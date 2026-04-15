@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>C:\> COMMAND.COM</title>
+    <style>
+        body {
+            background-color: #0c0c0c;
+            color: #1aff1a; /* Classic Phosphor Green */
+            font-family: "Lucida Console", Monaco, monospace;
+            margin: 0;
+            padding: 40px;
+            text-shadow: 0 0 5px #1aff1a;
+            overflow: hidden;
+        }
+
+        /* Scanline Overlay */
+        body::before {
+            content: " ";
+            display: block;
+            position: absolute;
+            top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), 
+                        linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            z-index: 2;
+            background-size: 100% 3px, 3px 100%;
+            pointer-events: none;
+        }
+
+        a {
+            color: #1aff1a;
+            text-decoration: none;
+            padding: 2px 5px;
+        }
+
+        a:hover {
+            background-color: #1aff1a;
+            color: #000;
+        }
+
+        .cursor {
+            display: inline-block;
+            background-color: #1aff1a;
+            width: 10px;
+            height: 1.2em;
+            animation: blink 0.8s step-end infinite;
+            vertical-align: bottom;
+        }
+
+        @keyframes blink { 50% { opacity: 0; } }
+
+        .ascii-art {
+            white-space: pre;
+            line-height: 1.2;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="ascii-art">
+  __  __  ____        _____   ____   ____  
+ |  \/  |/ ___|      |  _ \ / __ \ / ___| 
+ | |\/| |\___ \ _____| | | | |  | |\___ \ 
+ | |  | | ___) |_____| |_| | |__| | ___) |
+ |_|  |_||____/      |____/ \____/|____/  
+</div>
+
+<p>MS-DOS Version 6.22<br>Copyright (C) 1994 Microsoft Corp.</p>
+
+<p>C:\> DIR /W</p>
+
+<p>
+  [<a href="https://github.com/your-profile">GITHUB</a>] &nbsp;&nbsp; 
+  [<a href="https://linkedin.com">LINKEDIN</a>] &nbsp;&nbsp; 
+  [<a href="#">PROJECTS</a>] &nbsp;&nbsp; 
+  [<a href="#">RESUME.TXT</a>]
+</p>
+
+<p>C:\> <span class="cursor"></span></p>
+
+</body>
+</html>
