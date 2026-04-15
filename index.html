@@ -10,10 +10,10 @@
             margin: 0;
             padding: 40px;
             text-shadow: 0 0 5px #1aff1a;
-            overflow: hidden;
+            line-height: 1.4;
         }
 
-        /* Scanline Overlay */
+        /* Scanline Overlay for that CRT feel */
         body::before {
             content: " ";
             display: block;
@@ -26,10 +26,14 @@
             pointer-events: none;
         }
 
+        .container {
+            position: relative;
+            z-index: 1;
+        }
+
         a {
             color: #1aff1a;
             text-decoration: none;
-            padding: 2px 5px;
         }
 
         a:hover {
@@ -50,33 +54,71 @@
 
         .ascii-art {
             white-space: pre;
-            line-height: 1.2;
+            line-height: 1.1;
             margin-bottom: 20px;
+            font-weight: bold;
+        }
+
+        .dir-list {
+            list-style: none;
+            padding: 0;
+            margin: 20px 0;
+        }
+
+        .dir-item {
+            display: block;
+            margin-bottom: 5px;
         }
     </style>
 </head>
 <body>
 
+<div class="container">
 <div class="ascii-art">
-  __  __  ____        _____   ____   ____  
- |  \/  |/ ___|      |  _ \ / __ \ / ___| 
- | |\/| |\___ \ _____| | | | |  | |\___ \ 
- | |  | | ___) |_____| |_| | |__| | ___) |
- |_|  |_||____/      |____/ \____/|____/  
+  ___ _   _ ____  ____  ____  
+ / __| | | |  _ \|  _ \/ ___| 
+| |   | | | | |_) | |_) \___ \ 
+| |__ | |_| |  __/|  __/ ___) |
+ \___| \___/|_|   |_|   |____/ 
 </div>
 
-<p>MS-DOS Version 6.22<br>Copyright (C) 1994 Microsoft Corp.</p>
+<p>Current date is <span id="current-date"></span><br>
+Current time is <span id="current-time"></span><br>
+Copyright (C) 2026 CUPPS</p>
 
-<p>C:\> DIR /W</p>
+<p>C:\> cd repositories</p>
+<p>C:\REPOSITORIES> dir /w</p>
 
-<p>
-  [<a href="https://github.com/your-profile">GITHUB</a>] &nbsp;&nbsp; 
-  [<a href="https://linkedin.com">LINKEDIN</a>] &nbsp;&nbsp; 
-  [<a href="#">PROJECTS</a>] &nbsp;&nbsp; 
-  [<a href="#">RESUME.TXT</a>]
-</p>
+<div class="dir-list">
+    <span class="dir-item">[PRO] <a href="https://github.com/jamesccupps">GITHUB_PROFILE</a></span>
+    <span class="dir-item">[PY]  <a href="https://github.com/jamesccupps/WeatherOracle">WEATHER_ORACLE</a></span>
+    <span class="dir-item">[PY]  <a href="https://github.com/jamesccupps/NetScope">NET_SCOPE</a></span>
+    <span class="dir-item">[PY]  <a href="https://github.com/jamesccupps/NetSentinel">NET_SENTINEL</a></span>
+    <span class="dir-item">[PY]  <a href="https://github.com/jamesccupps/StockOracle">STOCK_ORACLE</a></span>
+    <span class="dir-item">[PY]  <a href="https://github.com/jamesccupps/CryptoAudit">CRYPTO_AUDIT</a></span>
+    <span class="dir-item">[PY]  <a href="https://github.com/jamesccupps/FlavorForge">FLAVOR_FORGE</a></span>
+    <span class="dir-item">[PY]  <a href="https://github.com/jamesccupps/UnifiStockWatcher">UNIFI_WATCHER</a></span>
+    <span class="dir-item">[PY]  <a href="https://github.com/jamesccupps/NoteForge">NOTE_FORGE</a></span>
+    <span class="dir-item">[SYS] <a href="https://github.com/jamesccupps/HVAC-Network-Scanner">HVAC_SCANNER</a></span>
+    <span class="dir-item">[SYS] <a href="https://github.com/jamesccupps/Building-Directory">BUILDING_DIR</a></span>
+    <span class="dir-item">[PAY] <a href="https://github.com/jamesccupps/Packet-Squirrel-Mark-II-Custom-Payloads">PACKET_SQUIRREL_V2</a></span>
+</div>
 
-<p>C:\> <span class="cursor"></span></p>
+<p>C:\REPOSITORIES> <span class="cursor"></span></p>
+</div>
+
+<script>
+    function updateDateTime() {
+        const now = new Date();
+        const dateOptions = { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' };
+        const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true };
+        
+        document.getElementById('current-date').innerText = now.toLocaleDateString('en-US', dateOptions);
+        document.getElementById('current-time').innerText = now.toLocaleTimeString('en-US', timeOptions);
+    }
+    updateDateTime();
+    setInterval(updateDateTime, 1000); // Keeps the clock ticking in real-time
+</script>
 
 </body>
 </html>
