@@ -1,123 +1,580 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>C:\> COMMAND.COM</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>C:\> CUPPS.EXE</title>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=VT323&family=IBM+Plex+Mono:wght@400;700&display=swap');
+
+        :root {
+            --green: #1aff1a;
+            --green-dim: #0d8a0d;
+            --green-glow: rgba(26, 255, 26, 0.4);
+            --amber: #ffb800;
+            --amber-dim: #8a6400;
+            --cyan: #00e5ff;
+            --bg: #0a0a0a;
+            --bg-light: #111;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html { font-size: 16px; }
+
         body {
-            background-color: #0c0c0c;
-            color: #1aff1a; /* Classic Phosphor Green */
-            font-family: "Lucida Console", Monaco, monospace;
-            margin: 0;
-            padding: 40px;
-            text-shadow: 0 0 5px #1aff1a;
-            line-height: 1.4;
+            background: var(--bg);
+            color: var(--green);
+            font-family: 'VT323', 'Lucida Console', monospace;
+            font-size: 1.15rem;
+            overflow-x: hidden;
+            min-height: 100vh;
         }
 
-        /* Scanline Overlay for that CRT feel */
-        body::before {
-            content: " ";
-            display: block;
-            position: absolute;
-            top: 0; left: 0; bottom: 0; right: 0;
-            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), 
-                        linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
-            z-index: 2;
-            background-size: 100% 3px, 3px 100%;
-            pointer-events: none;
-        }
-
-        .container {
+        /* ── CRT Monitor Frame ── */
+        .crt-frame {
             position: relative;
-            z-index: 1;
+            max-width: 960px;
+            margin: 0 auto;
+            min-height: 100vh;
+            padding: 30px 40px 60px;
+            background: radial-gradient(ellipse at center, #111 0%, #0a0a0a 70%, #050505 100%);
+            box-shadow: inset 0 0 120px rgba(0,0,0,0.8), inset 0 0 40px rgba(26,255,26,0.03);
         }
 
-        a {
-            color: #1aff1a;
-            text-decoration: none;
+        /* Scanlines */
+        .crt-frame::before {
+            content: "";
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 2px,
+                rgba(0, 0, 0, 0.15) 2px,
+                rgba(0, 0, 0, 0.15) 4px
+            );
+            pointer-events: none;
+            z-index: 100;
         }
 
-        a:hover {
-            background-color: #1aff1a;
-            color: #000;
+        /* Subtle screen flicker */
+        .crt-frame::after {
+            content: "";
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(26, 255, 26, 0.015);
+            pointer-events: none;
+            z-index: 99;
+            animation: flicker 0.15s infinite;
         }
 
-        .cursor {
-            display: inline-block;
-            background-color: #1aff1a;
-            width: 10px;
-            height: 1.2em;
-            animation: blink 0.8s step-end infinite;
-            vertical-align: bottom;
+        @keyframes flicker {
+            0% { opacity: 0.27; }
+            5% { opacity: 0.34; }
+            10% { opacity: 0.24; }
+            15% { opacity: 0.38; }
+            20% { opacity: 0.28; }
+            25% { opacity: 0.36; }
+            30% { opacity: 0.25; }
+            35% { opacity: 0.32; }
+            40% { opacity: 0.29; }
+            45% { opacity: 0.37; }
+            50% { opacity: 0.26; }
+            55% { opacity: 0.33; }
+            60% { opacity: 0.30; }
+            65% { opacity: 0.35; }
+            70% { opacity: 0.27; }
+            75% { opacity: 0.31; }
+            80% { opacity: 0.34; }
+            85% { opacity: 0.28; }
+            90% { opacity: 0.36; }
+            95% { opacity: 0.29; }
+            100% { opacity: 0.32; }
         }
 
-        @keyframes blink { 50% { opacity: 0; } }
+        /* ── Typography ── */
+        .glow { text-shadow: 0 0 6px var(--green-glow), 0 0 12px rgba(26,255,26,0.15); }
+        .amber { color: var(--amber); text-shadow: 0 0 6px rgba(255,184,0,0.4); }
+        .cyan { color: var(--cyan); text-shadow: 0 0 6px rgba(0,229,255,0.4); }
+        .dim { color: var(--green-dim); text-shadow: none; }
 
-        .ascii-art {
+        /* ── ASCII Header ── */
+        .ascii-header {
             white-space: pre;
-            line-height: 1.1;
-            margin-bottom: 20px;
+            font-size: 0.85rem;
+            line-height: 1.15;
+            margin-bottom: 8px;
+            color: var(--green);
+            text-shadow: 0 0 10px var(--green-glow);
+            animation: fadeIn 1s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ── Sections ── */
+        .section {
+            margin-bottom: 16px;
+            animation: typeReveal 0.4s ease-out;
+        }
+
+        @keyframes typeReveal {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .prompt { color: var(--green); }
+        .prompt-path { color: var(--amber); }
+
+        /* ── Project Cards ── */
+        .project-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 2px;
+            margin: 8px 0 12px;
+        }
+
+        .project-row {
+            display: grid;
+            grid-template-columns: 70px 200px 1fr;
+            gap: 0;
+            padding: 4px 8px;
+            border: 1px solid transparent;
+            transition: all 0.15s;
+            cursor: pointer;
+            text-decoration: none;
+            color: var(--green);
+        }
+
+        .project-row:hover {
+            background: rgba(26, 255, 26, 0.08);
+            border-color: var(--green-dim);
+        }
+
+        .project-row .tag {
+            color: var(--cyan);
+            font-size: 0.95rem;
+        }
+
+        .project-row .name {
+            color: var(--green);
+            text-shadow: 0 0 6px var(--green-glow);
             font-weight: bold;
         }
 
-        .dir-list {
-            list-style: none;
-            padding: 0;
-            margin: 20px 0;
+        .project-row .desc {
+            color: var(--green-dim);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
-        .dir-item {
-            display: block;
-            margin-bottom: 5px;
+        /* ── Interactive Input ── */
+        .input-line {
+            display: flex;
+            align-items: center;
+            margin-top: 16px;
         }
+
+        .input-line label {
+            white-space: nowrap;
+        }
+
+        #cmd-input {
+            background: transparent;
+            border: none;
+            color: var(--green);
+            font-family: 'VT323', monospace;
+            font-size: 1.15rem;
+            outline: none;
+            flex: 1;
+            caret-color: var(--green);
+            text-shadow: 0 0 6px var(--green-glow);
+            margin-left: 6px;
+        }
+
+        /* ── Separator ── */
+        .sep {
+            border: none;
+            border-top: 1px dashed var(--green-dim);
+            margin: 12px 0;
+            opacity: 0.4;
+        }
+
+        /* ── Status Bar ── */
+        .status-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0; right: 0;
+            background: var(--green);
+            color: var(--bg);
+            font-family: 'VT323', monospace;
+            font-size: 0.95rem;
+            padding: 2px 16px;
+            display: flex;
+            justify-content: space-between;
+            z-index: 200;
+        }
+
+        /* ── Contact links ── */
+        a.link {
+            color: var(--cyan);
+            text-decoration: none;
+            border-bottom: 1px dashed var(--cyan);
+            transition: all 0.15s;
+        }
+        a.link:hover {
+            background: var(--cyan);
+            color: var(--bg);
+        }
+
+        /* ── Responsive ── */
+        @media (max-width: 700px) {
+            .crt-frame { padding: 16px 16px 50px; }
+            .ascii-header { font-size: 0.55rem; }
+            .project-row { grid-template-columns: 50px 1fr; }
+            .project-row .desc { display: none; }
+            .skill-label { width: 100px; font-size: 0.9rem; }
+        }
+
+        /* ── Boot-up animation ── */
+        .boot-line {
+            opacity: 0;
+            animation: bootIn 0.3s ease-out forwards;
+        }
+        .boot-line:nth-child(1) { animation-delay: 0.1s; }
+        .boot-line:nth-child(2) { animation-delay: 0.35s; }
+        .boot-line:nth-child(3) { animation-delay: 0.6s; }
+        .boot-line:nth-child(4) { animation-delay: 0.85s; }
+        .boot-line:nth-child(5) { animation-delay: 1.0s; }
+        .boot-line:nth-child(6) { animation-delay: 1.15s; }
+
+        @keyframes bootIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        /* Hide main content until boot finishes */
+        .main-content {
+            opacity: 0;
+            animation: bootIn 0.5s ease-out 1.6s forwards;
+        }
+
+        /* Help table */
+        .help-table {
+            margin: 6px 0 10px 20px;
+        }
+        .help-table div {
+            display: grid;
+            grid-template-columns: 120px 1fr;
+            gap: 8px;
+        }
+        .help-table .cmd { color: var(--amber); }
     </style>
 </head>
 <body>
 
-<div class="container">
-<div class="ascii-art">
-  ___ _   _ ____  ____  ____  
- / __| | | |  _ \|  _ \/ ___| 
-| |   | | | | |_) | |_) \___ \ 
-| |__ | |_| |  __/|  __/ ___) |
- \___| \___/|_|   |_|   |____/ 
+<div class="crt-frame" id="crt">
+
+    <!-- BIOS Boot Sequence -->
+    <div id="boot-sequence">
+        <div class="boot-line dim">CUPPS BIOS v4.2.6 &mdash; Memory Test... OK</div>
+        <div class="boot-line dim">Detecting drives... C: [PRIMARY] OK</div>
+        <div class="boot-line dim">Loading CUPPS-DOS v6.22...</div>
+        <div class="boot-line dim">Network adapter: LINK OK</div>
+        <div class="boot-line dim">All systems nominal.</div>
+        <div class="boot-line dim">Starting COMMAND.COM...</div>
+    </div>
+
+    <!-- Main Terminal Content -->
+    <div class="main-content" id="main">
+
+        <div class="ascii-header glow">
+       ██╗ █████╗ ███╗   ███╗███████╗███████╗
+       ██║██╔══██╗████╗ ████║██╔════╝██╔════╝
+       ██║███████║██╔████╔██║█████╗  ███████╗
+  ██   ██║██╔══██║██║╚██╔╝██║██╔══╝  ╚════██║
+  ╚█████╔╝██║  ██║██║ ╚═╝ ██║███████╗███████║
+   ╚════╝ ╚═╝  ╚═╝╚═╝     ╚═╝╚══════╝╚══════╝
+       ██████╗██╗   ██╗██████╗ ██████╗ ███████╗
+      ██╔════╝██║   ██║██╔══██╗██╔══██╗██╔════╝
+      ██║     ██║   ██║██████╔╝██████╔╝███████╗
+      ██║     ██║   ██║██╔═══╝ ██╔═══╝ ╚════██║
+      ╚██████╗╚██████╔╝██║     ██║     ███████║
+       ╚═════╝ ╚═════╝ ╚═╝     ╚═╝     ╚══════╝</div>
+
+        <div class="section">
+            <span class="dim">Developer &bull; <span id="datetime"></span></span>
+        </div>
+
+        <hr class="sep">
+
+        <!-- ABOUT -->
+        <div class="section" id="sec-about">
+            <div><span class="prompt-path amber">C:\CUPPS</span><span class="prompt">&gt;</span> <span class="glow">type ABOUT.TXT</span></div>
+            <br>
+            <div>Tools that solve real problems, mostly.</div>
+            <div>Check out the projects below or type <span class="amber">HELP</span> for commands.</div>
+        </div>
+
+        <hr class="sep">
+
+        <!-- PROJECTS -->
+        <div class="section" id="sec-projects">
+            <div><span class="prompt-path amber">C:\CUPPS</span><span class="prompt">&gt;</span> <span class="glow">dir /projects /s</span></div>
+            <br>
+            <div class="dim"> Volume in drive C is CUPPS_REPOS</div>
+            <div class="dim"> Directory of C:\CUPPS\PROJECTS</div>
+            <br>
+            <div class="project-grid">
+                <a class="project-row" href="https://github.com/jamesccupps/WeatherOracle" target="_blank" rel="noopener">
+                    <span class="tag">[ML/PY]</span>
+                    <span class="name">WeatherOracle</span>
+                    <span class="desc">ML weather forecasting system</span>
+                </a>
+                <a class="project-row" href="https://github.com/jamesccupps/NetSentinel" target="_blank" rel="noopener">
+                    <span class="tag">[SEC]</span>
+                    <span class="name">NetSentinel</span>
+                    <span class="desc">Intrusion detection &amp; network monitoring</span>
+                </a>
+                <a class="project-row" href="https://github.com/jamesccupps/NetScope" target="_blank" rel="noopener">
+                    <span class="tag">[NET]</span>
+                    <span class="name">NetScope</span>
+                    <span class="desc">Network monitoring dashboard</span>
+                </a>
+                <a class="project-row" href="https://github.com/jamesccupps/StockOracle" target="_blank" rel="noopener">
+                    <span class="tag">[ML/PY]</span>
+                    <span class="name">StockOracle</span>
+                    <span class="desc">ML stock prediction system</span>
+                </a>
+                <a class="project-row" href="https://github.com/jamesccupps/CryptoAudit" target="_blank" rel="noopener">
+                    <span class="tag">[SEC]</span>
+                    <span class="name">CryptoAudit</span>
+                    <span class="desc">Network traffic crypto analysis</span>
+                </a>
+                <a class="project-row" href="https://github.com/jamesccupps/HVAC-Network-Scanner" target="_blank" rel="noopener">
+                    <span class="tag">[BAS]</span>
+                    <span class="name">HVAC Scanner</span>
+                    <span class="desc">BACnet network scanner</span>
+                </a>
+                <a class="project-row" href="https://github.com/jamesccupps/FlavorForge" target="_blank" rel="noopener">
+                    <span class="tag">[APP]</span>
+                    <span class="name">FlavorForge</span>
+                    <span class="desc">Recipe management application</span>
+                </a>
+                <a class="project-row" href="https://github.com/jamesccupps/UnifiStockWatcher" target="_blank" rel="noopener">
+                    <span class="tag">[APP]</span>
+                    <span class="name">UniFi Watcher</span>
+                    <span class="desc">Product stock monitor</span>
+                </a>
+                <a class="project-row" href="https://github.com/jamesccupps/NoteForge" target="_blank" rel="noopener">
+                    <span class="tag">[APP]</span>
+                    <span class="name">NoteForge</span>
+                    <span class="desc">Desktop note-taking app</span>
+                </a>
+                <a class="project-row" href="https://github.com/jamesccupps/Building-Directory" target="_blank" rel="noopener">
+                    <span class="tag">[SYS]</span>
+                    <span class="name">Building Dir</span>
+                    <span class="desc">Building directory tool</span>
+                </a>
+                <a class="project-row" href="https://github.com/jamesccupps/Packet-Squirrel-Mark-II-Custom-Payloads" target="_blank" rel="noopener">
+                    <span class="tag">[PAY]</span>
+                    <span class="name">Pkt Squirrel v2</span>
+                    <span class="desc">Custom payloads for Hak5 Packet Squirrel</span>
+                </a>
+            </div>
+            <div class="dim">       11 repo(s)    &mdash;  Type HELP for commands</div>
+        </div>
+
+        <hr class="sep">
+
+        <!-- CONTACT -->
+        <div class="section" id="sec-contact">
+            <div><span class="prompt-path amber">C:\CUPPS</span><span class="prompt">&gt;</span> <span class="glow">type CONTACT.TXT</span></div>
+            <br>
+            <div>
+                <span class="dim">GitHub:</span>&nbsp;&nbsp; <a class="link" href="https://github.com/jamesccupps" target="_blank" rel="noopener">github.com/jamesccupps</a>
+            </div>
+        </div>
+
+        <hr class="sep">
+
+        <!-- Command Output Area -->
+        <div id="cmd-output"></div>
+
+        <!-- Interactive Prompt -->
+        <div class="input-line">
+            <label><span class="prompt-path amber">C:\CUPPS</span><span class="prompt">&gt;</span></label>
+            <input type="text" id="cmd-input" autofocus autocomplete="off" spellcheck="false" aria-label="Command input">
+        </div>
+    </div>
 </div>
 
-<p>Current date is <span id="current-date"></span><br>
-Current time is <span id="current-time"></span><br>
-Copyright (C) 2026 CUPPS</p>
-
-<p>C:\> cd repositories</p>
-<p>C:\REPOSITORIES> dir /w</p>
-
-<div class="dir-list">
-    <span class="dir-item">[PRO] <a href="https://github.com/jamesccupps">GITHUB_PROFILE</a></span>
-    <span class="dir-item">[PY]  <a href="https://github.com/jamesccupps/WeatherOracle">WEATHER_ORACLE</a></span>
-    <span class="dir-item">[PY]  <a href="https://github.com/jamesccupps/NetScope">NET_SCOPE</a></span>
-    <span class="dir-item">[PY]  <a href="https://github.com/jamesccupps/NetSentinel">NET_SENTINEL</a></span>
-    <span class="dir-item">[PY]  <a href="https://github.com/jamesccupps/StockOracle">STOCK_ORACLE</a></span>
-    <span class="dir-item">[PY]  <a href="https://github.com/jamesccupps/CryptoAudit">CRYPTO_AUDIT</a></span>
-    <span class="dir-item">[PY]  <a href="https://github.com/jamesccupps/FlavorForge">FLAVOR_FORGE</a></span>
-    <span class="dir-item">[PY]  <a href="https://github.com/jamesccupps/UnifiStockWatcher">UNIFI_WATCHER</a></span>
-    <span class="dir-item">[PY]  <a href="https://github.com/jamesccupps/NoteForge">NOTE_FORGE</a></span>
-    <span class="dir-item">[SYS] <a href="https://github.com/jamesccupps/HVAC-Network-Scanner">HVAC_SCANNER</a></span>
-    <span class="dir-item">[SYS] <a href="https://github.com/jamesccupps/Building-Directory">BUILDING_DIR</a></span>
-    <span class="dir-item">[PAY] <a href="https://github.com/jamesccupps/Packet-Squirrel-Mark-II-Custom-Payloads">PACKET_SQUIRREL_V2</a></span>
-</div>
-
-<p>C:\REPOSITORIES> <span class="cursor"></span></p>
+<!-- Status Bar -->
+<div class="status-bar">
+    <span>CUPPS-DOS v6.22</span>
+    <span id="status-mem">SYS: OK</span>
+    <span id="status-time"></span>
 </div>
 
 <script>
-    function updateDateTime() {
+(function() {
+    // ── Date/time ──
+    function updateTime() {
         const now = new Date();
-        const dateOptions = { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' };
-        const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true };
-        
-        document.getElementById('current-date').innerText = now.toLocaleDateString('en-US', dateOptions);
-        document.getElementById('current-time').innerText = now.toLocaleTimeString('en-US', timeOptions);
+        const opts = { weekday:'short', year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:true };
+        const str = now.toLocaleString('en-US', opts);
+        const el = document.getElementById('datetime');
+        if (el) el.textContent = str;
+        const sb = document.getElementById('status-time');
+        if (sb) sb.textContent = now.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', hour12:true });
     }
-    updateDateTime();
-    setInterval(updateDateTime, 1000); // Keeps the clock ticking in real-time
+    updateTime();
+    setInterval(updateTime, 1000);
+
+    // ── Interactive Terminal ──
+    const input = document.getElementById('cmd-input');
+    const output = document.getElementById('cmd-output');
+    const history = [];
+    let histIdx = -1;
+
+    const COMMANDS = {
+        help: () => `
+<div class="help-table">
+<div><span class="cmd">HELP</span><span>Show available commands</span></div>
+<div><span class="cmd">ABOUT</span><span>Jump to about section</span></div>
+<div><span class="cmd">PROJECTS</span><span>Jump to projects</span></div>
+<div><span class="cmd">CONTACT</span><span>Jump to contact info</span></div>
+<div><span class="cmd">GITHUB</span><span>Open GitHub profile</span></div>
+<div><span class="cmd">CLEAR / CLS</span><span>Clear command output</span></div>
+<div><span class="cmd">VER</span><span>Show system version</span></div>
+<div><span class="cmd">UPTIME</span><span>Show session uptime</span></div>
+<div><span class="cmd">MATRIX</span><span>??? Try it</span></div>
+</div>`,
+        about: () => { scrollTo('sec-about'); return '<span class="dim">Jumping to ABOUT...</span>'; },
+        projects: () => { scrollTo('sec-projects'); return '<span class="dim">Jumping to PROJECTS...</span>'; },
+        contact: () => { scrollTo('sec-contact'); return '<span class="dim">Jumping to CONTACT...</span>'; },
+        github: () => { window.open('https://github.com/jamesccupps', '_blank'); return '<span class="dim">Opening GitHub...</span>'; },
+        clear: () => { output.innerHTML = ''; return null; },
+        cls: () => { output.innerHTML = ''; return null; },
+        ver: () => `<span class="amber">CUPPS-DOS v6.22</span>\nShell: COMMAND.COM\nUptime: ${getUptime()}`,
+        uptime: () => `Session uptime: ${getUptime()}`,
+        matrix: () => { startMatrix(); return '<span class="cyan">Entering the Matrix...</span>'; },
+        dir: () => `<span class="dim"> Volume in drive C is CUPPS_REPOS\n Directory of C:\\CUPPS\n\n ABOUT    TXT\n PROJECTS DIR  11 repo(s)\n CONTACT  TXT\n\n        3 item(s)</span>`,
+    };
+
+    const bootTime = Date.now();
+    function getUptime() {
+        const s = Math.floor((Date.now() - bootTime) / 1000);
+        const m = Math.floor(s / 60);
+        const h = Math.floor(m / 60);
+        if (h > 0) return `${h}h ${m%60}m ${s%60}s`;
+        if (m > 0) return `${m}m ${s%60}s`;
+        return `${s}s`;
+    }
+
+    function scrollTo(id) {
+        setTimeout(() => {
+            document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 100);
+    }
+
+    function exec(raw) {
+        const cmd = raw.trim().toLowerCase();
+        if (!cmd) return;
+        history.unshift(raw);
+        histIdx = -1;
+
+        // Echo the command
+        const echo = document.createElement('div');
+        echo.style.marginTop = '8px';
+        echo.innerHTML = `<span class="prompt-path amber">C:\\CUPPS</span><span class="prompt">&gt;</span> <span class="glow">${escapeHtml(raw)}</span>`;
+        output.appendChild(echo);
+
+        const handler = COMMANDS[cmd];
+        if (handler) {
+            const result = handler();
+            if (result) {
+                const res = document.createElement('div');
+                res.innerHTML = result;
+                res.style.whiteSpace = 'pre-wrap';
+                output.appendChild(res);
+            }
+        } else {
+            const err = document.createElement('div');
+            err.innerHTML = `<span style="color:#ff4444">Bad command or file name: "${escapeHtml(cmd)}"</span>\n<span class="dim">Type HELP for available commands.</span>`;
+            err.style.whiteSpace = 'pre-wrap';
+            output.appendChild(err);
+        }
+
+        // Scroll to bottom
+        setTimeout(() => input.scrollIntoView({ behavior: 'smooth' }), 50);
+    }
+
+    function escapeHtml(s) {
+        return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+            exec(input.value);
+            input.value = '';
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (histIdx < history.length - 1) {
+                histIdx++;
+                input.value = history[histIdx];
+            }
+        } else if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (histIdx > 0) {
+                histIdx--;
+                input.value = history[histIdx];
+            } else {
+                histIdx = -1;
+                input.value = '';
+            }
+        }
+    });
+
+    // Click anywhere to focus input
+    document.addEventListener('click', e => {
+        if (!e.target.closest('a')) input.focus();
+    });
+
+    // ── Matrix Easter Egg ──
+    function startMatrix() {
+        const canvas = document.createElement('canvas');
+        canvas.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;z-index:300;pointer-events:none;';
+        document.body.appendChild(canvas);
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        const cols = Math.floor(canvas.width / 16);
+        const drops = Array(cols).fill(1);
+        const chars = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン0123456789CUPPS';
+        let frames = 0;
+        function draw() {
+            ctx.fillStyle = 'rgba(0,0,0,0.05)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#1aff1a';
+            ctx.font = '15px VT323, monospace';
+            for (let i = 0; i < drops.length; i++) {
+                const ch = chars[Math.floor(Math.random() * chars.length)];
+                ctx.fillText(ch, i * 16, drops[i] * 16);
+                if (drops[i] * 16 > canvas.height && Math.random() > 0.975) drops[i] = 0;
+                drops[i]++;
+            }
+            frames++;
+            if (frames < 300) requestAnimationFrame(draw);
+            else { canvas.remove(); }
+        }
+        draw();
+    }
+})();
 </script>
 
 </body>
