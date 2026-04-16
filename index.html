@@ -4,7 +4,29 @@
     <meta name="google-site-verification" content="5pvUtcrLxUj0DTJMFDWMm7efBFn1IxssbC4NWdvjaJA" />
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>C:\> CUPPS.EXE</title>
+    <title>James Cupps — Developer | CUPPS.EXE</title>
+
+    <!-- SEO -->
+    <meta name="description" content="James Cupps — independent developer building open-source tools for HVAC, network security, machine learning, and home automation. Projects in Python, JavaScript, and Electron.">
+    <meta name="author" content="James Cupps">
+    <meta name="keywords" content="James Cupps, developer, BACnet, HVAC, network security, machine learning, Python, Electron, home automation, open source">
+    <link rel="canonical" href="https://jamesccupps.github.io/">
+
+    <!-- Open Graph (Facebook, LinkedIn, Discord, Slack) -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://jamesccupps.github.io/">
+    <meta property="og:title" content="James Cupps — Developer">
+    <meta property="og:description" content="Independent developer. Open-source tools for HVAC, network security, machine learning, and home automation.">
+    <meta property="og:site_name" content="CUPPS.EXE">
+    <meta property="og:locale" content="en_US">
+
+    <!-- Twitter / X Card -->
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="James Cupps — Developer">
+    <meta name="twitter:description" content="Independent developer. Open-source tools for HVAC, network security, machine learning, and home automation.">
+
+    <!-- Theme color matches the CRT green aesthetic -->
+    <meta name="theme-color" content="#0a0a0a">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=VT323&family=IBM+Plex+Mono:wght@400;700&display=swap');
 
@@ -101,10 +123,17 @@
         .dim { color: var(--green-dim); text-shadow: none; }
 
         /* ── ASCII Header ── */
+        /* Use a conventional monospace stack here — VT323 is a pixel font that */
+        /* lacks box-drawing glyphs (█ ╗ ╔ ═ ║ etc.), so the browser falls back */
+        /* per-character and the columns stop aligning. These fonts all have */
+        /* full Unicode box-drawing coverage at matched widths. */
         .ascii-header {
             white-space: pre;
-            font-size: 0.85rem;
-            line-height: 1.15;
+            font-family: 'Cascadia Mono', 'Cascadia Code', 'Consolas', 'Menlo',
+                         'DejaVu Sans Mono', 'Liberation Mono', 'Courier New', monospace;
+            font-size: 0.75rem;
+            line-height: 1.05;
+            letter-spacing: 0;
             margin-bottom: 8px;
             color: var(--green);
             text-shadow: 0 0 10px var(--green-glow);
@@ -331,6 +360,11 @@
             <div class="dim"> Directory of C:\CUPPS\PROJECTS</div>
             <br>
             <div class="project-grid">
+                <a class="project-row" href="https://github.com/jamesccupps/HVAC-Network-Scanner" target="_blank" rel="noopener">
+                    <span class="tag">[BAS]</span>
+                    <span class="name">HVAC Scanner</span>
+                    <span class="desc">BACnet network scanner</span>
+                </a>
                 <a class="project-row" href="https://github.com/jamesccupps/WeatherOracle" target="_blank" rel="noopener">
                     <span class="tag">[ML/PY]</span>
                     <span class="name">WeatherOracle</span>
@@ -356,11 +390,6 @@
                     <span class="name">CryptoAudit</span>
                     <span class="desc">Network traffic crypto analysis</span>
                 </a>
-                <a class="project-row" href="https://github.com/jamesccupps/HVAC-Network-Scanner" target="_blank" rel="noopener">
-                    <span class="tag">[BAS]</span>
-                    <span class="name">HVAC Scanner</span>
-                    <span class="desc">BACnet network scanner</span>
-                </a>
                 <a class="project-row" href="https://github.com/jamesccupps/FlavorForge" target="_blank" rel="noopener">
                     <span class="tag">[APP]</span>
                     <span class="name">FlavorForge</span>
@@ -375,11 +404,6 @@
                     <span class="tag">[APP]</span>
                     <span class="name">NoteForge</span>
                     <span class="desc">Desktop note-taking app</span>
-                </a>
-                <a class="project-row" href="https://github.com/jamesccupps/Building-Directory" target="_blank" rel="noopener">
-                    <span class="tag">[SYS]</span>
-                    <span class="name">Building Dir</span>
-                    <span class="desc">Building directory tool</span>
                 </a>
                 <a class="project-row" href="https://github.com/jamesccupps/Packet-Squirrel-Mark-II-Custom-Payloads" target="_blank" rel="noopener">
                     <span class="tag">[PAY]</span>
