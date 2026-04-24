@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>APOGEE P2 Protocol Reference | CUPPS.EXE</title>
+
+    <meta name="description" content="Technical reference for the Siemens APOGEE P2 building-automation protocol used by PXC controllers.">
+    <meta name="author" content="James Cupps">
+    <meta name="theme-color" content="#0a0a0a">
+    <meta name="robots" content="index, follow">
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=VT323&family=IBM+Plex+Mono:wght@400;700&display=swap');
+
+        :root {
+            --green: #1aff1a;
+            --green-dim: #0d8a0d;
+            --green-glow: rgba(26, 255, 26, 0.4);
+            --amber: #ffb800;
+            --cyan: #00e5ff;
+            --bg: #0a0a0a;
+            --bg-light: #111;
+            --bg-block: #0f1a0f;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html { font-size: 16px; }
+
+        body {
+            background: var(--bg);
+            color: var(--green);
+            font-family: 'IBM Plex Mono', 'Consolas', 'Menlo', 'Courier New', monospace;
+            font-size: 0.95rem;
+            line-height: 1.55;
+            overflow-x: hidden;
+            min-height: 100vh;
+        }
+
+        /* ── CRT Monitor Frame ── */
+        .crt-frame {
+            position: relative;
+            max-width: 1000px;
+            margin: 0 auto;
+            min-height: 100vh;
+            padding: 30px 40px 80px;
+            background: radial-gradient(ellipse at center, #111 0%, #0a0a0a 70%, #050505 100%);
+            box-shadow: inset 0 0 120px rgba(0,0,0,0.8), inset 0 0 40px rgba(26,255,26,0.03);
+        }
+
+        /* Scanlines */
+        .crt-frame::before {
+            content: "";
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 2px,
+                rgba(0, 0, 0, 0.15) 2px,
+                rgba(0, 0, 0, 0.15) 4px
+            );
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        /* Subtle flicker (reduced opacity for long reading) */
+        .crt-frame::after {
+            content: "";
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(26, 255, 26, 0.008);
+            pointer-events: none;
+            z-index: 99;
+            animation: flicker 0.3s infinite;
+        }
+
+        @keyframes flicker {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 0.7; }
+        }
+
+        /* ── Header navigation ── */
+        .page-nav {
+            font-family: 'VT323', monospace;
+            font-size: 1.2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            padding-bottom: 12px;
+            border-bottom: 1px dashed var(--green-dim);
+            margin-bottom: 24px;
+        }
+        .page-nav .prompt-path { color: var(--amber); text-shadow: 0 0 6px rgba(255,184,0,0.4); }
+        .page-nav .prompt { color: var(--green); }
+        .page-nav .glow { text-shadow: 0 0 6px var(--green-glow), 0 0 12px rgba(26,255,26,0.15); }
+        .page-nav a.back {
+            color: var(--cyan);
+            text-decoration: none;
+            border-bottom: 1px dashed var(--cyan);
+            transition: all 0.15s;
+        }
+        .page-nav a.back:hover {
+            background: var(--cyan);
+            color: var(--bg);
+        }
+
+        /* ── Rendered markdown content ── */
+        #content {
+            color: var(--green);
+        }
+
+        #content h1, #content h2, #content h3, #content h4 {
+            font-family: 'VT323', 'Cascadia Mono', 'Consolas', monospace;
+            color: var(--amber);
+            text-shadow: 0 0 6px rgba(255,184,0,0.4);
+            margin-top: 28px;
+            margin-bottom: 12px;
+            font-weight: normal;
+        }
+        #content h1 {
+            font-size: 2.2rem;
+            color: var(--green);
+            text-shadow: 0 0 8px var(--green-glow);
+            border-bottom: 1px dashed var(--green-dim);
+            padding-bottom: 8px;
+            margin-top: 0;
+        }
+        #content h2 {
+            font-size: 1.6rem;
+            border-bottom: 1px dotted rgba(255,184,0,0.25);
+            padding-bottom: 4px;
+        }
+        #content h3 { font-size: 1.3rem; color: var(--cyan); text-shadow: 0 0 4px rgba(0,229,255,0.3); }
+        #content h4 { font-size: 1.1rem; color: var(--green); }
+
+        #content p {
+            margin: 10px 0;
+        }
+
+        #content strong {
+            color: var(--green);
+            font-weight: 700;
+            text-shadow: 0 0 3px var(--green-glow);
+        }
+
+        #content em {
+            color: var(--cyan);
+            font-style: italic;
+        }
+
+        #content ul, #content ol {
+            margin: 10px 0 10px 24px;
+        }
+        #content li {
+            margin: 4px 0;
+            color: var(--green);
+        }
+        #content li > strong:first-child {
+            color: var(--amber);
+        }
+
+        #content a {
+            color: var(--cyan);
+            text-decoration: none;
+            border-bottom: 1px dashed var(--cyan);
+        }
+        #content a:hover {
+            background: var(--cyan);
+            color: var(--bg);
+        }
+
+        /* Inline code */
+        #content code {
+            background: var(--bg-block);
+            color: var(--amber);
+            padding: 1px 5px;
+            border-radius: 2px;
+            font-family: 'IBM Plex Mono', 'Consolas', monospace;
+            font-size: 0.9em;
+            border: 1px solid rgba(255,184,0,0.15);
+        }
+
+        /* Code blocks */
+        #content pre {
+            background: var(--bg-block);
+            border: 1px solid var(--green-dim);
+            border-left: 3px solid var(--green);
+            padding: 12px 16px;
+            margin: 14px 0;
+            overflow-x: auto;
+            font-size: 0.85rem;
+            line-height: 1.4;
+        }
+        #content pre code {
+            background: transparent;
+            border: none;
+            padding: 0;
+            color: var(--green);
+            text-shadow: 0 0 3px rgba(26,255,26,0.3);
+            font-size: inherit;
+        }
+
+        /* Tables */
+        #content table {
+            border-collapse: collapse;
+            margin: 14px 0;
+            width: 100%;
+            font-size: 0.9rem;
+        }
+        #content th, #content td {
+            border: 1px solid var(--green-dim);
+            padding: 5px 10px;
+            text-align: left;
+            vertical-align: top;
+        }
+        #content th {
+            background: rgba(26, 255, 26, 0.08);
+            color: var(--amber);
+            font-weight: 700;
+        }
+        #content tr:nth-child(even) td {
+            background: rgba(26, 255, 26, 0.02);
+        }
+
+        /* Blockquote */
+        #content blockquote {
+            border-left: 3px solid var(--cyan);
+            padding: 4px 14px;
+            margin: 12px 0;
+            color: var(--green-dim);
+            background: rgba(0, 229, 255, 0.04);
+        }
+
+        /* Horizontal rule */
+        #content hr {
+            border: none;
+            border-top: 1px dashed var(--green-dim);
+            margin: 24px 0;
+            opacity: 0.5;
+        }
+
+        /* Table of contents */
+        #toc {
+            border: 1px solid var(--green-dim);
+            padding: 14px 20px;
+            margin: 20px 0 28px;
+            background: rgba(26, 255, 26, 0.03);
+        }
+        #toc-title {
+            color: var(--amber);
+            font-family: 'VT323', monospace;
+            font-size: 1.2rem;
+            margin-bottom: 6px;
+        }
+        #toc ul {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+        #toc li {
+            margin: 2px 0;
+            padding-left: 0;
+        }
+        #toc li.toc-h3 { padding-left: 20px; font-size: 0.88rem; }
+        #toc a {
+            color: var(--cyan);
+            text-decoration: none;
+            border-bottom: none;
+        }
+        #toc a:hover {
+            color: var(--green);
+            background: transparent;
+            text-decoration: underline;
+        }
+
+        /* ── Loading state ── */
+        #loading {
+            font-family: 'VT323', monospace;
+            font-size: 1.2rem;
+            color: var(--green-dim);
+            padding: 40px 0;
+            text-align: center;
+        }
+        #error {
+            display: none;
+            border: 1px solid #ff4444;
+            padding: 12px 16px;
+            color: #ff6666;
+            margin: 20px 0;
+            background: rgba(255, 0, 0, 0.05);
+        }
+
+        /* Status Bar */
+        .status-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0; right: 0;
+            background: var(--green);
+            color: var(--bg);
+            font-family: 'VT323', monospace;
+            font-size: 0.95rem;
+            padding: 2px 16px;
+            display: flex;
+            justify-content: space-between;
+            z-index: 200;
+        }
+
+        /* Responsive */
+        @media (max-width: 700px) {
+            .crt-frame { padding: 16px 16px 50px; }
+            body { font-size: 0.85rem; }
+            #content pre { font-size: 0.75rem; }
+            #content table { font-size: 0.8rem; }
+            #content th, #content td { padding: 3px 6px; }
+            .page-nav { flex-direction: column; gap: 6px; }
+        }
+
+        /* Scroll-to-top button */
+        #scroll-top {
+            position: fixed;
+            bottom: 30px;
+            right: 20px;
+            z-index: 201;
+            background: var(--bg-light);
+            color: var(--green);
+            border: 1px solid var(--green-dim);
+            padding: 6px 12px;
+            font-family: 'VT323', monospace;
+            font-size: 1rem;
+            cursor: pointer;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+            text-shadow: 0 0 6px var(--green-glow);
+        }
+        #scroll-top.visible {
+            opacity: 0.85;
+            pointer-events: auto;
+        }
+        #scroll-top:hover {
+            opacity: 1;
+            background: var(--green);
+            color: var(--bg);
+            text-shadow: none;
+        }
+    </style>
+</head>
+<body>
+
+<div class="crt-frame">
+
+    <!-- Header / back-nav -->
+    <div class="page-nav">
+        <div>
+            <span class="prompt-path">C:\CUPPS\DOCS</span><span class="prompt">&gt;</span>
+            <span class="glow">type PROTOCOL.MD</span>
+        </div>
+        <div>
+            <a class="back" href="/">&lt;&lt; back to /</a>
+        </div>
+    </div>
+
+    <!-- Loading state -->
+    <div id="loading">Loading PROTOCOL.md ...</div>
+
+    <!-- Error state -->
+    <div id="error"></div>
+
+    <!-- Table of contents (populated after render) -->
+    <div id="toc" style="display:none;">
+        <div id="toc-title">&gt; CONTENTS</div>
+        <ul id="toc-list"></ul>
+    </div>
+
+    <!-- Rendered markdown -->
+    <div id="content"></div>
+
+</div>
+
+<!-- Status Bar -->
+<div class="status-bar">
+    <span>CUPPS-DOS v6.22</span>
+    <span id="status-file">FILE: PROTOCOL.MD</span>
+    <span id="status-time"></span>
+</div>
+
+<!-- Scroll-to-top -->
+<button id="scroll-top" aria-label="Scroll to top">^ TOP</button>
+
+<!-- marked.js for markdown rendering -->
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+
+<script>
+(function() {
+    // ── Clock ──
+    function updateTime() {
+        const now = new Date();
+        const el = document.getElementById('status-time');
+        if (el) el.textContent = now.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', hour12:true });
+    }
+    updateTime();
+    setInterval(updateTime, 30000);
+
+    // ── Fetch & render the markdown ──
+    const loadingEl = document.getElementById('loading');
+    const errorEl = document.getElementById('error');
+    const contentEl = document.getElementById('content');
+    const tocEl = document.getElementById('toc');
+    const tocList = document.getElementById('toc-list');
+
+    // Configure marked: GFM tables, line breaks, etc.
+    marked.setOptions({
+        gfm: true,
+        breaks: false,
+        headerIds: true,
+        mangle: false,
+    });
+
+    function slugify(s) {
+        return s.toLowerCase()
+            .replace(/[^\w\s-]/g, '')
+            .replace(/\s+/g, '-')
+            .replace(/-+/g, '-')
+            .replace(/^-|-$/g, '');
+    }
+
+    fetch('PROTOCOL.md', { cache: 'no-cache' })
+        .then(r => {
+            if (!r.ok) throw new Error('HTTP ' + r.status + ' — could not load PROTOCOL.md');
+            return r.text();
+        })
+        .then(md => {
+            loadingEl.style.display = 'none';
+            contentEl.innerHTML = marked.parse(md);
+
+            // Add IDs to headings for anchor links + build TOC
+            const headings = contentEl.querySelectorAll('h1, h2, h3');
+            const tocItems = [];
+            headings.forEach(h => {
+                if (!h.id) h.id = slugify(h.textContent);
+                // Only include h2 and h3 in TOC (skip the big h1 title)
+                if (h.tagName === 'H2' || h.tagName === 'H3') {
+                    tocItems.push({
+                        id: h.id,
+                        text: h.textContent,
+                        level: h.tagName.toLowerCase()
+                    });
+                }
+            });
+
+            if (tocItems.length > 0) {
+                tocList.innerHTML = tocItems.map(it =>
+                    `<li class="toc-${it.level}"><a href="#${it.id}">${it.text}</a></li>`
+                ).join('');
+                tocEl.style.display = 'block';
+
+                // Move TOC before the first h2 in content for good visual placement
+                const firstH2 = contentEl.querySelector('h2');
+                if (firstH2) {
+                    firstH2.parentNode.insertBefore(tocEl, firstH2);
+                }
+            }
+        })
+        .catch(err => {
+            loadingEl.style.display = 'none';
+            errorEl.style.display = 'block';
+            errorEl.innerHTML =
+                '<strong>Could not load PROTOCOL.md</strong><br>' +
+                err.message + '<br><br>' +
+                'Expected the file at <code>' + window.location.origin + '/PROTOCOL.md</code>. ' +
+                'If deploying on GitHub Pages, place PROTOCOL.md in the repository root alongside this page.';
+        });
+
+    // ── Scroll-to-top button ──
+    const scrollBtn = document.getElementById('scroll-top');
+    window.addEventListener('scroll', () => {
+        if (window.scrollY > 400) scrollBtn.classList.add('visible');
+        else scrollBtn.classList.remove('visible');
+    });
+    scrollBtn.addEventListener('click', () => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+})();
+</script>
+
+</body>
+</html>
