@@ -1,0 +1,12 @@
+# robots.txt for https://jamesccupps.github.io/
+# Allow all compliant crawlers by default.
+
+User-agent: *
+Allow: /
+
+# Don't index the raw markdown — the styled HTML version at /protocol.html
+# is the canonical page for this content. Disallowing here prevents the
+# raw file from competing with the HTML page in search results.
+Disallow: /PROTOCOL.md
+
+Sitemap: https://jamesccupps.github.io/sitemap.xml
