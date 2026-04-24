@@ -137,23 +137,11 @@
             margin-bottom: 8px;
             color: var(--green);
             text-shadow: 0 0 10px var(--green-glow);
-            animation: fadeIn 1s ease-out;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(-8px); }
-            to { opacity: 1; transform: translateY(0); }
         }
 
         /* ── Sections ── */
         .section {
             margin-bottom: 16px;
-            animation: typeReveal 0.4s ease-out;
-        }
-
-        @keyframes typeReveal {
-            from { opacity: 0; }
-            to { opacity: 1; }
         }
 
         .prompt { color: var(--green); }
@@ -200,6 +188,37 @@
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+        }
+
+        /* Multi-link row variant: row is a div so the name can be its own
+           link and the description can contain additional links without
+           producing invalid nested <a> elements. */
+        .project-row.multilink { cursor: default; }
+        .project-row.multilink:hover {
+            background: transparent;
+            border-color: transparent;
+        }
+        .project-row .name-link {
+            color: var(--green);
+            text-shadow: 0 0 6px var(--green-glow);
+            font-weight: bold;
+            text-decoration: none;
+            padding: 0 4px;
+            margin-left: -4px;
+            transition: background 0.15s;
+        }
+        .project-row .name-link:hover {
+            background: rgba(26, 255, 26, 0.12);
+        }
+        .project-row .doc-link {
+            color: var(--cyan);
+            text-decoration: none;
+            border-bottom: 1px dotted var(--cyan);
+            transition: all 0.15s;
+        }
+        .project-row .doc-link:hover {
+            background: var(--cyan);
+            color: var(--bg);
         }
 
         /* ── Interactive Input ── */
@@ -270,29 +289,6 @@
             .skill-label { width: 100px; font-size: 0.9rem; }
         }
 
-        /* ── Boot-up animation ── */
-        .boot-line {
-            opacity: 0;
-            animation: bootIn 0.3s ease-out forwards;
-        }
-        .boot-line:nth-child(1) { animation-delay: 0.1s; }
-        .boot-line:nth-child(2) { animation-delay: 0.35s; }
-        .boot-line:nth-child(3) { animation-delay: 0.6s; }
-        .boot-line:nth-child(4) { animation-delay: 0.85s; }
-        .boot-line:nth-child(5) { animation-delay: 1.0s; }
-        .boot-line:nth-child(6) { animation-delay: 1.15s; }
-
-        @keyframes bootIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-
-        /* Hide main content until boot finishes */
-        .main-content {
-            opacity: 0;
-            animation: bootIn 0.5s ease-out 1.6s forwards;
-        }
-
         /* Help table */
         .help-table {
             margin: 6px 0 10px 20px;
@@ -308,16 +304,6 @@
 <body>
 
 <div class="crt-frame" id="crt">
-
-    <!-- BIOS Boot Sequence -->
-    <div id="boot-sequence">
-        <div class="boot-line dim">CUPPS BIOS v4.2.6 &mdash; Memory Test... OK</div>
-        <div class="boot-line dim">Detecting drives... C: [PRIMARY] OK</div>
-        <div class="boot-line dim">Loading CUPPS-DOS v6.22...</div>
-        <div class="boot-line dim">Network adapter: LINK OK</div>
-        <div class="boot-line dim">All systems nominal.</div>
-        <div class="boot-line dim">Starting COMMAND.COM...</div>
-    </div>
 
     <!-- Main Terminal Content -->
     <div class="main-content" id="main">
@@ -365,6 +351,11 @@
                     <span class="name">HVAC Scanner</span>
                     <span class="desc">Multi-protocol BACnet scanner</span>
                 </a>
+                <div class="project-row multilink">
+                    <span class="tag">[BAS]</span>
+                    <a class="name-link" href="https://github.com/jamesccupps/P2Scanner" target="_blank" rel="noopener">P2 Scanner</a>
+                    <span class="desc">Siemens APOGEE P2 protocol scanner &middot; <a class="doc-link" href="protocol.html">PROTOCOL.md</a></span>
+                </div>
                 <a class="project-row" href="https://github.com/jamesccupps/NoteForge" target="_blank" rel="noopener">
                     <span class="tag">[APP]</span>
                     <span class="name">NoteForge</span>
@@ -411,7 +402,7 @@
                     <span class="desc">Ubiquiti Store restock alert tool</span>
                 </a>
             </div>
-            <div class="dim">       10 repo(s)    &mdash;  Type HELP for commands</div>
+            <div class="dim">       11 repo(s)    &mdash;  Type HELP for commands</div>
         </div>
 
         <hr class="sep">
@@ -491,7 +482,7 @@
         ver: () => `<span class="amber">CUPPS-DOS v6.22</span>\nShell: COMMAND.COM\nUptime: ${getUptime()}`,
         uptime: () => `Session uptime: ${getUptime()}`,
         matrix: () => { startMatrix(); return '<span class="cyan">Entering the Matrix...</span>'; },
-        dir: () => `<span class="dim"> Volume in drive C is CUPPS_REPOS\n Directory of C:\\CUPPS\n\n ABOUT    TXT\n PROJECTS DIR  10 repo(s)\n CONTACT  TXT\n\n        3 item(s)</span>`,
+        dir: () => `<span class="dim"> Volume in drive C is CUPPS_REPOS\n Directory of C:\\CUPPS\n\n ABOUT    TXT\n PROJECTS DIR  11 repo(s)\n CONTACT  TXT\n\n        3 item(s)</span>`,
     };
 
     const bootTime = Date.now();
