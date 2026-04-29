@@ -24,6 +24,7 @@ Siemens APOGEE P2 is the building-automation protocol used by Siemens PXC contro
   - **PPCL-edit capture** (~63 KB) — operator editing a single PPCL line in Desigo CC. Surfaces the program editor opcode family `0x4100` (line write/create), `0x4103` (program enable/disable hint), and `0x4104` (line read/delete by line number) — companions to the previously-known `0x4106` ClearTracebits.
   - **UI-browse capture** (~686 KB) — operator clicking through tree views in Desigo CC. Surfaces the small-form (~30–40 byte) variant of `0x4200` PropertyQuery, distinct from the large pre-allocated 222-byte form used by deep property reads.
   - **Cold-probe captures** (`enumeratetest1-3.pcapng`) — focused tests of malformed / experimental request bodies. Useful as negative examples: probes `0x0245` and `0x4500` with 3–4 byte bodies always error; this is included as a guard for scanner authors.
+  - **Two-node validation capture** (~1.6 MB, ~11k packets, 35 minutes, 2 panels) — server-side capture covering both legacy-dialect (NODE3, PME1252) and modern-dialect (NODE11, PME1300) panels in normal steady-state operation. Surfaced opcode `0x0295` (a previously-undocumented 02xx read variant), provided byte-level validation for the documented `0x0274` / `0x0240` wire formats against live data, and exposed an error in the previous routing-header "Name ordering" correction below — see *Routing header* for details.
 
 Every stream across all captures parsed cleanly against the framing rules below with zero desyncs.
 
@@ -60,11 +61,11 @@ Beacon characteristics:
 | Payload | 4 bytes: `01 00 00 00` |
 | UDP datagram length | 12 bytes (8-byte UDP header + 4-byte payload) |
 | Cadence | One emission pair roughly every 10.5 seconds, very regular |
-| Senders | BLN gateway/router devices (multiple senders observed simultaneously on multi-segment sites) |
+| Senders | BLN gateway/router devices (multiple senders observed simultaneously on multi-VLAN sites) |
 
-**Dual emission**: each beacon is sent twice in immediate succession — once to the multicast group, once to the directed broadcast — typically within 1 millisecond of each other from the same source (observed deltas range 0.000–0.460 ms across the corpus, with most pairs <100 µs apart). This redundancy presumably ensures presence detection works regardless of whether the receiving switch has IGMP snooping configured. Earlier captures saw only the multicast variant because their SPAN port filtered broadcast frames; a comprehensive any-interface capture surfaces both. The 10.50-second inter-pair cadence is consistent across every capture in the corpus and across multiple sources on multi-segment sites, so it is a hardcoded interval rather than a configurable timer.
+**Dual emission**: each beacon is sent twice in immediate succession — once to the multicast group, once to the directed broadcast — typically within 1 millisecond of each other from the same source (observed deltas range 0.000–0.460 ms across the corpus, with most pairs <100 µs apart). This redundancy presumably ensures presence detection works regardless of whether the receiving switch has IGMP snooping configured. Earlier captures saw only the multicast variant because their SPAN port filtered broadcast frames; a comprehensive any-interface capture surfaces both. The 10.50-second inter-pair cadence is consistent across every capture in the corpus and across multiple sources on multi-VLAN sites, so it is a hardcoded interval rather than a configurable timer.
 
-**Corpus-wide statistics (51 pcaps from the reference site):** 1040 beacon packets observed across 26 pcaps. Every one carries the identical 4-byte payload `01 00 00 00` (zero variation in 1040 samples). Two unique source IPs: `<gw-A>` (547 packets, segment-A gateway) and `<gw-B>` (493 packets, segment-B gateway). Two destinations: `233.89.188.1` (534 packets) and `255.255.255.255` (506 packets). Of 906 inter-emission intervals, 474 fall in the [10.0 s, 11.0 s] band (the real cadence — median 10.4906 s, max 10.6546 s) and 415 are sub-millisecond (the multicast/broadcast pair-emission deltas). The pattern is mechanically regular.
+**Corpus-wide statistics (51 pcaps from the reference site):** 1040 beacon packets observed across 26 pcaps. Every one carries the identical 4-byte payload `01 00 00 00` (zero variation in 1040 samples). Two unique source IPs: `10.0.0.1` (547 packets, HVAC VLAN gateway) and `10.0.1.1` (493 packets, HVAC-Ext VLAN 6 gateway). Two destinations: `233.89.188.1` (534 packets) and `255.255.255.255` (506 packets). Of 906 inter-emission intervals, 474 fall in the [10.0 s, 11.0 s] band (the real cadence — median 10.4906 s, max 10.6546 s) and 415 are sub-millisecond (the multicast/broadcast pair-emission deltas). The pattern is mechanically regular.
 
 The beacon is a presence-announcement, not a discovery query — it carries no node name, no BLN identifier, no routing data. A scanner that wanted to use it for site discovery would see only "something Siemens-shaped is alive on this segment" and would still need to brute-force-attempt the TCP handshake to identify specific nodes. The cartesian-attack discovery flow documented later remains the reliable approach.
 
@@ -203,39 +204,40 @@ The direction byte is:
 
 These are the only three values observed on the wire. No other values appear across 7873 messages.
 
-### Name ordering: NOT the same for all message types
+### Name ordering: slot 2 = destination, slot 4 = source
 
-**This is a correction to the original doc.** The ordering of names A/B differs by message type:
+**Empirically verified across 7873+ messages spanning all four message types: slot 2 is always the destination node, slot 4 is always the source node.** The byte order does not depend on message type.
 
 | Message type | Slot 2 | Slot 4 |
 |--------------|--------|--------|
-| `0x33` DATA (C2S) | destination node | source scanner |
-| `0x33` DATA (S2C) | destination (= original source) | source (= original dest) |
-| `0x34` HEARTBEAT | same as DATA | same as DATA |
-| `0x2E` CONNECT | sender (self) | recipient (peer) |
-| `0x2F` ANNOUNCE | sender (self) | recipient (peer) |
+| `0x33` DATA | destination | source |
+| `0x34` HEARTBEAT | destination | source |
+| `0x2E` CONNECT | destination | source |
+| `0x2F` ANNOUNCE | destination | source |
 
-Concrete examples from the reference pcap:
+Concrete examples from real captures:
 
-DATA C2S (client addresses PXC):
+DATA C2S (supervisor addresses PXC):
 ```
-00 "SITEBLN" "node1" "SITEBLN" "DCC-SVR|5034"
-       BLN    DEST      BLN         SRC
-```
-
-DATA S2C (PXC response):
-```
-01 "SITEBLN" "DCC-SVR|5034" "SITEBLN" "NODE1"
-       BLN         DEST            BLN      SRC
+00 "SITEBLN" "node6" "SITEBLN" "DCC-SVR|5034"
+       BLN     DEST       BLN          SRC
 ```
 
-CONNECT C2S (client introduces itself to PXC):
+DATA S2C (PXC response — slots swap to keep slot 2 = destination of *this* frame):
 ```
-00 "SITEBLN" "DCC-SVR" "SITEBLN" "NODE1"
-       BLN      SELF         BLN      PEER
+01 "SITEBLN" "DCC-SVR|5034" "SITEBLN" "NODE6"
+       BLN          DEST            BLN     SRC
 ```
 
-The safest parser rule: don't hardcode which slot is dest vs src. Parse the 4 names with the message type in mind. Validate them against known pairs.
+CONNECT (PXC opens Mode C connection to supervisor:5033):
+```
+00 "SITEBLN" "DCC-SVR" "SITEBLN" "NODE3"
+       BLN       DEST          BLN     SRC
+```
+
+In the CONNECT example, IP source is NODE3 (the panel) and IP destination is the supervisor. The IdentifyBlock body's first TLV — the sender's self-name — is `NODE3`, agreeing with slot 4 (source), not slot 2. Both the IP-layer direction and the inner identity payload independently confirm that slot 4 holds the sender for CONNECT/ANNOUNCE just as it does for DATA/HEARTBEAT.
+
+**Correction note.** An earlier revision of this document claimed CONNECT and ANNOUNCE reversed the ordering — slot 2 = sender, slot 4 = recipient. That claim is contradicted by all available evidence: the two-node validation capture contains 854 CONNECT/ANNOUNCE frames (426 `0x2E` + 428 `0x2F`), covering both panel→supervisor requests and the corresponding supervisor→panel responses, and every one follows the destination-first convention. The supervisor responses are particularly conclusive — they have IP src = supervisor and slot 4 = supervisor, so slot 4 is the source even when the supervisor is doing the sending. The likely source of the earlier error was a hand-annotated example whose IP-direction wasn't cross-checked against the routing slots. The corpus does not contain a supervisor-initiated `0x2E` CONNECT (Mode A flows in this capture used the alternative `0x33` + inner `0x4640` initiation path), so a residual possibility exists that some old Insight/Desigo client populates the slots differently — but no such client has been observed. Parser authors should treat slot 2 = destination as universal until counter-evidence appears.
 
 **Scanner identity conventions:**
 - Desigo CC servers: `<SITE>DCC-SVR|5034`
@@ -266,24 +268,26 @@ The distinct BLN-RST vs scanner/node-silent behavior is what makes cold-site dis
 
 CONNECT and ANNOUNCE have **structurally identical payloads**. The only differences are the message type code (0x2E vs 0x2F) and slight byte-length variation for the embedded node name.
 
-A CONNECT with node name `NODE1` (5 chars) is 76 bytes; an ANNOUNCE with node name `NODEAB` (6 chars) is 78 bytes. The delta is exactly the character-count difference in the node name, which appears twice in the payload.
+A CONNECT with node name `NODE1` (5 chars) is 76 bytes; an ANNOUNCE with node name `NODE11` (6 chars) is 78 bytes. The delta is exactly the character-count difference in the node name, which appears twice in the payload.
 
-Full layout (CONNECT example):
+Full layout (CONNECT example, panel `NODE1` reaching back to supervisor `DCC-SVR`):
 
 ```
 00                         direction byte (request)
 "SITEBLN"\0                BLN (routing header slot 1)
-"DCC-SVR"\0             sender / self (routing header slot 2)
+"DCC-SVR"\0                destination — supervisor (slot 2)
 "SITEBLN"\0                BLN (slot 3)
-"NODE1"\0                  peer / target node (slot 4)
+"NODE1"\0                  source — sender's self-name (slot 4)
 46 40                      0x4640 IdentifyBlock marker
-01 00 05 "NODE1"           TLV: node name (tag=0x01, u16 BE length)
-01 00 04 "SITE"            TLV: site name
+01 00 05 "NODE1"           TLV: node name (tag=0x01, u16 BE length) — matches slot 4
+01 00 03 "ACM"             TLV: site name
 01 00 07 "SITEBLN"         TLV: BLN name
 00 01 01 00 00 00 00 00    8 bytes constant (flags?)
 00 XX XX XX XX             5 bytes: null-pad + 32-bit Unix epoch (big-endian)
 00 00 00                   3 bytes trailer
 ```
+
+(Slot 2 is always the destination of the current frame and slot 4 is always the source — see *Routing header → Name ordering*. The IdentifyBlock body's first TLV is the sender's self-name, agreeing with slot 4.)
 
 ### The embedded timestamp
 
@@ -330,12 +334,12 @@ Within Mode C there are **two sub-variants**, distinguished by what's in the ver
 
 The PXC-initiated Mode C connections all target the **DCC's port 5033**. This means at least at the reference site, the DCC service listens on **both 5033 and 5034**. (Many references describe DCC as "5034-only" — that may be a deployment-specific simplification. Treat 5033/5034 as both-ways-listenable in any robust scanner.)
 
-Sample headless Mode C flow from the schedule-edit capture, supervisor `<dcc-ip>:<port> → <panel-ip>:5033`:
+Sample headless Mode C flow from the schedule-edit capture, supervisor `10.0.0.10:55811 → 10.0.0.20:5033`:
 
 ```
 Frame  Type  Direction  Opcode   Notes
 1      2E    →          --       fresh TCP, bare CONNECT, no IdentifyBlock
-2      2E    →          0x0964   schedule-name query (TITLE.SAMPLE)
+2      2E    →          0x0964   schedule-name query (EXAMPLE.ROOM)
 3      2E    ←          0x0964   response carrying value+units+limits
 4      2E    →          0x0971   enhanced point read (same target)
 5      2E    ←          0x0971   response
@@ -369,7 +373,7 @@ After the routing header, the payload contains a big-endian 16-bit opcode follow
 |--------|-----------|-----------|-------|
 | `0x0220` | 5033 | ReadShort | Desigo CC's preferred read, compact request |
 | `0x0271` | 5033 | ReadExtended | Legacy-client dialect; returns full value block |
-| `0x0272` | 5033/5034 | **ReadExtended-MetaOnly** (likely) | Wire format identical to `0x0271` but the trailing 2-byte sentinel is **omitted** (just stops at the second TLV). Body shape: `02 72 00 00 [01 00 LL <name>] [01 00 LL <subname>]`. Compare: `0x0271` ends with `00 FF` (request-the-value sentinel), `0x0273` ends with `00 00` (no-value sentinel). `0x0272` ends with neither — likely a "look up the property descriptor without fetching its current value" form, used by Desigo CC during schedule probes. **All 37 corpus samples come from a representative reference capture and 35/37 return `0x0003 not_found`** — meaning the opcode is recognized but the named targets don't exist as schedule objects. Carried inside both Mode-C `0x2E` framing and ordinary `0x33` DATA frames |
+| `0x0272` | 5033/5034 | **ReadExtended-MetaOnly** (likely) | Wire format identical to `0x0271` but the trailing 2-byte sentinel is **omitted** (just stops at the second TLV). Body shape: `02 72 00 00 [01 00 LL <name>] [01 00 LL <subname>]`. Compare: `0x0271` ends with `00 FF` (request-the-value sentinel), `0x0273` ends with `00 00` (no-value sentinel). `0x0272` ends with neither — likely a "look up the property descriptor without fetching its current value" form, used by Desigo CC during schedule probes. **All 37 corpus samples come from `<reference-pcap>` and 35/37 return `0x0003 not_found`** — meaning the opcode is recognized but the named targets don't exist as schedule objects. Carried inside both Mode-C `0x2E` framing and ordinary `0x33` DATA frames |
 | `0x0273` | 5033 | WriteNoValue / AlarmAckTrigger | Same wire format as 0x0271, trailer `00 00` instead of `00 FF`. Gets ACK-only response. Now observed sent immediately before `0x0509` AlarmAck for the same point in operator alarm-acknowledgement flows — likely the operator-action trigger or a state-clear precondition for the formal ack. Wire format is identical to a legacy read; the trailer is the only structural difference |
 | `0x0274` | both | ValuePush / COVNotification | See below — behavior depends on direction |
 | `0x0240` | 5034 only | WriteWithQuality | PXC→DCC push of a BLN-sourced virtual point value, with a quality/sentinel header. Device name is literally `"NONE"` for panel-global points. ACK-only response. **DCC also issues this on 5033 against `SYST`-tagged properties — those reliably error with `0x0E15`, see "Property writes" below** |
@@ -672,13 +676,13 @@ A previously undocumented family of `09xx` opcodes drives Desigo CC's weekly-sch
 | Opcode | Operation | Body shape (after routing header) | Returns | Notes |
 |--------|-----------|-----------------------------------|---------|-------|
 | `0x0961` | AnalogPointQuery (legacy) | Same shape as `0x0981` | Often `0x0003` | Returns data on a small number of points; mostly errors. Likely a deprecated form of `0x0971` |
-| `0x0964` | TitleAnalogQuery | `[01 00 04 "SYST"][01 00 LL <obj>][01 00 LL <subpoint>]` | Value + units + min/max limits | Used to populate Desigo "TITLE.SAMPLE" room temperature widget. Carries f32 value, units string, and engineering limits |
+| `0x0964` | TitleAnalogQuery | `[01 00 04 "SYST"][01 00 LL <obj>][01 00 LL <subpoint>]` | Value + units + min/max limits | Used to populate Desigo "EXAMPLE.ROOM" room temperature widget. Carries f32 value, units string, and engineering limits |
 | `0x0965` | NodeDiscoveryEnumerate | Cursor TLV pair; same as `0x0986` | Node name(s) on the BLN | Used early in a session to confirm panel reachability. Equivalent in function to a slim `0x0986` |
 | `0x0966` | ShortQuery | 4-byte body, no SYST tag | Mostly `0x0003` | Probe op; rarely returns useful data |
-| `0x0969` | ScheduleObjectList | `[01 00 04 "SYST"][01 00 LL <object>]` | List of schedule object names under a parent | Returns names like `"SAMPLE.SCHEDULE.OCC"` — schedule objects in a panel namespace |
+| `0x0969` | ScheduleObjectList | `[01 00 04 "SYST"][01 00 LL <object>]` | List of schedule object names under a parent | Returns names like `"LIGHTING.SAMPLE.SCH"` — schedule objects in a panel namespace |
 | `0x0971` | EnhancedPointRead | Like `0x0981` but with extra trailing config bytes | Description + value + units + resolution + min + max + type-code | More complete than `0x0981`. Returned `ROOM TEMP = 71.75 °F`, resolution `0.25`, max `48.0` for one tested point. Use this when a UI needs limits, not just current value |
-| `0x0974` | MultistatePointEnumerate | Like `0x0964` but state-set-aware | Object name + current state index + state-set ref | Used for points like `ZONE.HP.ZN/MODE` — pulls current multistate value plus the cursor reference into the matching state-set |
-| `0x0975` | NodeDiscoveryWithLines | Cursor + line-number trailer like `0x0985` | Node + line + column index | Used to map PPCL programs to nodes. Sample returned `NODETEST / D / 00010 C / 0A` |
+| `0x0974` | MultistatePointEnumerate | Like `0x0964` but state-set-aware | Object name + current state index + state-set ref | Used for points like `EXAMPLE.HP.ZN/MODE` — pulls current multistate value plus the cursor reference into the matching state-set |
+| `0x0975` | NodeDiscoveryWithLines | Cursor + line-number trailer like `0x0985` | Node + line + column index | Used to map PPCL programs to nodes. Sample returned `NODE9TEST / D / 00010 C / 0A` |
 | `0x0976` | DeviceAllSubpointsRead | `[01 00 04 "SYST"][01 00 LL <device>]` plus 2-byte slot count | App number (u16) + description + per-slot `(slot_index, f32)` tuples | Powerful "give me everything on this device" op. Sample returned app=`0x07E7` (= 2023, indicating the application code), description "VAV-19", and 18 (slot, value) pairs |
 | `0x0979` | ShortVariant | `0x0976`-like body with trailing `02 71` | Variable | The `02 71` trailer references opcode `0x0271` (extended point read). Looks like a "cross-opcode lookup" — request says "use 0x0271 semantics on this object" |
 | `0x098B` | NewerFeature | `0x0981`-shape | 100% `0x0003`/`0x00AC` on PME1252 | Newer-firmware enumerate. Captures show Desigo trying it, panels rejecting it |
@@ -697,7 +701,7 @@ The most complex member of the family. One response can carry an entire week of 
 [routing header]
 01                              direction: success
 00 00                           separator
-01 00 LL <schedule_name>        e.g. "SAMPLE.SCHEDULE.OCC"
+01 00 LL <schedule_name>        e.g. "LIGHTING.SAMPLE.SCH"
 01 00 02 00 NN                  NN = entry count
 [per entry, repeated NN times]:
   01 00 01 [day-of-week 1=Mon..7=Sun]
@@ -767,7 +771,7 @@ These opcodes give Desigo CC's schedule editor an O(1) round-trip to render a fu
 
 ### Schedule property writes (`0x5020` / `0x5022`)
 
-Schedule edits land via a paired write: an init/allocate (`0x5022`) followed by an entry-write (`0x5020`). Both observed in the schedule-edit capture (sequence numbers 529731 → 529732) targeting schedule objects `SAMPLE.SCHEDULE.OCC` and `SAMPLE.TENANT.OCC`.
+Schedule edits land via a paired write: an init/allocate (`0x5022`) followed by an entry-write (`0x5020`). Both observed in the schedule-edit capture (sequence numbers 529731 → 529732) targeting schedule objects `LIGHTING.SAMPLE.SCH` and `EXAMPLE.TENANT.SCH`.
 
 #### 0x5022 — schedule slot init
 
@@ -981,6 +985,7 @@ The captures consistently show Desigo CC emitting a wider opcode set than panels
 | `0x0263` | 5033 | 4 | Object lifecycle / delete-related | Pairs with `0x0260` |
 | `0x0203`, `0x0204`, `0x0260` | 5033 | 2–4 each | `XX XX [02–04] 00 02 00 00 [LP name] 01 00 00 00 01 [LP name] 01 00 00 01 00 00 3F FF FF FF` | **Object lifecycle family.** Probes seen carrying client-test names (`test1`, `test2`, `test4`, `test434`). The trailing `3F FF FF FF` is the same property-state sentinel used in `0x0050`. `0x0204` is doc-named CreateObject (returns `0x0E11 already_exists` if the name is taken). `0x0203` and `0x0260` likely sibling create/probe variants — only seen with client-debug names in the corpus, so semantics aren't pinned down beyond "object-lifecycle 02xx family" |
 | `0x0291`, `0x0294`, `0x02A8` | 5033 | 2–8 each | SYST + device + point + value-like trailing bytes; some carry an inline byte `0xC8` followed by a type code and 4-byte float | Read/write variants in the 02xx family. `0x0291` and `0x02A8` carry value bytes (writes); `0x0294` carries no value (read). Separator after SYST is `0x23` for the value-carrying ones, `0x00` for the read-only one. **Two body shapes for 0x0294**: small (53-byte) form uses separator `0x00`; large (222-byte) preallocated form uses separator `0x01` |
+| `0x0295` | 5033 | 25 | `02 95 [01 00 04 "SYST"][01 00 LL <obj>][01 00 LL <prop>]?` | Sibling of `0x0294` — SYST-scoped read against a single named object, optionally followed by a property-name TLV. Surfaced in the two-node validation capture, all 25 samples DCC→PXC. Most samples carry just an object name (short single-token plant-equipment status-register names — boiler/pump/tower enables, alarms, status); two carry `<schedule-object>, MODE` suggesting a multistate-aware variant. Wire shape mirrors `0x0294` small-form; semantics are the same family of "read a SYST-scoped property" probes. Add to the same dispatcher branch as `0x0294` |
 | `0x0368` | 5033 | 1 | `03 68 04 01 00 00 01 00 05 <node-name> 00 01 00 1F` | Node-routing query. Carries a node name and what looks like a 16-bit flag/mask field |
 | `0x0606`, `0x5354` | 5033 | 6 / 6 | `XX YY 01 00 04 "SYST" 23 3F FF FF FF` | Same shape as `0x0050`. `0x0606` returns empty body (heartbeat-like ping); `0x5354` always errors `0x0003` |
 | `0x4220` | 5033 | 1 | SYST + point + property descriptor bytes | Bulk variant adjacent to `0x4221` and `0x4222`. Single sample; appears to read or modify property metadata rather than the value itself |
@@ -1331,7 +1336,7 @@ Sent when a device-point value changes enough to cross the COV threshold. The fo
 ```
 [routing header: BLN / dest=supervisor / BLN / src=panel]
 02 74 00 01 00 00             opcode + header
-01 00 0A "VAV-EXAMPLE"         device TLV
+01 00 0A "VAV-12"         device TLV
 01 00 09 "ROOM TEMP"          point TLV
 42 90 00 00                   f32 BE value (72.0 °F)
 00 00 00 00 00 00 00 00 00 00 00 00 00   trailer padding
@@ -1590,7 +1595,7 @@ Multiple opcodes leak the panel's own canonical identity in their responses, eve
 
 Every DATA-style response from a panel includes the panel's own canonical name in **slot 4 of the routing header**, regardless of whether the response carried success (`0x01`) or an error (`0x05`). Crucially, the bouncer is **case-insensitive on the destination node name in slot 2 of the request** — sending `node1` (lowercase) gets a response routed back with `NODE1` (canonical case) in slot 4. So a scanner that has guessed even an approximately-correct node name receives the canonical form for free, in the very first response.
 
-Worked example, observed verbatim in a representative reference capture:
+Worked example, observed verbatim in `<reference-pcap>`:
 
 ```
 DCC sends:  00 "SITEBLN" "node1" "SITEBLN" "DCC-SVR" 09 61 ...
@@ -1610,9 +1615,9 @@ A successful response to a panel-bound IdentifyBlock request carries the panel's
 
 ```
 01                              dir = success
-"SITEBLN" "DCC-SVR|5034" "SITEBLN" "NODE1"     routing (panel name in slot 4)
-01 00 05 "NODE1"                LP-string: panel's node name (in body)
-01 00 04 "SITE"                 LP-string: site name
+"SITEBLN" "DCC-SVR|5034" "SITEBLN" "NODE6"     routing (panel name in slot 4)
+01 00 05 "NODE6"                LP-string: panel's node name (in body)
+01 00 03 "ACM"                  LP-string: site name
 01 00 07 "SITEBLN"              LP-string: BLN name
 00 01 01 00 00 00 00 00         8-byte fixed pattern
 00 69 EA 3E F5                  panel-side timestamp (BE u32 epoch)
@@ -1630,12 +1635,12 @@ PME1300                         <-- firmware family
 PXME V2.8.18 APOGEE             <-- detailed firmware version
 Sep 26 2019 12:41:20            <-- build timestamp
 ... binary status flags ...
-NODE1                           <-- node name (also in routing slot 4)
-SITE                            <-- site name
+NODE11                          <-- node name (also in routing slot 4)
+ACM                             <-- site name
 SITEBLN                         <-- BLN name
 ```
 
-Different panels carry different application identifiers in the same field — observed values include `APP1`, `APP2`, `APP3-Custom`, `APPLICATION`. These are the application-program names installed on each panel. **A scanner that hits `0x010C` against every IP on a subnet builds a complete asset inventory: firmware version, build date, application program, node/site/BLN — in one frame per panel.**
+Different panels carry different application identifiers in the same field — observed values include `R911FTR`, `DIVV9`, `DIVV9-NAMED`, `APPLICATION`. These are the application-program names installed on each panel. **A scanner that hits `0x010C` against every IP on a subnet builds a complete asset inventory: firmware version, build date, application program, node/site/BLN — in one frame per panel.**
 
 ### 4. `0x0050` and `0x0606` lightweight probes
 
@@ -1666,7 +1671,7 @@ Step 1 is no-touch and yields complete topology if a supervisor is active. Steps
 
 ### Practical caveat: case-sensitivity for the BLN name
 
-The bouncer's BLN check appears to be **case-sensitive**: `SITEBLN` works, `occebln` issues a TCP RST. The node-name check is case-insensitive (lowercase variants get routed-and-canonicalized). Treat BLN as exact-match-or-RST when iterating; treat node name as case-folded.
+The bouncer's BLN check appears to be **case-sensitive**: `SITEBLN` works, `sitebln` issues a TCP RST. The node-name check is case-insensitive (lowercase variants get routed-and-canonicalized). Treat BLN as exact-match-or-RST when iterating; treat node name as case-folded.
 
 ---
 
@@ -1701,7 +1706,7 @@ Partially misleading. `0x4640` is an **identity block marker** that can appear i
 
 ### "The routing header puts destination first, source second"
 
-Only true for DATA (0x33) and HEARTBEAT (0x34). **CONNECT (0x2E) and ANNOUNCE (0x2F) reverse the order**: the sender's own name is in slot 2, the target in slot 4. Don't write a parser that assumes dest-src for all message types.
+True for all message types. An earlier revision of this doc claimed CONNECT (`0x2E`) and ANNOUNCE (`0x2F`) reversed the ordering (sender in slot 2, recipient in slot 4); the two-node validation capture's 854 CONNECT/ANNOUNCE frames — covering both panel→supervisor requests and the matching supervisor→panel responses — all follow the destination-first convention identical to DATA/HEARTBEAT. Supervisor responses are the cleanest evidence: IP src = supervisor and slot 4 = supervisor, so slot 4 holds the source even when the supervisor is the one transmitting. The IdentifyBlock body's first TLV (the sender's self-name) consistently agrees with slot 4. Parsers can safely assume `slot 2 = destination, slot 4 = source` for every message type. See *Routing header → Name ordering* for the full evidence.
 
 ### "`0x0271` is an extended read, `0x0220` is a short read"
 
@@ -2038,7 +2043,7 @@ def read_one(pxc_ip: str, panel: bytes, device: bytes, point: bytes,
         s.close()
 
 # Usage:
-# value = read_one("192.0.2.42", panel=b"panel1", device=b"TEC1", point=b"TEMP")
+# value = read_one("10.0.0.42", panel=b"panel1", device=b"TEC1", point=b"TEMP")
 # print(f"reading: {value}")  # → 72.5
 ```
 
