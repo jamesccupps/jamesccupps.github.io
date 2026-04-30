@@ -516,7 +516,7 @@ XX XX XX XX                 f32 BE value
 
 The parser must try the discriminators in order:
 
-1. **SHAPE A detection**: scan the body for the `3F FF FF F?` quality sentinel. If found, the f32 value sits at sentinel-offset +7 (sometimes +4 or +8 for edge cases). The sentinel is unambiguous — it only appears on physical points with a quality register.
+1. **SHAPE A detection**: scan the body for the quality sentinel — match the **3-byte prefix `3F FF FF` only**, treating the 4th byte as opaque (commonly `FF` or `F7`, occasionally `F0`; all are equally valid). If found, the f32 value sits at sentinel-offset +7 (sometimes +4 or +8 for edge cases). The 3-byte prefix is unambiguous — it only appears on physical points with a quality register, and the unstable low nibble of the 4th byte must not be locked. (Matching the literal `3F FF FF FF` will silently miss the F7 majority on most sites — see "Property state sentinel" below.)
 
 2. **SHAPE B detection**: if no sentinel, scan for the pattern `[00 00 00 00 00 00 XX]` (6 zero bytes followed by a small data-type code in `{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}`) occurring **after the last ASCII TLV**. The f32 value is the 4 bytes immediately following. This pattern is distinct from the SHAPE A metadata because it lacks the quality sentinel.
 
@@ -1088,10 +1088,12 @@ Labeled R1–R4 to keep them distinct from the SHAPE A/SHAPE B names used for `0
 
 | Variant | Opcode | 7 metadata bytes | Condition |
 |---------|--------|------------------|-----------|
-| R1 | `0x0271` | `3F FF FF FF 00 00 00` | Quality flags unset |
+| R1 | `0x0271` | `3F FF FF X? 00 00 00` | Quality flags partial (see below) |
 | R2 | `0x0271` | `00 00 00 00 00 00 00` | Quality flags explicit, all clear |
 | R3 | `0x0220` | `00 00 00 00 00 00 XX` | XX = data-type code (see "Data-type codes" sub-section) |
 | R4 | any | (R2/R3 pattern but float starts `0xBF`) | Negative values |
+
+**Critical: lock only the 3-byte prefix `3F FF FF`, NOT the full 4-byte `3F FF FF FF`.** The fourth byte varies on the wire — `3F FF FF FF` and `3F FF FF F7` are both real and very common, and at least `3F FF FF F0` has been observed. Field captures of one site's NODE3 returned `F7` for ~75% of live read responses and `FF` for the remainder, with no apparent correlation to point type or value. Bit pattern of the low nibble is unstable across reads of the *same point* in the same session, so this isn't quality-flag information the user can interpret reliably; treat it as opaque. A predicate that requires the literal `3F FF FF FF` will reject the F7 majority and produce false-offline classifications for most online devices — see "Property state sentinel" below.
 
 ### Scan-loop bounds for the value block
 
@@ -1144,6 +1146,21 @@ Desigo CC's UI displays comm-faulted points with a `#COM` flag. This scanner doe
 
 **Note:** this `0x01` in the *value block metadata* is a TEC-level comm-fault flag for the underlying device. It is distinct from the `0x05` *response-level* status byte described earlier, which indicates a PXC-level operation failure (point doesn't exist, opcode unsupported). Both can appear in the same parser workflow — one for device health, the other for operation outcome.
 
+### Panel-cached metadata vs live FLN data
+
+A subtle and easily-missed distinction. Not all properties on a device behave the same way under FLN comm-fault:
+
+- **Live FLN-sourced points** (ROOM TEMP, RM STPT DIAL, AUX TEMP, anything that's read from the device's I/O at request time) carry the comm-status flag described above. When the TEC is faulted, these come back with `comm_status=0x01` and a stale cached value.
+- **Panel-cached configuration metadata** (APPLICATION number, descriptor strings, slot-table info — anything the panel knows because it commissioned the device, not because the device just told it) keeps reading successfully even when the TEC is fully faulted. APPLICATION reads on a #COM device return the configured app number with `comm_status=0x01` (in some firmware) or `comm_status=0x00` (in others, despite the device being dead) — it's unreliable as a liveness signal.
+
+**The trap:** a scanner that uses APPLICATION-read-success as a "device exists / is registered" probe and treats that as "online" will silently mark every #COM-faulted device online, because APPLICATION is panel-cached and never fails for a commissioned device. Cross-checked against Desigo CC's own System Manager: when ROOM TEMP shows `#COM` for a device, APPLICATION still shows the configured app number with no fault indicator on that row — Desigo doesn't treat APPLICATION readability as a liveness signal either.
+
+**Correct policy for a verifier:**
+1. Read ROOM TEMP (or any other genuinely live-sourced point on the device).
+2. If `comm_status=0x00` → online.
+3. If `comm_status=0x01` → offline (#COM). Optionally read APPLICATION to surface the configured app number for display, but flag it as cached.
+4. If ROOM TEMP doesn't exist on this device (some non-VAV apps), fall back to APPLICATION as a registration probe — but treat the result as "registered" not "online", and check `comm_status` on it too. APPLICATION-only confirmation is a weaker signal than ROOM TEMP confirmation.
+
 ### Observed stale-sensor signature: `-62.5°F`
 
 A second, separate signal of sensor trouble is a repeated `-62.5°F` (or adjacent values like `-63.5`) across multiple unrelated points on the same device. This has been observed where one AHU's mixed-air / return-air / supply-air temperatures and all its zone temperatures reported `-62.5 DEG F` while adjacent AHUs on the same panel reported plausible values.
@@ -1154,13 +1171,24 @@ This isn't a protocol signal per se — the PXC returns these values with `comm_
 
 ## Property state sentinel (partially unresolved)
 
-The `3F FF FF FF` vs `00 00 00 00` pattern appearing in variants R1 vs R2 almost certainly corresponds to a quality-flag register — analogous to OPC's uncertain/good/bad triad, or IEC 61131's quality bits.
+The `3F FF FF X?` vs `00 00 00 00` pattern appearing in variants R1 vs R2 almost certainly corresponds to a quality-flag register — analogous to OPC's uncertain/good/bad triad, or IEC 61131's quality bits.
 
-**Hypothesized meaning:** `3FFFFFFF` = "no specific quality flags set"; `00000000` = "explicit quality flags, all cleared."
+**Hypothesized meaning:** `3F FF FF FF` = "no specific quality flags set"; `00 00 00 00` = "explicit quality flags, all cleared"; the low nibble of the fourth byte (`F7`, `F0`, `FF`, ...) encodes individual flag bits.
 
 **Empirical testing does not confirm a clear user-facing distinction.** A write-test against a point repeatedly returned either sentinel unpredictably, and the value was live in both cases. The parser surfaces the raw bytes as `property_state_hex` for users to spot patterns, but doesn't assign meaning.
 
-**Cross-opcode observation:** the same `3F FF FF FF` sentinel appears inside `0x0220` read requests (as a middle field of the compact request format) AND inside `0x4221` bulk-read requests (at a fixed offset). This suggests it's a generic "no filter / wildcard property" sentinel used across multiple opcodes, not a quality-flag register at all — it may just be "match any property state." This reframes the mystery but doesn't solve it.
+### Sentinel-validation rule (the parser-critical part)
+
+A naive parser that scans for `01 00 00` markers preceded by ASCII gets fooled by enumerate-response metadata. The robust filter is:
+
+> Sentinel must be either `3F FF FF XX` (any 4th byte) **or** `00 00 00 00`.
+
+The *first three bytes* are the lock; the fourth byte is opaque and must NOT be checked. Concrete reasons:
+
+- A predicate that requires literal `3F FF FF FF` rejects the `3F FF FF F7` variant — which is the majority shape on at least some sites — and the parser silently returns `None` for those reads. Symptom: most live devices misclassified offline, no clear log signal.
+- A predicate that omits the prefix entirely (just `01 00 00` + ASCII predecessor) false-matches the SHAPE A enumerate per-entry metadata block (`04 00 02 00 ...`, `03 00 02 00 ...`, etc. — second byte always `00`, third byte always `02`), producing fake floats like `3.6e-35` and phantom STALE tags pulled from whatever bytes happen to follow.
+
+**Cross-opcode observation:** the same `3F FF FF FF` sentinel appears inside `0x0220` read requests (as a middle field of the compact request format) AND inside `0x4221` bulk-read requests (at a fixed offset). This suggests it's a generic "no filter / wildcard property" sentinel used across multiple opcodes, not a quality-flag register at all — it may just be "match any property state." This reframes the mystery but doesn't solve it. The `0x0220` request side appears to always send the literal `3F FF FF FF` (no `F7` variants observed in requests), so the request-side sentinel is genuinely a wildcard while the response-side sentinel carries opaque per-read state.
 
 If you figure this one out, vendor FCD documentation would probably clarify it — the relevant constants almost certainly live in the client-side binaries but the code paths that consume them aren't fully mapped.
 
@@ -1609,6 +1637,8 @@ Panel replies:  05 "SITEBLN" "DCC-SVR" "SITEBLN" "NODE1" 00 03
 
 The panel did not implement the request (returned `0x0003 not_found`) but still leaked `NODE1` as its canonical name. **A passive observer on any conversation gets the panel's name from the very first response, regardless of payload.** Likewise, an active scanner sending a single garbage request that produces an error gets the panel's name back for free.
 
+**Empirical rate.** Across 6 captures totaling 39,820 P2 frames, 4,573 request/response pairs were checkable for the case-correction leak. Of those, 3,409 (74.5%) showed the lowercase→canonical-case correction (e.g. `node1` request → `NODE1` in slot 4 of the response); 1,164 (25.5%) returned an unrelated frame or didn't fire the leak. The 74.5% rate means a scanner that sends two distinct lowercase guesses to a panel has ≈93.5% probability of harvesting the canonical name from at least one response.
+
 ### 2. `0x4640` IdentifyBlock success response
 
 A successful response to a panel-bound IdentifyBlock request carries the panel's **full identity** as a TLV-encoded body. Sample from a successful exchange:
@@ -1646,7 +1676,7 @@ Different panels carry different application identifiers in the same field — o
 
 Both have `00 XX YY 01 00 04 "SYST" 23 3F FF FF FF` request shapes — the same `SYST`-scoped "give me the system" probe with different opcode bytes:
 
-- **`0x0050`** response body: `01 00 04 "SYST" 23 3F FF FF FF [00 02] 01 00 0A "DCC-SVR" 01 00 00` — the registered supervisor name string. Plus the panel name in routing slot 4. So `0x0050` leaks **panel name + supervisor name** in one round trip. This is the opcode the doc has long marked as the "early shortcut" for cold discovery.
+- **`0x0050`** response body: `01 00 04 "SYST" 23 3F FF FF FF [00 02] 01 00 0A "DCC-SVR" 01 00 00` — the registered supervisor name string. Plus the panel name in routing slot 4. So `0x0050` leaks **panel name + supervisor name** in one round trip. This is the opcode the doc has long marked as the "early shortcut" for cold discovery. Note that `0x0050` returns the supervisor name in its **bare form** (`DCC-SVR`, no `|5034` suffix), while `0x4640` IdentifyBlock returns the **listen-port form** (`DCC-SVR|5034`). Both forms are in use across the protocol — DATA frames and the routing-table-push body use the `|5034` form, CONNECT/ANNOUNCE and `0x0050` use the bare form. A scanner constructing a session identity should prefer `|5034` for DATA traffic.
 - **`0x0606`** response body: empty (`00 00`) — pure ACK. Still leaks the panel name in routing slot 4.
 
 Use `0x0050` when you want supervisor name (for the "scanner attack" step); use `0x0606` when you only want a panel-presence ACK.
