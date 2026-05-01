@@ -299,25 +299,25 @@ SS SS                      2 bytes: session identifier (per-session constant)
 
 ### The role flag (third byte of the flag triplet)
 
-The third byte of the `01 01 XX` flag triplet varies by who is sending and what kind of frame. Observed values across the corpus:
+The third byte of the `01 01 XX` flag triplet — call it the role flag — has been observed in the corpus consistently set to `0x00` across all senders. Both real DCC and real panels use `01 01 00` in their CONNECT and DATA frames at the reference site.
 
-| Sender | msg_type | Third flag byte |
-|--------|----------|-----------------|
-| Supervisor (Desigo CC) | `0x2E` CONNECT | `0x01` |
-| Supervisor (Desigo CC) | `0x33` DATA-as-first-frame | `0x00` |
-| Panel | `0x2E` CONNECT (panel-initiated) | `0x00` |
-| Any | response frames (direction byte = `0x01`) | `0x00` |
+| Sender | msg_type | Third flag byte | Source |
+|--------|----------|-----------------|--------|
+| Supervisor (Desigo CC) | `0x33` (Mode B CONNECT with embedded `0x4640`) | `0x00` | Verified in 52 frames |
+| Panel | `0x2E` CONNECT (panel-initiated) | `0x00` | Verified in 51 frames |
 
-The pattern suggests **`0x01` is set only when a supervisor is *initiating* a CONNECT-type session-establishment**. Panel-initiated frames and DATA-style frames use `0x00`. A scanner can use either value depending on what role it wants to look like.
+**A previous version of this document hypothesized that `0x01` was set when a supervisor was initiating a CONNECT.** This claim is not supported by the corpus — no real frame from either DCC or any panel has been observed with this byte set to `0x01`. The hypothesis was based on early reverse-engineering before the corpus was reviewed comprehensively. Treat this byte as `0x00` always; it may be a "fixed sentinel" rather than a role discriminator.
+
+**Important field-test note.** Sending a CONNECT with `flags = 01 01 01` (the value the prior hypothesis suggested) appears to put a PME1252 panel into an unintended state where it persistently attempts outbound TCP/5033 connections to the source IP. The trigger conditions are not fully characterized — see "Panel peer-state side effect" in Field-testing findings. **Recommendation: a scanner constructing CONNECT frames should use `01 01 00` matching what real DCC and panels send.**
 
 ### The 2-byte session identifier
 
-Bytes at trailer positions 13–14 are a 2-byte field that **stays constant for the duration of a single TCP session** but varies between sessions. Verified in the corpus across many frames in the same DCC↔panel session — every CONNECT carries identical session-ID bytes. The exact derivation isn't pinned down (could be a hash of session parameters, a counter, or a random nonce per session). Two important properties:
+Bytes at trailer positions 13–14 are a 2-byte field with distinct conventions:
 
-- **Panel-initiated frames carry `00 00`** in this field — panels don't set it.
-- **DCC-initiated frames carry a non-zero value** that's session-stable.
+- **Panel-initiated CONNECTs always carry `00 00`** — verified in 51 corpus frames from a single panel. Panels do not set this field.
+- **DCC-initiated CONNECTs carry a non-zero session-stable value** — verified in 52 corpus frames; a single DCC↔NODE6 session used `fe 98` for every frame within that session. Other sessions use other values; the field appears to be derived per-session and stable for the session's lifetime.
 
-A scanner that uses `00 00` (panel-style) should be acceptable to the bouncer since panels successfully establish sessions with that value. A scanner that wants to look like Desigo can copy the value from a real DCC capture or generate a session-stable random.
+Since panels successfully establish sessions with `00 00` in this field, the panel-side bouncer apparently accepts this value. A scanner that uses `00 00` matches what real panels send. The exact derivation of DCC's non-zero value isn't pinned down (could be a hash of session parameters, a counter, or a random nonce per session); a scanner that wants to look like DCC could copy a value from a real capture, but doing so risks colliding with an active session.
 
 ### The embedded timestamp
 
@@ -1804,13 +1804,12 @@ Putting these together, the most efficient cold-discovery sequence depends on wh
 
 **Important field-testing finding on Surface 1.** Surface 1 (case-correction leak) does NOT close the gap from BACnet-only inventory to P2 panel names. Field testing against PME1252 V2.8.10 panels with eight non-name slot-2 variants (`*`, empty, `0`, `?`, IP literal, `panel`, `BROADCAST`, `unknown`) got 8/8 silent drops — no canonical name leak. The bouncer's slot-2 check is strict and routes only on known panel names. Surface 1 fires only when the slot-2 value case-folds to a real panel name; it is a normalization primitive, not a discovery primitive.
 
-**What this means in practice:** for legacy P2-only panels, no single-frame cold-discovery primitive is available to a non-supervisor host. To get a P2 panel name, the scanner must:
+**What this means in practice:** for legacy P2-only panels, no single-frame cold-discovery primitive is available to a non-supervisor host. To get a P2 panel name, the scanner must either:
 
 - (a) be configured with a naming convention (typical Siemens convention is `NODE<n>` with `n` as a small integer), or
-- (b) trigger panel peer-state by sending a byte-accurate supervisor-impersonation CONNECT and then bind a TCP/5033 listener — see `Panel peer-state side effect` in the field-testing findings (this comes with a 50+ minute peer-state footprint per panel touched), or
-- (c) get supervisor-host or SPAN vantage and use surfaces 5/6 directly.
+- (b) get supervisor-host or SPAN vantage and use surfaces 5/6 directly.
 
-Option (c) is operationally cleanest. Option (a) is operationally cleanest if a convention is known. Option (b) is the only no-prior-knowledge active path but has documented side effects.
+Option (b) is operationally cleanest if the vantage is available. Option (a) is cleanest if a naming convention is known.
 
 **For BACnet-bridged Siemens devices** (PXCC/PXCM compact and modular controllers exposed via BACnet, e.g., the `1xx000`-instance devices typical of Siemens commissioning):
 
@@ -1844,8 +1843,8 @@ The bouncer's BLN check appears to be **case-sensitive**: `SITEBLN` works, `site
 - **Backup/restore, firmware-upload** — distinct opcode sets used by Siemens' engineering tools, out of scope
 - **Opcodes `0x09A3 / 0x09A7 / 0x09AB / 0x09BB / 0x400F–0x4133`** — supervisor sends them, PXC rejects with `00 AC`; probably newer-firmware features. Not mapped.
 - **`has_more` flag in 0x0985 responses** — present at byte-offset -5 of the response body, but its value doesn't correlate with program boundaries in observed data. Either the semantic is different from what it appears to be, or it encodes something that happens to be almost constant in our captures. Ignored by the reference implementation.
-- **Panel peer-state TTL upper bound** — verified persistence at 50+ minutes after a byte-accurate impersonation CONNECT. Upper bound unknown; may be hours, may persist until panel reboot. Whether subsequent CONNECTs refresh the TTL or are independent state is also unverified.
-- **Panel peer-state trigger conditions** — registration appears to require byte-accurate IdentifyBlock (16-byte trailer). What's not yet pinned down: (a) whether the supervisor-role flag (`0x01` in `flags = 01 01 XX`) is required vs. any role flag works, (b) whether the source identity must match a known supervisor name for registration to fire, (c) whether the same trigger applies to PME1300 modern panels.
+- **Panel peer-state side effect — trigger characterization** — sending a CONNECT with `msg_type = 0x2E`, `slot 4 = supervisor name`, `flags = 01 01 01`, random non-zero session ID puts a PME1252 panel into a state where it persistently attempts outbound TCP/5033 reconnection to the source IP. Persistence verified at 6+ hours; upper bound unknown, possibly until reboot. The exact trigger condition is not fully characterized — the frame in question does not match what either real DCC or real panels send, suggesting the trigger is "anomalous frame format" rather than "supervisor impersonation." Worth controlled testing with byte-accurate matching of real DCC's frame format to determine whether real DCC byte format avoids this side effect. Cleanup mechanism not documented in any captured opcode; power cycle is the only verified method.
+- **Modern PME1300 panel behavior** — the side effect above has only been verified against PME1252. Whether modern PME1300 panels exhibit the same edge case is untested.
 - **Whether modern PME1300 panels share legacy peer-state behavior** — only legacy PME1252 has been tested for the side effect. Worth verifying against NODE11 (PME1300 V2.8.18) at the reference site.
 - **Cold-discovery from non-supervisor vantage for legacy P2-only panels** — no zero-cost single-frame primitive has been found. Tested negatively: arbitrary slot-2 strings (silent drop), active 0x4634 query (TCP RST), BACnet ReadProperty (returns BACnet name not P2 name; legacy panels often don't appear in BACnet at all). Open paths: Siemens proprietary BACnet properties (vendor-id 7) untested; UDP discovery protocols other than BACnet untested.
 
@@ -1983,37 +1982,63 @@ An earlier corpus capture from the same VLAN that DID contain DCC↔panel frames
 
 The supervisor-host or SPAN-port requirement for Surfaces 5 and 6 is binding on properly-segmented networks. Tools that need Surface 5/6 visibility should be deployed on the supervisor itself, on a SPAN port, or on a flooding/unmanaged switch.
 
-### Panel peer-state side effect — under investigation
+### Panel peer-state side effect — caused by malformed CONNECT, not impersonation
 
-Initial observation: when a non-supervisor scanner sends a CONNECT to a panel that succeeds AND has a byte-accurate supervisor-role IdentifyBlock, the panel apparently registers the source IP as a temporary peer in some internal routing/peer-list state. After the session ends, the panel actively initiates outbound TCP/5033 connections to the scanner's IP on the documented Surface 6 cadence (~10–16 second intervals).
+When a scanner sends a CONNECT to a panel that is **structurally accepted by the bouncer but contains anomalous values not seen in normal supervisor or panel traffic**, the panel can enter a state where it persistently attempts outbound TCP/5033 connections back to the source IP. Field-verified at the reference site against a PME1252 V2.8.10 panel.
 
-Verified at the reference site against a PME1252 V2.8.10 panel:
+**The specific frame that triggered this at the reference site:**
 
-1. Recent test sessions used a corrected 16-byte IdentifyBlock trailer including the supervisor role flag (`flags = 01 01 01`) and a non-zero session ID — newly characterized in this research.
-2. After these byte-accurate impersonation CONNECTs, the panel began initiating outbound TCP/5033 SYNs from random source ports to the scanner's IP, retrying with classic exponential backoff (1s, 2s, 4s) before giving up with RST, then re-attempting from a new source port ~15s later.
-3. Retry attempts persisted for at least 50+ minutes after the original CONNECT. TTL upper bound unknown.
-4. Real DCC↔panel traffic from the legitimate supervisor continued normally throughout — no operational disruption.
+```
+msg_type = 0x2E         (panel-style CONNECT, not DCC's 0x33)
+direction = 0x00        (request)
+slot 4 = "OCCDCC-SVR"   (DCC's bare name without |5034 suffix; matches what panels put in slot 2 when reaching DCC)
+flags = 01 01 01        (third byte = 0x01 — value not observed in any real DCC or panel frame)
+session_id = random non-zero  (DCC uses non-zero stable per session; panels use 00 00; scanner used random)
+IdentifyBlock self-name = "OCCDCC-SVR"  (matching slot 4)
+```
 
-**Important caveat — what we're NOT yet sure about:**
+**Why this is anomalous.** Comparing against what real DCC and real panels send:
+- Real DCC uses `msg_type = 0x33` (Mode B), not `0x2E` — verified in 52 corpus frames.
+- Real DCC uses `slot 4 = "OCCDCC-SVR|5034"` with the listen-port suffix — verified in 52 corpus frames.
+- Real DCC uses `flags = 01 01 00` — verified in 52 corpus frames.
+- Real DCC uses a session-stable non-zero session ID like `fe 98` — verified in 52 corpus frames.
+- Real panels use `msg_type = 0x2E`, `slot 4 = NODE6` (their own name), `flags = 01 01 00`, `session_id = 00 00`.
 
-- The site operator confirms that **earlier impersonation testing did NOT trigger this behavior**. Earlier tests likely had subtly malformed IdentifyBlocks (8-byte trailer instead of 16, wrong role flag, zero session ID) that the panel may have parsed as malformed supervisor frames — accepted at the bouncer/routing layer enough to send back a canonical name, but rejected at the IdentifyBlock-parsing layer before peer-state registration code fired.
-- This means the registration trigger is likely **conditional on byte-accurate impersonation** (specifically, valid 16-byte trailer with `flags = 01 01 01` supervisor-role flag set), not "any successful CONNECT."
-- A non-impersonating CONNECT (with src identity = scanner's own name, not `DCC-SVR`) and a successful CONNECT with role flag = `0x00` (non-supervisor) may NOT trigger registration. This is untested.
+The frame the scanner sent had panel-style msg_type with DCC-style identity, a flag triplet not observed in any real frame, and a session ID format that mixed scanner-randomized non-zero with panel-style zero conventions. **Nothing in the corpus produces this exact byte signature.**
 
-**Open questions to investigate:**
+**Observed effect:**
 
-1. Does the registration require the supervisor-role flag (`0x01` in third position of `01 01 XX`)? Test by sending byte-identical impersonation but with `flags = 01 01 00` and observing whether the panel reaches back.
-2. Does the registration require the source identity to match a known supervisor name? Test with a non-supervisor identity but otherwise byte-accurate frame.
-3. Is the TTL refreshed by additional probes, or is it set once at registration?
-4. Does the same trigger condition apply to PME1300 modern panels?
+1. Session was established normally and closed cleanly (the bouncer accepted BLN + slot 2; the panel responded with the canonical name as expected).
+2. The panel began initiating outbound TCP/5033 SYNs from random source ports to the scanner's IP every ~16 seconds, retrying with classic exponential backoff (1s, 2s, 4s) before giving up with RST after ~5s.
+3. **This persisted for at least 6 hours** with no sign of expiry, while real DCC↔panel traffic continued normally — no operational disruption.
+4. Critically: **the scanner's IP does NOT appear in the panel's published `0x4634` routing table**. The panel is reaching out to the scanner but is not telling other systems "the scanner is a peer." The panel's published peer list shows only the legitimate site topology (`NODE1` through `NODE11`, `OCCDCC-SVR`, `OCC-SIEMENS-BMS`, etc.). This contradicts an earlier interpretation that the panel had registered the scanner as a supervisor.
 
-**Implications regardless of exact trigger condition:**
+**Most likely explanation.** The anomalous frame caused the panel to enter an internal state where some "active outbound connection" or "peer reconnection" entry was created without the corresponding routing-table or supervisor-list entry being created. This is more consistent with **a parser edge case or unhandled state transition** than with successful impersonation. Real DCC sending byte-correct frames does not cause this; sending the same CONNECT format that real panels use (msg_type `0x2E`, flags `01 01 00`, session_id `00 00`, scanner identity in slot 4) likely would not cause this either.
 
-1. A scanner that intentionally impersonates the supervisor with byte-accurate frames inserts itself into the panel's peer state for an extended period (50+ minutes minimum).
-2. A new primitive remains valid: a scanner that has triggered registration can **bind a TCP listener on port 5033** and receive the panel's IdentifyBlock pushes — Surface 6 reachable from any segment-local host.
-3. Earlier loosely-formed "impersonations" (with malformed IdentifyBlocks) appeared to succeed at the protocol-response level but did NOT trigger the side effect — they were accepted at the bouncer layer but treated as invalid further up the stack. This is a useful diagnostic: if you want to do active P2 testing without triggering peer-state registration, deliberately malforming the IdentifyBlock body may be safer than sending a perfect frame.
+**What this is NOT (correcting earlier framing in this document):**
 
-This behavior is not documented in any vendor materials examined. The trigger conditions need more controlled testing before being characterized definitively.
+- It is **not** evidence of supervisor-impersonation registration. The scanner's IP is not in the panel's peer list.
+- It is **not** caused by "byte-accurate" impersonation — the frame in question was specifically *not* byte-accurate to anything real DCC sends.
+- It is **not** a security finding about the protocol per se. It is more accurately characterized as a side effect of a malformed-but-bouncer-accepted CONNECT triggering an edge-case code path in the panel's session manager.
+
+**What this IS:**
+
+- A reproducible behavior whose trigger condition is "send a CONNECT with anomalous combinations of msg_type/flags/identity that pass the bouncer but don't match any normal sender."
+- A useful empirical caution for scanner authors: **send frames that match what real panels and real DCC actually send**, byte-for-byte where the field semantics matter (msg_type, flag triplet, session ID).
+- Persistent for at least 6+ hours; cleanup likely requires panel reboot.
+
+**Open questions:**
+
+1. Is the trigger specifically `flags = 01 01 01` (which neither DCC nor panels send), or any flag value other than `0x00` in that position?
+2. What if the frame matched real DCC exactly (`msg_type = 0x33`, `flags = 01 01 00`, `session_id = stable non-zero`, `slot 4 = OCCDCC-SVR|5034`)? Would there be no side effect, or would there be a different (possibly more concerning) effect like real-DCC session displacement?
+3. Does the same trigger condition apply to PME1300 modern panels?
+4. Does the panel actually send anything to the scanner if a TCP listener is bound on port 5033, or does it just open the connection and immediately close?
+
+**Practical guidance for scanner authors:**
+
+- For read-only diagnostics: use the documented Mode B form — `msg_type = 0x33` with embedded `0x4640` IdentifyBlock — and use `flags = 01 01 00` and `session_id = 00 00` (matching panel conventions). Use scanner's own identity in slot 4 (e.g., `p2-scanner|5034`); the bouncer doesn't validate slot 4.
+- Avoid the specific frame format documented above (`msg_type = 0x2E` + DCC identity + `flags = 01 01 01` + random session_id) unless you specifically want to study the behavior.
+- If you observe a panel persistently SYN-ing to your IP after testing, panel reboot is the only known clean cleanup.
 
 ### 0x4634 routing-table push — sender-restricted
 
@@ -2103,7 +2128,7 @@ What's been tested end-to-end against live PXCs on the reference site — both P
 | **Active 0x4634 query** | **Inside 0x33 DATA frame** | **✗ Verified rejected: panel TCP-RST within 3ms** |
 | **Surface 7 BACnet broadcast (any vantage)** | **scapy passive listen UDP/47808** | **✓ Verified at the reference site: 14 broadcasts in 90s from non-supervisor host** |
 | **Surfaces 5/6 (non-supervisor vantage)** | **scapy passive listen TCP/5033** | **✗ Verified NOT visible: 0/0 frames from non-supervisor host on properly-segmented network** |
-| **Panel peer-state side effect** | **Byte-accurate impersonation CONNECT** | **△ Observed: registers source IP for 50+ minutes; trigger conditions still under investigation** |
+| **Panel persistent reconnect side effect** | **Anomalous CONNECT (`flags = 01 01 01` etc.)** | **△ Observed: panel attempts outbound TCP/5033 to source IP for 6+ hours; cause appears to be edge-case frame format, not impersonation; cleanup likely requires reboot** |
 
 What's wire-format-documented but NOT live-tested:
 
@@ -2177,20 +2202,18 @@ PAYLOAD
   
   Trailer (16 bytes — see "Connection handshake → role flag" and "session identifier" sections):
   00                           1 byte: trailer separator
-  01 01 00                     3 bytes: flags. Third byte is the role flag —
-                               use 0x00 here (scanner is not impersonating
-                               supervisor-initiating role; see role-flag table).
-                               Use 0x01 only if you intentionally need to
-                               trigger supervisor-role recognition (note: this
-                               may register your IP in the panel's peer state
-                               for an extended period — see field-testing
-                               findings).
+  01 01 00                     3 bytes: flags. Third byte should be 0x00 —
+                               this is what real DCC and panels both send.
+                               DO NOT use 0x01 here: this value has not been
+                               observed in any real frame and has been seen
+                               to put panels into an unintended persistent-
+                               reconnect state (see field-testing findings).
   00 00 00 00 00               5 bytes: reserved padding (always zero)
   TT TT TT TT                  4 bytes: Unix epoch timestamp, big-endian
                                (struct.pack(">I", int(time.time())))
-  00 00                        2 bytes: session ID. 00 00 is acceptable for
-                               a non-supervisor scanner; real DCC uses a
-                               non-zero per-session constant.
+  00 00                        2 bytes: session ID. 00 00 matches what
+                               real panels send; real DCC uses a session-
+                               stable non-zero value.
   00                           1 byte: trailing null
 ```
 
@@ -2584,7 +2607,7 @@ For each panel from Phase 1:
 
 If Method A or B was used, you already have all panel names from the topology dump and can skip Method E entirely. Method E exists for the C/D path where you only have the BLN — and even then, it only works if your candidate names happen to include real panel-name variants.
 
-**Caveat — peer-state side effect:** if your CONNECT uses byte-accurate impersonation of a known supervisor identity (slot 4 = `DCC-SVR|5034`) AND a byte-accurate IdentifyBlock with `flags = 01 01 01` (supervisor role), the panel may register your IP in its peer state for an extended period (50+ minutes minimum, see *Field-testing findings → Panel peer-state side effect*). Using a non-supervisor scanner identity and `flags = 01 01 00` may avoid this — though the trigger conditions are not yet fully characterized.
+**Caveat — panel persistent reconnect side effect:** sending a CONNECT with anomalous flag values (specifically `flags = 01 01 01`, which neither real DCC nor real panels send) has been observed to put a PME1252 panel into a state where it persistently attempts outbound TCP/5033 connections back to the source IP. This persists for 6+ hours, possibly until reboot. **Recommendation: use `flags = 01 01 00`** matching what real DCC and panels actually send. See *Field-testing findings → Panel peer-state side effect* for full discussion.
 
 ```python
 def harvest_panel_name(panel_ip, bln, scanner_identity=b"p2-scanner|5034", msg_type=0x34):
