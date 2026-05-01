@@ -250,17 +250,21 @@ The `|5034` suffix on the scanner identity is the port the scanner is listening 
 
 ## The bouncer (identity validation)
 
-The PXC validates three fields on every handshake. Each has a distinct failure signature:
+The PXC validates handshake fields with two distinct failure signatures. Field-tested against live panels:
 
 | Field | If wrong | Why it matters |
 |-------|----------|----------------|
-| **BLN name** | TCP RST | BLN is both security AND routing — wrong BLN means the PXC has no valid route for the packet |
-| **Scanner name** | Silent drop | TCP connection stays up; all data messages discarded |
-| **Node name** | Silent drop | Same as scanner — connection looks healthy, nothing works |
+| **BLN name** | TCP RST | BLN is both security AND routing — wrong BLN means the PXC has no valid route for the packet. Case-sensitive. |
+| **Slot 2 (destination panel name)** | Silent drop | TCP connection stays up; the frame is silently discarded by the routing layer. Slot 2 must case-fold-match a name in the panel's known peer list — arbitrary strings (`*`, empty, IP literal, generic words) all silent-drop. Case-correction does fire for case-variants of known names. |
 
-The site name and trailer bytes in the handshake are **decorative** — the PXC doesn't validate them. This is empirically confirmed via isolation testing (mutate one field at a time, observe the response).
+**Other fields are NOT validated.** Specifically:
+- The **source identity in slot 4** can be any string — a scanner does not need to impersonate the supervisor name.
+- The **IdentifyBlock body fields** (self-name TLV, site code TLV, BLN TLV) are not validated beyond internal consistency with the routing slots.
+- The **trailer bytes** (timestamp, session ID) are not validated as authentication, though see "Panel peer-state side effect" in Field-testing findings for one observed effect of byte-accurate vs malformed IdentifyBlocks.
 
-The distinct BLN-RST vs scanner/node-silent behavior is what makes cold-site discovery tractable: you can enumerate BLN candidates in parallel by looking at TCP RST vs silent drop, without having to send actual reads.
+This means a read-only scanner only needs to know two things to establish a session: the **BLN name** (exact case-sensitive match) and **at least one panel name** (case-insensitive). Everything else is decorative.
+
+The distinct BLN-RST vs slot-2-silent behavior is what makes cold-site BLN discovery tractable: you can enumerate BLN candidates in parallel by looking at TCP RST vs silent drop, without sending actual reads. See *Cold-site discovery* and *Identity-leak surfaces* below.
 
 ---
 
@@ -268,26 +272,52 @@ The distinct BLN-RST vs scanner/node-silent behavior is what makes cold-site dis
 
 CONNECT and ANNOUNCE have **structurally identical payloads**. The only differences are the message type code (0x2E vs 0x2F) and slight byte-length variation for the embedded node name.
 
-A CONNECT with node name `NODE1` (5 chars) is 76 bytes; an ANNOUNCE with node name `NODE11` (6 chars) is 78 bytes. The delta is exactly the character-count difference in the node name, which appears twice in the payload.
+Total frame size depends on the lengths of the four name strings (BLN, panel-name, supervisor-name, site-code) — each appears in the payload at least once and the BLN appears twice. The delta between two CONNECTs from the same site is exactly the character-count difference in whichever name varies. Worked example with concrete byte counts is in the *Minimum viable scanner* appendix.
 
 Full layout (CONNECT example, panel `NODE1` reaching back to supervisor `DCC-SVR`):
 
 ```
-00                         direction byte (request)
+00                         direction byte (request, 0x00) or response (0x01)
 "SITEBLN"\0                BLN (routing header slot 1)
 "DCC-SVR"\0                destination — supervisor (slot 2)
 "SITEBLN"\0                BLN (slot 3)
 "NODE1"\0                  source — sender's self-name (slot 4)
 46 40                      0x4640 IdentifyBlock marker
-01 00 05 "NODE1"           TLV: node name (tag=0x01, u16 BE length) — matches slot 4
-01 00 03 "ACM"             TLV: site name
+01 00 05 "NODE1"           TLV: self-name (tag=0x01, u16 BE length) — matches slot 4
+01 00 03 "ACM"             TLV: site code
 01 00 07 "SITEBLN"         TLV: BLN name
-00 01 01 00 00 00 00 00    8 bytes constant (flags?)
-00 XX XX XX XX             5 bytes: null-pad + 32-bit Unix epoch (big-endian)
-00 00 00                   3 bytes trailer
+─── 16-byte trailer ───
+00                         trailer separator (1 byte)
+01 01 XX                   flags (3 bytes; XX = role flag, see below)
+00 00 00 00 00             5 reserved/padding bytes (always zero in observed frames)
+TT TT TT TT                4 bytes: Unix epoch timestamp (big-endian)
+SS SS                      2 bytes: session identifier (per-session constant)
+00                         trailing null
 ```
 
 (Slot 2 is always the destination of the current frame and slot 4 is always the source — see *Routing header → Name ordering*. The IdentifyBlock body's first TLV is the sender's self-name, agreeing with slot 4.)
+
+### The role flag (third byte of the flag triplet)
+
+The third byte of the `01 01 XX` flag triplet varies by who is sending and what kind of frame. Observed values across the corpus:
+
+| Sender | msg_type | Third flag byte |
+|--------|----------|-----------------|
+| Supervisor (Desigo CC) | `0x2E` CONNECT | `0x01` |
+| Supervisor (Desigo CC) | `0x33` DATA-as-first-frame | `0x00` |
+| Panel | `0x2E` CONNECT (panel-initiated) | `0x00` |
+| Any | response frames (direction byte = `0x01`) | `0x00` |
+
+The pattern suggests **`0x01` is set only when a supervisor is *initiating* a CONNECT-type session-establishment**. Panel-initiated frames and DATA-style frames use `0x00`. A scanner can use either value depending on what role it wants to look like.
+
+### The 2-byte session identifier
+
+Bytes at trailer positions 13–14 are a 2-byte field that **stays constant for the duration of a single TCP session** but varies between sessions. Verified in the corpus across many frames in the same DCC↔panel session — every CONNECT carries identical session-ID bytes. The exact derivation isn't pinned down (could be a hash of session parameters, a counter, or a random nonce per session). Two important properties:
+
+- **Panel-initiated frames carry `00 00`** in this field — panels don't set it.
+- **DCC-initiated frames carry a non-zero value** that's session-stable.
+
+A scanner that uses `00 00` (panel-style) should be acceptable to the bouncer since panels successfully establish sessions with that value. A scanner that wants to look like Desigo can copy the value from a real DCC capture or generate a session-stable random.
 
 ### The embedded timestamp
 
@@ -1219,7 +1249,7 @@ This is also the hierarchy Desigo CC and Insight use in their tree views.
 **Point-name suffix conventions (observed):**
 - `.BN` — BLN-sourced virtual point. The value doesn't originate on this panel; it's pushed in from elsewhere on the BLN (typically by the DCC server via `0x0274` writes). Example: `OAT.MIRROR.BN` = mirror of outdoor air temp from another panel.
 - `.BAC` — BACnet-bridged point. This panel exposes the point via BACnet or received it from BACnet.
-- `.DP`, `.ENB`, `.OCC`, `.NGT` — internal PPCL variables, typically booleans or small enums.
+- `.DP`, `.ENB`, `.SITE`, `.NGT` — internal PPCL variables, typically booleans or small enums.
 - `.SPM`, `.CSTM` — set-point / custom programmed values.
 
 These are conventions, not syntax rules. The PXC doesn't validate them.
@@ -1598,20 +1628,17 @@ A scanner that wants to write must:
 
 ## Cold-site discovery (the cartesian attack)
 
-A scanner with no prior knowledge of a site can still identify a PXC by exploiting the bouncer's distinct failure signatures:
+A scanner with no prior knowledge of a site can still identify a PXC by exploiting the bouncer's distinct failure signatures. The bouncer validates two fields:
 
-1. **Port-scan** a subnet for TCP/5033 listeners
-2. **BLN attack** — try candidate BLN names (`P2NET`, site-prefix guesses, common patterns) against a known PXC IP. A TCP RST means "wrong BLN"; a silent accept means "BLN correct, scanner or node wrong." The first silent-accept gives you the BLN.
-3. **Scanner attack** — with the BLN locked, try candidate scanner names. Silent drop continues until you get a heartbeat response, then the scanner name is valid.
-4. **Node attack** — with BLN and scanner locked, try node names (`node1`, `node2`, ..., `NODE1`, ..., named variants). The first one that gets a valid read response is the PXC's actual node name.
+1. **Port-scan** a subnet for TCP/5033 listeners. Filter by Siemens OUI (`00:a0:03`, `00:c0:e4`) for higher confidence the listener is an Apogee panel.
+2. **BLN attack** — try candidate BLN names (`P2NET`, site-prefix guesses, common patterns like `<SITE>BLN`, `<SITE>EBLN`) against a known PXC IP. A TCP RST means "wrong BLN"; a silent accept means "BLN correct, panel name wrong" (frame got past TCP layer, dropped at routing). The first silent-accept gives you the BLN. **The scanner identity in slot 4 does not need to be guessed** — any string works since the bouncer doesn't validate slot 4.
+3. **Node attack** — with the BLN locked, try candidate panel names in slot 2 (`node1`, `node2`, ..., `NODE1`, ..., named variants). The first one that gets a CONNECT-ACK response is the PXC's actual node name. The case-correction leak (Surface 1) means a single lowercase guess like `node1` will return the canonical name (`NODE1`) in slot 4 of the response if the case-folded form matches.
 
-This is the "cartesian attack" — up to `|BLN| × |Scanner| × |Node|` probes in the worst case, but well-ordered candidate lists usually hit within a few dozen probes.
+This is the "cartesian attack" — up to `|BLN| × |Node|` probes in the worst case, but well-ordered candidate lists usually hit within a few dozen probes.
 
-The whole workflow fits inside `cold_discover_site()` in the scanner code with pre-built candidate dictionaries for each field.
+**Passive shortcut:** observing one `0x4634` frame from a real supervisor reveals the complete BLN topology (every panel name, every supervisor name, plus costs). One `0x4634` observation is worth hundreds of brute-force node attacks. Note: `0x4634` does **not** work as an active probe — panels TCP-RST inbound `0x4634` frames within milliseconds, treating them as a sender-restricted opcode (only the supervisor is allowed to push). See "0x4634 routing-table push — sender-restricted" in the field-testing findings section. Use `0x4634` as a passive surface only.
 
-**New shortcut:** once you have a valid session, send one `0x4634` probe or observe one from a real supervisor — it reveals the complete BLN topology (every panel name, every scanner name, plus costs). One successful `0x4634` observation is worth hundreds of brute-force node attacks.
-
-**Earlier shortcut:** the `0x0050` status query (`00 50 01 00 04 "SYST" 23 3F FF FF FF`) returns the registered supervisor name list (e.g. `DCC-SVR`) **without requiring a full identity handshake** — it works inside any successful session bouncer pass. Sending `0x0050` after the `0x33` CONNECT probe (before sending an IdentifyBlock) confirms whether the panel knows a supervisor and gives you the supervisor name to use as a "scanner attack" candidate. Cuts cold-discovery time roughly in half on sites where the supervisor is reachable.
+**Supervisor-name shortcut:** the `0x0050` status query (`00 50 01 00 04 "SYST" 23 3F FF FF FF`) returns the registered supervisor name list (e.g. `DCC-SVR`) **without requiring a full identity handshake** — it works inside any successful session bouncer pass. Sending `0x0050` after the CONNECT (before sending an IdentifyBlock) confirms whether the panel knows a supervisor and yields the supervisor name. The supervisor name is not strictly required for read-only scanning, but it's useful for cross-correlation with BACnet inventory or for impersonation testing.
 
 ---
 
@@ -1619,9 +1646,11 @@ The whole workflow fits inside `cold_discover_site()` in the scanner code with p
 
 Multiple opcodes leak the panel's own canonical identity in their responses, even when the request fails. A scanner that wants to identify a panel without prior knowledge can chain these to extract every name it needs without exhaustive cartesian probing. Ranked by how cheaply they leak useful information:
 
-### 1. Routing-header leak in **any** response (success OR error)
+### 1. Routing-header leak in **any** response (success OR error) — case-correction only
 
-Every DATA-style response from a panel includes the panel's own canonical name in **slot 4 of the routing header**, regardless of whether the response carried success (`0x01`) or an error (`0x05`). Crucially, the bouncer is **case-insensitive on the destination node name in slot 2 of the request** — sending `node1` (lowercase) gets a response routed back with `NODE1` (canonical case) in slot 4. So a scanner that has guessed even an approximately-correct node name receives the canonical form for free, in the very first response.
+Every DATA-style response from a panel includes the panel's own canonical name in **slot 4 of the routing header**, regardless of whether the response carried success (`0x01`) or an error (`0x05`). The bouncer is **case-insensitive on the destination node name in slot 2 of the request** — sending `node1` (lowercase) gets a response routed back with `NODE1` (canonical case) in slot 4. So a scanner that has guessed even an approximately-correct node name receives the canonical form for free, in the very first response.
+
+**Important scope clarification:** This leak fires only when slot 2 is a **case-variant of an existing panel name**. The bouncer's slot-2 check is otherwise strict — it routes only on names that case-fold to a name in the panel's known peer list. Slot 2 values that don't match any panel name (`*`, empty string, IP literal, generic words like `panel` or `BROADCAST`) get **silently dropped** with no leak. Field-tested with 8 such variants against a PME1252 panel: 8/8 silent drops, no responses. The leak is useful as a **case-correction primitive** (already-known approximate name → canonical name), not as a **discovery primitive** (unknown name → canonical name).
 
 Worked example, observed verbatim in `<reference-pcap>`:
 
@@ -1635,23 +1664,25 @@ Panel replies:  05 "SITEBLN" "DCC-SVR" "SITEBLN" "NODE1" 00 03
                                                          canonical name leaked
 ```
 
-The panel did not implement the request (returned `0x0003 not_found`) but still leaked `NODE1` as its canonical name. **A passive observer on any conversation gets the panel's name from the very first response, regardless of payload.** Likewise, an active scanner sending a single garbage request that produces an error gets the panel's name back for free.
+The panel did not implement the request (returned `0x0003 not_found`) but still leaked `NODE1` as its canonical name. A passive observer on any conversation gets the panel's name from the very first response, regardless of payload. An active scanner that has correctly guessed even one approximately-correct node name (e.g. lowercase) gets the canonical form back. But a scanner sending arbitrary non-name strings gets silent drop.
 
-**Empirical rate.** Across 6 captures totaling 39,820 P2 frames, 4,573 request/response pairs were checkable for the case-correction leak. Of those, 3,409 (74.5%) showed the lowercase→canonical-case correction (e.g. `node1` request → `NODE1` in slot 4 of the response); 1,164 (25.5%) returned an unrelated frame or didn't fire the leak. The 74.5% rate means a scanner that sends two distinct lowercase guesses to a panel has ≈93.5% probability of harvesting the canonical name from at least one response.
+**Empirical rate (case-correction only).** Across 6 captures totaling 39,820 P2 frames, 4,573 request/response pairs were checkable for the case-correction leak. Of those, 3,409 (74.5%) showed the lowercase→canonical-case correction (e.g. `node1` request → `NODE1` in slot 4 of the response); 1,164 (25.5%) returned an unrelated frame or didn't fire the leak. The 74.5% rate means a scanner that sends two distinct lowercase variants of a known-or-suspected panel name has ≈93.5% probability of harvesting the canonical name from at least one response.
 
 ### 2. `0x4640` IdentifyBlock success response
 
-A successful response to a panel-bound IdentifyBlock request carries the panel's **full identity** as a TLV-encoded body. Sample from a successful exchange:
+A successful response to a panel-bound IdentifyBlock request carries the panel's **full identity** as a TLV-encoded body. Sample from a successful exchange (note: this is a CONNECT response, not a DATA response — `slot 2 = "DCC-SVR"` bare form):
 
 ```
-01                              dir = success
-"SITEBLN" "DCC-SVR|5034" "SITEBLN" "NODE6"     routing (panel name in slot 4)
-01 00 05 "NODE6"                LP-string: panel's node name (in body)
-01 00 03 "ACM"                  LP-string: site name
+01                              direction byte = response (0x01)
+"SITEBLN" "DCC-SVR" "SITEBLN" "NODE6"     routing (panel name in slot 4)
+46 40                           0x4640 IdentifyBlock marker
+01 00 05 "NODE6"                LP-string: panel's node name (matches slot 4)
+01 00 03 "ACM"                  LP-string: site code
 01 00 07 "SITEBLN"              LP-string: BLN name
-00 01 01 00 00 00 00 00         8-byte fixed pattern
-00 69 EA 3E F5                  panel-side timestamp (BE u32 epoch)
-00 00 00                        trailer
+00 01 01 00 00 00 00 00 00      9 bytes: separator + flags(01 01 00) + 5 zero pad
+69 EA 3E F5                     4 bytes: Unix epoch timestamp
+00 00                           2 bytes: session-id (panels send 00 00)
+00                              1 byte: trailing null
 ```
 
 A successful IdentifyBlock to a single panel reveals the full `(BLN, site, panel)` triple in one round trip. Of course, you need a valid IdentifyBlock to get a successful response — but the leak in #1 above gives you the panel name, and the BLN name is what got you past the TCP RST in the first place. So by the time you can run this, you already had the data.
@@ -1679,25 +1710,113 @@ Both have `00 XX YY 01 00 04 "SYST" 23 3F FF FF FF` request shapes — the same 
 - **`0x0050`** response body: `01 00 04 "SYST" 23 3F FF FF FF [00 02] 01 00 0A "DCC-SVR" 01 00 00` — the registered supervisor name string. Plus the panel name in routing slot 4. So `0x0050` leaks **panel name + supervisor name** in one round trip. This is the opcode the doc has long marked as the "early shortcut" for cold discovery. Note that `0x0050` returns the supervisor name in its **bare form** (`DCC-SVR`, no `|5034` suffix), while `0x4640` IdentifyBlock returns the **listen-port form** (`DCC-SVR|5034`). Both forms are in use across the protocol — DATA frames and the routing-table-push body use the `|5034` form, CONNECT/ANNOUNCE and `0x0050` use the bare form. A scanner constructing a session identity should prefer `|5034` for DATA traffic.
 - **`0x0606`** response body: empty (`00 00`) — pure ACK. Still leaks the panel name in routing slot 4.
 
-Use `0x0050` when you want supervisor name (for the "scanner attack" step); use `0x0606` when you only want a panel-presence ACK.
+Use `0x0050` when you want the registered supervisor name (e.g., for impersonation or cross-correlation); use `0x0606` when you only want a panel-presence ACK.
 
 ### 5. `0x4634` routing-table push — the topology-in-one-message goldmine
 
-Documented above — a single `0x4634` observation (passive or actively triggered) reveals **the entire BLN topology**: every panel name, the supervisor name (with and without `|5034` suffix), the panel-default route name (`$paneldefault`), the site identifier (`101000`), the BMS registration (`SITE-BMS` / `SITE-BMS`), each with its 4-byte cost. One frame, complete reconnaissance. If you can passively listen on the BLN segment for ~1 minute, a real supervisor will publish this without you sending anything.
+Documented above — a single passive `0x4634` observation reveals **the entire BLN topology**: every panel name, the supervisor name (with and without `|5034` suffix), the panel-default route name (`$paneldefault`), the site identifier (`101000`), the BMS registration (`SITE-BMS` / `SITE-BMS`), each with its 4-byte cost. One frame, complete reconnaissance. If you can passively listen on the BLN segment for ~1 minute, a real supervisor will publish this without you sending anything.
+
+### 6. Panel-initiated CONNECT — the 10–16-second self-announcement
+
+Each PXC opens a fresh outbound TCP/5033 connection to its configured supervisor every 10–16 seconds. Each connection sends, as its very first data frame, a fully-formed CONNECT (`msg_type` 0x2E for legacy or 0x2F for modern) with an embedded `0x4640` IdentifyBlock body — meaning each frame leaks `(BLN, supervisor_name, panel_name, site_code)` in plaintext.
+
+Wire layout (verified, 88-byte legacy form):
+
+```
+00 00 00 58 00 00 00 2E <seq:4>           12-byte P2 header (msg_type 0x2E)
+00 "SITEBLN" 00 "DCC-SVR" 00 "SITEBLN" 00 "NODE1" 00   routing slots
+46 40                                              IdentifyBlock opcode
+01 00 05 "NODE1"                                   LP-string: self-name
+01 00 03 "ACM"                                     LP-string: site code
+01 00 07 "SITEBLN"                                 LP-string: BLN
+01 01 00 00 00 00 00 00 ...                        fixed pattern + tail
+```
+
+Empirical cadence across the corpus: 9 distinct PXCs each emit 95–100 announcements over a 25-minute capture, with mean inter-announcement interval 15.5 s (range 14.0–24.0 s, occasional outliers up to 35–45 s). On a different 24-minute capture targeting only 5/9 panels, the cadence tightens to a near-exact 10.0 s interval per panel — suggesting the cadence varies by firmware family or supervisor configuration. In either case, a passive observer on the supervisor↔PXC channel sees every panel self-identify within a minute.
+
+This complements surface 5: surface 5 gives you the entire topology in one frame every 60 s; surface 6 gives you per-panel identity in many frames, every 10–16 s. They serve the same function (passive identity recovery) at different granularities. Same vantage requirement — the scanner has to be on a path that sees the supervisor's TCP/5033 traffic to/from the panels.
+
+### 7. BACnet Who-Has broadcasts — site-code extraction from BACnet plane
+
+Apogee Automation Stations periodically issue standard BACnet `Who-Has` broadcasts (Unconfirmed-Request, service `0x07`) to subnet broadcast (`x.x.x.255:47808`) carrying the object name they're searching for. Because BACnet sites overwhelmingly use site-prefixed object naming conventions (`<SITE>_RM<number>` for room points, `<SITE>.<subsystem>` for system points), these broadcasts carry site-prefixed strings in plaintext. Any host on the segment receives them — they're directed broadcasts, no special vantage required.
+
+Verified across three BACnet-bearing captures in the corpus:
+
+| Capture | Span | Who-Has broadcasts | Unique names | Site-prefixed |
+|---------|-----:|-------------------:|-------------:|--------------:|
+| `<reference-pcap-1>` | 396 s | 378 | 15 | 12 |
+| `<reference-pcap-2>` |  82 s |  48 |  8 |  5 |
+| `<reference-pcap-3>` | 204 s | 119 | 15 | 12 |
+
+Wire format of the broadcast (verified frame, sanitized):
+
+```
+BVLC:    81 0B 00 1E                (Original-Broadcast, 30 bytes)
+NPDU:    01 20 FF FF 00 FF          (ver=1, ctrl=0x20: DNET=0xFFFF broadcast)
+APDU:    10 07                       (Unconfirmed-Request, service=0x07 Who-Has)
+         09 00                       (context-tag 0: low instance limit = 0)
+         1B 3F FF FF                 (context-tag 1: high instance limit = max)
+         3D 0A 00                    (context-tag 3: objectName, length 10, charset 0)
+         "ACM_RM416"                 the leaked string
+```
+
+A scanner that wants the site code without sending any packet binds to UDP/47808, filters for BVLC `0x0B` + APDU `10 07`, and extracts the context-tag-3 objectName from each frame. Apply regex `^([A-Z]{2,6})[._]` to the captured names; the most-frequent prefix is the site code. In all three corpus captures, the site code surfaced within the first 10 seconds of capture.
+
+This is BACnet operating exactly as designed — the protocol broadcasts queries-by-name, and operators deploy their sites with prefixed naming conventions. The leak is structural rather than implementation-specific. It complements surfaces 1–6: those operate inside the P2 plane (TCP/5033) and require P2 frame visibility, while surface 7 operates entirely on the BACnet plane (UDP/47808 broadcast) and is reachable by any host on the local segment.
+
+### 8. P2-over-BACnet transport (passive — SPAN required)
+
+**Vantage caveat: this surface requires SPAN/mirror access to the supervisor↔PXC unicast traffic. Unprivileged observers on the segment do not see these packets.**
+
+Apogee uses BACnet/IP `Confirmed-Private-Transfer` (service `0x12`) with vendor-id `7` (Siemens) and service-number `0x01FF` as a transport for tunneled P2 frames between Desigo CC supervisors and the higher-level Automation Stations. The body of each CPT carries a complete P2 frame (routing slots + IdentifyBlock body) in plaintext, with `msg_type` `0x2D` — a value used exclusively for the BACnet tunnel and not seen on TCP/5033. Wire layout:
+
+```
+BVLC:        81 0A 00 6C                       Original-Unicast-NPDU
+NPDU:        01 04                              expecting reply, no routing
+APDU header: 02 05 29 12                       Confirmed-Request, service=0x12 (CPT)
+CPT params:  09 07                              vendor-id tag: Siemens=7
+             1A 01 FF                           service-number tag: 0x01FF
+             2E                                 opening tag for tunneled parameter
+P2 frame:    00 00 00 5B 00 00 00 2D ...        msg_type 0x2D, full P2 routing
+             routing: BLN / dst-instance / BLN / src-instance
+             body:    46 40 ... IdentifyBlock with site code, BLN
+```
+
+The names in the routing slots use BACnet device-instance numbers (`9997`/`9998` for Desigo CC supervisors, `1xx000` for Automation Stations) rather than the NODE-style names used on TCP/5033. The two planes use **distinct BLN names** (`SITEBLN` for TCP/5033, `SITEBACBLN` for the BACnet tunnel) but share the same site-code prefix.
+
+This is documented here for completeness of the protocol picture and because it explains why captures of UDP/47808 sometimes show P2-shaped payloads that don't decode as standard BACnet. It's a transport observation, not a discovery primitive — the unicast nature means it offers no advantage over surfaces 5/6 for an unprivileged observer.
 
 ### Cold-discovery flow chart, optimized
 
-Putting these together, the most efficient cold-discovery sequence is:
+Putting these together, the most efficient cold-discovery sequence depends on what network vantage the scanner has:
 
-1. **Passive listen 60 seconds** for any `0x4634` from a real supervisor → if heard, you're done; you have everything.
-2. **Active probe** TCP/5033 on candidate IPs. RST = wrong BLN; silent or accept = candidate alive.
-3. **Send a deliberately-malformed request** (or a `0x0606` with a guessed BLN and arbitrary slot 4) to any responsive IP. Any response — success or error — leaks the panel's canonical name in routing slot 4.
-4. **Send `0x0050`** to that IP using the leaked name in slot 2. Response leaks the registered supervisor name.
-5. **Construct a valid IdentifyBlock** with the now-known BLN, panel, and supervisor names. Send it.
-6. **Send `0x010C`** to harvest firmware/application/build-date.
-7. **Send `0x4634`** to harvest the rest of the BLN topology.
+**If the scanner is on a path that sees supervisor↔PXC TCP/5033 traffic** (e.g., on the supervisor host, on a SPAN port, on a flooding/unmanaged switch, or inline on the BLN segment):
 
-Step 1 is no-touch and yields complete topology if a supervisor is active. Steps 2–4 cost a handful of probes and yield enough names to make step 5 succeed. The cartesian attack from the prior section is the fallback when steps 1–4 don't yield. In the reference corpus, every panel responded to step 4 within the first probe.
+1. **Passive listen for 0x4634 or panel-initiated CONNECT** (surfaces 5 + 6). Either fires within 60 s — surface 5 gives full topology in one frame, surface 6 gives per-panel identity per ~10–16 s. Done; you have everything.
+
+**If the scanner is just another host on the local segment** (no path visibility into supervisor traffic) — the typical "non-supervisor vantage" case:
+
+1. **ARP sweep + Siemens OUI filter** to identify Apogee Automation Station candidates. OUIs `00:a0:03` (legacy generations) and `00:c0:e4` (newer generations) cover the Siemens BAS family.
+2. **TCP/5033 reachability probe** to rule out non-P2 endpoints. Open + immediate close. RST = no listener, no useful info; SYN-ACK = candidate alive on P2 plane.
+3. **Passive listen UDP/47808 for BACnet Who-Has** (surface 7). Site-code prefix typically surfaces within 10–60 s. No packets sent. Field-verified to work from any segment-local host.
+4. **BACnet ReadProperty on each BACnet-discoverable Siemens device** — `Who-Is` then `ReadProperty(Device:N, object-name)` for each I-Am respondent. Field-verified: returns the BACnet inventory and equipment tags, but **NOT** the P2 panel name. See `BACnet vs P2 naming` section — these are separate namespaces.
+5. At this point you have the segment, the site code, and the BACnet inventory, but you do **not** have P2 panel names for legacy P2-only panels.
+
+**Important field-testing finding on Surface 1.** Surface 1 (case-correction leak) does NOT close the gap from BACnet-only inventory to P2 panel names. Field testing against PME1252 V2.8.10 panels with eight non-name slot-2 variants (`*`, empty, `0`, `?`, IP literal, `panel`, `BROADCAST`, `unknown`) got 8/8 silent drops — no canonical name leak. The bouncer's slot-2 check is strict and routes only on known panel names. Surface 1 fires only when the slot-2 value case-folds to a real panel name; it is a normalization primitive, not a discovery primitive.
+
+**What this means in practice:** for legacy P2-only panels, no single-frame cold-discovery primitive is available to a non-supervisor host. To get a P2 panel name, the scanner must:
+
+- (a) be configured with a naming convention (typical Siemens convention is `NODE<n>` with `n` as a small integer), or
+- (b) trigger panel peer-state by sending a byte-accurate supervisor-impersonation CONNECT and then bind a TCP/5033 listener — see `Panel peer-state side effect` in the field-testing findings (this comes with a 50+ minute peer-state footprint per panel touched), or
+- (c) get supervisor-host or SPAN vantage and use surfaces 5/6 directly.
+
+Option (c) is operationally cleanest. Option (a) is operationally cleanest if a convention is known. Option (b) is the only no-prior-knowledge active path but has documented side effects.
+
+**For BACnet-bridged Siemens devices** (PXCC/PXCM compact and modular controllers exposed via BACnet, e.g., the `1xx000`-instance devices typical of Siemens commissioning):
+
+- BACnet Method C (Who-Is + ReadProperty) gives complete site fingerprint plus equipment context (e.g., `AHU-1`, `EXHAUST FANS`, `10TH FLOOR DXRS`).
+- These BACnet-side controllers may be a **different inventory** than the P2 panels. At the reference site, 0 of 8 P2 panels appeared in BACnet I-Am responses — the BACnet plane and P2 plane were completely disjoint inventories.
+- For HVAC tooling that just needs to identify equipment by building system, BACnet Method C is sufficient. For P2 session work, BACnet provides no useful bridge.
 
 ### Practical caveat: case-sensitivity for the BLN name
 
@@ -1725,6 +1844,10 @@ The bouncer's BLN check appears to be **case-sensitive**: `SITEBLN` works, `site
 - **Backup/restore, firmware-upload** — distinct opcode sets used by Siemens' engineering tools, out of scope
 - **Opcodes `0x09A3 / 0x09A7 / 0x09AB / 0x09BB / 0x400F–0x4133`** — supervisor sends them, PXC rejects with `00 AC`; probably newer-firmware features. Not mapped.
 - **`has_more` flag in 0x0985 responses** — present at byte-offset -5 of the response body, but its value doesn't correlate with program boundaries in observed data. Either the semantic is different from what it appears to be, or it encodes something that happens to be almost constant in our captures. Ignored by the reference implementation.
+- **Panel peer-state TTL upper bound** — verified persistence at 50+ minutes after a byte-accurate impersonation CONNECT. Upper bound unknown; may be hours, may persist until panel reboot. Whether subsequent CONNECTs refresh the TTL or are independent state is also unverified.
+- **Panel peer-state trigger conditions** — registration appears to require byte-accurate IdentifyBlock (16-byte trailer). What's not yet pinned down: (a) whether the supervisor-role flag (`0x01` in `flags = 01 01 XX`) is required vs. any role flag works, (b) whether the source identity must match a known supervisor name for registration to fire, (c) whether the same trigger applies to PME1300 modern panels.
+- **Whether modern PME1300 panels share legacy peer-state behavior** — only legacy PME1252 has been tested for the side effect. Worth verifying against NODE11 (PME1300 V2.8.18) at the reference site.
+- **Cold-discovery from non-supervisor vantage for legacy P2-only panels** — no zero-cost single-frame primitive has been found. Tested negatively: arbitrary slot-2 strings (silent drop), active 0x4634 query (TCP RST), BACnet ReadProperty (returns BACnet name not P2 name; legacy panels often don't appear in BACnet at all). Open paths: Siemens proprietary BACnet properties (vendor-id 7) untested; UDP discovery protocols other than BACnet untested.
 
 ---
 
@@ -1800,6 +1923,156 @@ Partially right — the verbose form works, but it's not the only accepted form.
 
 ---
 
+## Field-testing findings (active scanner build-out)
+
+These notes come from active probing against a live PME1252 panel (NODE6) during scanner development. The corpus pcaps were sufficient to document the wire format passively; field testing surfaced the things that matter when *you* are the one constructing frames rather than parsing someone else's.
+
+### The bouncer's silent-drop failure mode
+
+When the bouncer rejects a frame, the failure is not always a TCP RST. Two distinct rejection paths observed:
+
+1. **Immediate TCP RST** — fires when the BLN check fails or the frame is structurally malformed in obvious ways (length field mismatch, etc.). Happens within the same RTT as the SYN-ACK.
+2. **Silent drop after TCP-layer ACK** — fires when the frame parses well enough to be accepted by the transport layer but the session manager rejects it. The panel sends a TCP ACK confirming receipt of the bytes, then never produces a response. Connection idles until the scanner times out.
+
+The silent-drop path is easy to misdiagnose as a network problem. It's actually a session-state rejection. Verified causes for silent drops on legacy (PME1252) panels:
+
+- **First frame on a fresh TCP connection is `0x33` DATA-LEGACY without a prior `0x2E` CONNECT in the session** — bouncer accepts the bytes at TCP layer but the session manager has no session for this peer, drops silently. (DCC actually does send `0x33` as a fresh-connection first frame in some captures, which contradicts this — see "0x33 as fresh-connection first frame" in *What's still unknown*.)
+- **IdentifyBlock body shorter than expected** — the body trailer must be the full 16 bytes; truncated trailers (e.g., 8 bytes) are silently dropped.
+- **Wrong slot 4 form for the msg_type** — slot 4 must be the bare supervisor name (e.g., `DCC-SVR`) in CONNECT frames and the listen-port form (e.g., `DCC-SVR|5034`) in DATA frames. Reversing this caused silent drop in testing.
+- **Slot 2 doesn't case-fold-match a known panel name** — the bouncer requires slot 2 to be a name it recognizes (case-insensitive match). Sending arbitrary placeholders like `panel1` or `node1` to a panel that's actually named `NODE6` causes silent drop. The case-correction leak (Surface 1) only fires when the case-folded name does match an existing panel — it's a normalization step, not arbitrary-name acceptance.
+
+### Bouncer enforcement scope (verified empirically)
+
+End-to-end testing against a live PME1252 panel established that the bouncer enforces exactly two checks:
+
+1. **BLN must match exactly** (case-sensitive). Wrong BLN → TCP RST.
+2. **Slot 2 must case-fold-match a known panel name.** Wrong panel name → silent drop.
+
+Slot 4 (the source identity), the IdentifyBlock self-name TLV, and the IdentifyBlock site/BLN body fields are **NOT enforced** beyond consistency with each other. A scanner can identify itself as any string (e.g., `p2-scanner`) and the panel will accept the connection and respond with full identity blocks. **A read-only scanner does not need to impersonate the supervisor** — it just needs to know the BLN and a panel name to establish a session.
+
+Verified by direct comparison of two probes against the same panel (NODE6 at the reference site):
+- `slot 4 = "DCC-SVR"` (impersonating supervisor) → 86-byte response, then full SystemInfo dump
+- `slot 4 = "p2-scanner"` (arbitrary scanner name) → 86-byte response with identical structure
+
+Both probes received the same 86-byte CONNECT response (opcode `0x0100`, embedded `NODE6`/`SITE`/`SITEBLN` identity strings). The panel made no distinction.
+
+### Panel CONNECT response opcode varies by firmware
+
+The panel's CONNECT response opcode is **not always `0x4640`**. Observed against live panels:
+
+- **PME1300 modern firmware** — responds with `0x2E` body containing `0x4640` IdentifyBlock (matches DCC↔NODE5 captures in the corpus).
+- **PME1252 V2.8.10 (Oct 2013 build)** — responds with `0x2E` body opcode `0x0100` (legacy SystemInfo response format), with identity strings still embedded but in a different layout than `0x4640`.
+
+A scanner that strict-matches on opcode `0x4640` for CONNECT responses will fail to recognize the legacy panel's response shape. Robust dispatch: any response inside a `0x2E`/`0x2F` frame on a fresh TCP connection should be treated as a CONNECT-ACK regardless of inner opcode, with identity-string extraction by ASCII pattern rather than fixed offsets.
+
+### Frame length field calculation (corrected)
+
+The 4-byte length field at offset 0 of every frame counts **the entire frame including the length field itself**. Verified by direct measurement: a 93-byte frame on the wire carries length value `0x5D = 93`. A scanner that computes `length = 8 + payload_size` (excluding the length-field's own 4 bytes) sends frames whose stated length is 4 short of actual, which the bouncer immediately rejects with TCP RST. Correct calculation: `length = 12 + payload_bytes` (header is 4+4+4 = 12 bytes; payload is routing slots + body).
+
+### Sequence number field (offset 8–11)
+
+Real Desigo CC frames use a session-monotonic sequence number that increments per-frame. Across one captured session, observed values ranged from `0x00018fec` to `0x00019008` over ~10 frames in 30 seconds (so ~2-3 increment per frame, occasionally retransmitted with the same value). A scanner that sends `0x00000000` for seq is flagged behavior — real DCC is never observed with seq=0. The bouncer may or may not validate this strictly, but a scanner sending non-zero "plausible" values blends in better. Recommend starting at a random 24-bit value and incrementing per frame.
+
+### Connection vantage matters for cold-discovery
+
+A scanner running on the supervisor host itself sees DCC↔panel traffic natively (no SPAN required) — this is a *privileged* vantage equivalent to "owning the supervisor." A scanner running on an arbitrary host on the same VLAN sees only broadcast traffic (Surface 7) and its own active probes. Most cold-discovery surfaces (5, 6) require the supervisor-host or SPAN vantage. Tools that claim to work "without SPAN" need to be tested from a non-supervisor host to verify the claim.
+
+**Field-test result, reference site:** A 90-second passive listen with `scapy.sniff` from a non-supervisor host (a regular workstation IP) on the HVAC VLAN observed 0 Surface 5 frames, 0 Surface 6 frames, and 14 Surface 7 broadcasts. Surface 7 (BACnet Who-Has) works from any segment-local host as expected. Surfaces 5 and 6 (P2 unicast TCP/5033 traffic) were not visible. The site's network is properly switched — DCC↔panel unicast traffic does not reach segment hosts.
+
+An earlier corpus capture from the same VLAN that DID contain DCC↔panel frames was, on confirmation with the site operator, captured on the Desigo CC server itself, not on a separate workstation. That capture is consistent with privileged-vantage observation; it does not indicate that an unprivileged host can see Surfaces 5/6.
+
+The supervisor-host or SPAN-port requirement for Surfaces 5 and 6 is binding on properly-segmented networks. Tools that need Surface 5/6 visibility should be deployed on the supervisor itself, on a SPAN port, or on a flooding/unmanaged switch.
+
+### Panel peer-state side effect — under investigation
+
+Initial observation: when a non-supervisor scanner sends a CONNECT to a panel that succeeds AND has a byte-accurate supervisor-role IdentifyBlock, the panel apparently registers the source IP as a temporary peer in some internal routing/peer-list state. After the session ends, the panel actively initiates outbound TCP/5033 connections to the scanner's IP on the documented Surface 6 cadence (~10–16 second intervals).
+
+Verified at the reference site against a PME1252 V2.8.10 panel:
+
+1. Recent test sessions used a corrected 16-byte IdentifyBlock trailer including the supervisor role flag (`flags = 01 01 01`) and a non-zero session ID — newly characterized in this research.
+2. After these byte-accurate impersonation CONNECTs, the panel began initiating outbound TCP/5033 SYNs from random source ports to the scanner's IP, retrying with classic exponential backoff (1s, 2s, 4s) before giving up with RST, then re-attempting from a new source port ~15s later.
+3. Retry attempts persisted for at least 50+ minutes after the original CONNECT. TTL upper bound unknown.
+4. Real DCC↔panel traffic from the legitimate supervisor continued normally throughout — no operational disruption.
+
+**Important caveat — what we're NOT yet sure about:**
+
+- The site operator confirms that **earlier impersonation testing did NOT trigger this behavior**. Earlier tests likely had subtly malformed IdentifyBlocks (8-byte trailer instead of 16, wrong role flag, zero session ID) that the panel may have parsed as malformed supervisor frames — accepted at the bouncer/routing layer enough to send back a canonical name, but rejected at the IdentifyBlock-parsing layer before peer-state registration code fired.
+- This means the registration trigger is likely **conditional on byte-accurate impersonation** (specifically, valid 16-byte trailer with `flags = 01 01 01` supervisor-role flag set), not "any successful CONNECT."
+- A non-impersonating CONNECT (with src identity = scanner's own name, not `DCC-SVR`) and a successful CONNECT with role flag = `0x00` (non-supervisor) may NOT trigger registration. This is untested.
+
+**Open questions to investigate:**
+
+1. Does the registration require the supervisor-role flag (`0x01` in third position of `01 01 XX`)? Test by sending byte-identical impersonation but with `flags = 01 01 00` and observing whether the panel reaches back.
+2. Does the registration require the source identity to match a known supervisor name? Test with a non-supervisor identity but otherwise byte-accurate frame.
+3. Is the TTL refreshed by additional probes, or is it set once at registration?
+4. Does the same trigger condition apply to PME1300 modern panels?
+
+**Implications regardless of exact trigger condition:**
+
+1. A scanner that intentionally impersonates the supervisor with byte-accurate frames inserts itself into the panel's peer state for an extended period (50+ minutes minimum).
+2. A new primitive remains valid: a scanner that has triggered registration can **bind a TCP listener on port 5033** and receive the panel's IdentifyBlock pushes — Surface 6 reachable from any segment-local host.
+3. Earlier loosely-formed "impersonations" (with malformed IdentifyBlocks) appeared to succeed at the protocol-response level but did NOT trigger the side effect — they were accepted at the bouncer layer but treated as invalid further up the stack. This is a useful diagnostic: if you want to do active P2 testing without triggering peer-state registration, deliberately malforming the IdentifyBlock body may be safer than sending a perfect frame.
+
+This behavior is not documented in any vendor materials examined. The trigger conditions need more controlled testing before being characterized definitively.
+
+### 0x4634 routing-table push — sender-restricted
+
+Active probe testing established that **panels reject inbound `0x4634` frames with TCP RST**, even from session-holders with valid BLN and panel name. Specifically: a session was established to NODE6 successfully (CONNECT got 86-byte response), but sending `0x4634` as the opcode of a subsequent `0x33` DATA frame triggered an immediate TCP RST from the panel (3 millisecond response time).
+
+This is distinct from:
+- **Silent drop** (slot 2 not recognized — the routing layer drops with no response)
+- **Error response** (opcode recognized but request rejected — panel sends `0x05 0x00 0x03` error frame)
+
+The panel apparently classifies `0x4634` as a sender-role-restricted opcode: only the supervisor is allowed to send it (as part of normal topology pushes). Anyone else attempting it gets the connection killed.
+
+**Implication:** `0x4634` is not viable as an active cold-discovery query primitive. It's strictly a passive observation surface (Surface 5), only available to a vantage that sees the supervisor's outbound traffic.
+
+### BACnet vs P2 naming — two distinct namespaces
+
+A subtle but important finding. Siemens Apogee panels live on two protocol planes simultaneously (BACnet/IP on UDP/47808 and P2 on TCP/5033), and they have different names on each. Verified by direct comparison at the reference site:
+
+| Panel | BACnet object-name | BACnet description | P2 canonical name |
+|-------|---------------------|---------------------|--------------------|
+| BACnet-capable PXCC | `SITE_PXCC101000` | (same as object-name) | not present in P2 inventory |
+| BACnet-capable PXCC | `SITE_PXCC102000` | `EXHAUST FANS` | not present in P2 inventory |
+| Legacy P2-only panel | (not in BACnet — PME1252 V2.8.10) | n/a | `NODE6` |
+| BACnet-capable PXCM | `SITE_PXCM103000` | `AHU-1` | not present in P2 inventory |
+| BACnet-capable PXCC | `SITE_PXCC104000` | `10TH FLOOR DXRS` | not present in P2 inventory |
+
+The BACnet name is descriptive and includes the instance number; the P2 name is short and canonical (`NODE<n>`). They're **not** simple transformations of each other.
+
+The BACnet `description` property (property ID 28) was field-tested as a possible bridge between namespaces. The result: descriptions contain **mechanical/equipment tags** (e.g., `AHU-1`, `EXHAUST FANS`, `10TH FLOOR DXRS`) — useful for HVAC asset management but not for P2 routing. The description does not expose the panel's P2 canonical name.
+
+**Most important finding from the cross-protocol test at the reference site: the BACnet inventory and the P2 panel inventory are completely disjoint.** Of 8 confirmed P2 panels (8 PME1252 + 1 PME1300), 0 appeared in BACnet I-Am responses. Of the BACnet-discoverable Siemens devices found, none responded to P2 CONNECT on TCP/5033. The two planes have distinct device populations even though both carry the same site-code prefix in their naming conventions.
+
+**Implication for cold-discovery:** The BACnet ReadProperty primitive (Method C in the runbook) reliably gives you (a) the site code, (b) the BACnet device inventory, and (c) the panels' mechanical/equipment context. It does **not** give you the P2 panel name needed for slot 2 of a P2 CONNECT.
+
+To go from BACnet name to P2 name, three approaches remain plausible:
+
+1. **Siemens proprietary BACnet properties** (vendor-id 7) that may expose P2 identity directly — not yet tested.
+2. **Cross-correlate via passive observation** — observe both BACnet and P2 traffic from the same source IP and match by timing/structure (requires Surface 5/6 vantage).
+3. **Probe the panel's P2 plane with candidate names** seeded from convention (e.g., known patterns like `NODE<n>` for panels in the `1xx000` BACnet instance range, where `n` may correlate to the instance number).
+
+For panels that don't speak BACnet at all (PME1252 V2.8.10 generation, like the reference site's `NODE6`), the BACnet path is unavailable and discovery must use Surface 5/6 passive observation (with appropriate vantage) or active P2 probing.
+
+### Example: BACnet inventory extracted via cold-discovery
+
+Field testing at the reference site produced this verified inventory using only the BACnet primitives — Method C + description ReadProperty — from a non-supervisor host on the HVAC VLAN. IPs are sanitized; the layout is what a real cold-discovery run produces:
+
+| Role | BACnet instance | Object name | Equipment context |
+|------|-----------------|-------------|-------------------|
+| Primary supervisor | 9997 | `DCC-SVR` | Primary Desigo CC server |
+| Secondary supervisor | 9998 | `Desigo CC 9998` | Secondary Desigo CC workstation |
+| Compact PXC | 101000 | `SITE_PXCC101000` | (no equipment description) |
+| Compact PXC | 102000 | `SITE_PXCC102000` | Exhaust fans controller |
+| BACnet/MSTP router | 103100 | `SITE_HV1_BACROUTER` | BACnet/IP→MS/TP router for an air handler |
+| Modular PXC | 103000 | `SITE_PXCM103000` | Air handler controller |
+| Compact PXC | 104000 | `SITE_PXCC104000` | Floor-N DXRS controller |
+| Modular PXC | 106000 | `SITE_PXCM106000` | Floor DXRS controller |
+| Modular PXC | 112000 | `SITE_PXCM112000` | Multi-floor DXRS controller |
+
+This gives a scanner enough to map building IPs to building systems using BACnet alone — useful for technician tooling. It does **not** give the P2 panel names needed to establish P2 sessions on the P2 plane.
+
 ## Empirical validation status
 
 What's been tested end-to-end against live PXCs on the reference site — both PME1252 V2.8.10 legacy-dialect panels and a PME1300 V2.8.18 modern-dialect panel:
@@ -1825,6 +2098,12 @@ What's been tested end-to-end against live PXCs on the reference site — both P
 | Compact sysinfo | `0x010C` | ✓ Returns model/firmware/build date |
 | Legacy sysinfo | `0x0100` | ✓ Returns same fields in different layout |
 | pcap decoding | Offline | ✓ Parses all 52 captures cleanly across the corpus |
+| **BACnet Method C cold-discovery** | **Who-Is + ReadProperty** | **✓ Verified at the reference site: returns BACnet inventory + equipment tags + site code prefix** |
+| **Bouncer slot-2 strictness** | **8 non-name variants** | **✓ Verified at the reference site: 8/8 silent drops, no leak** |
+| **Active 0x4634 query** | **Inside 0x33 DATA frame** | **✗ Verified rejected: panel TCP-RST within 3ms** |
+| **Surface 7 BACnet broadcast (any vantage)** | **scapy passive listen UDP/47808** | **✓ Verified at the reference site: 14 broadcasts in 90s from non-supervisor host** |
+| **Surfaces 5/6 (non-supervisor vantage)** | **scapy passive listen TCP/5033** | **✗ Verified NOT visible: 0/0 frames from non-supervisor host on properly-segmented network** |
+| **Panel peer-state side effect** | **Byte-accurate impersonation CONNECT** | **△ Observed: registers source IP for 50+ minutes; trigger conditions still under investigation** |
 
 What's wire-format-documented but NOT live-tested:
 
@@ -1870,11 +2149,11 @@ s = socket.create_connection((pxc_ip, 5033), timeout=5)
 
 That's it. No P2 magic until you write a frame to the socket.
 
-### Step 2 — Send the CONNECT handshake (95 bytes)
+### Step 2 — Send the CONNECT handshake (93 bytes)
 
 ```
 HEADER (12 bytes)
-  00 00 00 5F                  total length = 95
+  00 00 00 5D                  total length = 93
   00 00 00 33                  msg_type = 0x33 (DATA, legacy dialect)
   00 00 00 01                  seq = 1 (you pick — monotonic per side)
 
@@ -1896,19 +2175,32 @@ PAYLOAD
   01 00 05                     LP-string header: len=5
   4D 59 42 4C 4E               "MYBLN"
   
-  Trailer (16 bytes — flags + timestamp + pad):
-  00 01 01 00 00 00 00 00      8 bytes of mostly-zero flags
-  69 EB 62 22                  4-byte timestamp (any value; PXC ignores)
-  00 FE 98 00                  4-byte trailing pad (constant)
+  Trailer (16 bytes — see "Connection handshake → role flag" and "session identifier" sections):
+  00                           1 byte: trailer separator
+  01 01 00                     3 bytes: flags. Third byte is the role flag —
+                               use 0x00 here (scanner is not impersonating
+                               supervisor-initiating role; see role-flag table).
+                               Use 0x01 only if you intentionally need to
+                               trigger supervisor-role recognition (note: this
+                               may register your IP in the panel's peer state
+                               for an extended period — see field-testing
+                               findings).
+  00 00 00 00 00               5 bytes: reserved padding (always zero)
+  TT TT TT TT                  4 bytes: Unix epoch timestamp, big-endian
+                               (struct.pack(">I", int(time.time())))
+  00 00                        2 bytes: session ID. 00 00 is acceptable for
+                               a non-supervisor scanner; real DCC uses a
+                               non-zero per-session constant.
+  00                           1 byte: trailing null
 ```
 
 The PXC validates this and replies with a routing-flipped success acknowledgement carrying the panel's identity. You don't need to parse the response in detail — just confirm `msg_type=0x33`, `seq=1`, direction byte = `0x01`. If you get direction byte `0x05` instead, the bouncer rejected you (see "The bouncer" section).
 
-### Step 3 — Send a read request (71 bytes)
+### Step 3 — Send a read request (65 bytes)
 
 ```
 HEADER (12 bytes)
-  00 00 00 47                  total length = 71
+  00 00 00 41                  total length = 65
   00 00 00 33                  msg_type = 0x33 (legacy dialect)
   00 00 00 02                  seq = 2
 
@@ -2021,13 +2313,25 @@ def build_frame(seq: int, body: bytes) -> bytes:
 
 def build_connect(bln: bytes, dst: bytes, src: bytes, site: bytes, seq: int) -> bytes:
     routing = build_routing(bln, dst, src)
+    # IdentifyBlock body: opcode + self-name TLV + site TLV + BLN TLV + 16-byte trailer
+    # The 16-byte trailer breaks down as:
+    #   00                  1 byte: separator
+    #   01 01 00            3 bytes: flags (third byte = 0x00 for non-impersonating)
+    #   00 00 00 00 00      5 bytes: reserved padding
+    #   TT TT TT TT         4 bytes: Unix epoch timestamp (big-endian)
+    #   00 00               2 bytes: session ID (00 00 acceptable for scanner)
+    #   00                  1 byte: trailing null
+    trailer = (b"\x00"                                  # separator
+               + b"\x01\x01\x00"                        # flags (role=0x00)
+               + b"\x00\x00\x00\x00\x00"                # reserved
+               + struct.pack(">I", int(time.time()))   # timestamp
+               + b"\x00\x00"                            # session ID
+               + b"\x00")                               # trailing null
     identity = (b"\x46\x40"             # opcode 0x4640
                 + lp_string(src)
                 + lp_string(site)
                 + lp_string(bln)
-                + b"\x00\x01\x01\x00\x00\x00\x00\x00"
-                + struct.pack(">I", int(time.time()))
-                + b"\x00\xFE\x98\x00")
+                + trailer)
     # Note: the leading direction byte 0x00 is already in build_routing
     return build_frame(seq, routing + identity)
 
@@ -2080,3 +2384,286 @@ def read_one(pxc_ip: str, panel: bytes, device: bytes, point: bytes,
 This is functional against legacy-dialect (PME1252) panels. For modern-dialect (PME1300) panels, change `0x33` → `0x34` in `build_frame` and switch the read opcode from `0x0271` to `0x0220` with the modified body shape (see "Reading a point"). For mixed sites, implement the dialect probe in "Firmware dialects → Detection algorithm."
 
 That's the entire end-to-end scanner: ~60 lines, no dependencies beyond stdlib. Everything beyond this — point enumeration, COV listening, alarm handling, writes, multi-panel coordination — extends from the same primitives in the same way.
+---
+
+## Appendix: Cold bootstrap runbook — discovering everything from zero
+
+The MVS appendix above assumes you already know the site's BLN, the panel name, and a panel IP. This appendix covers the prior step: walking onto an HVAC segment with no prior site knowledge and ending up with a verified `(BLN, panel_name, IP)` tuple for every PXC, plus the supervisor name needed for scanner identity.
+
+There are five verified discovery methods, ranked by preference. Run **Phase 1** always (L2/L3 inventory). Then in **Phase 2**, pick the highest-preference method available given your network vantage; the lower-preference methods exist as fallbacks. **Phase 3** is per-panel enrichment that always runs last.
+
+The placeholder names used throughout (matching the MVS appendix):
+- Site code: `SITE` (placeholder for the prefix you discover, e.g. `SITE`)
+- BLN: `MYBLN` (placeholder for the form you discover, e.g. `<SITE>EBLN`)
+- Supervisor name: `DCC-SVR` (placeholder for the form you discover)
+- Panel names: `panel1`, `panel2`, …
+- Scanner identity (any reasonable string): `scanner|5034`
+
+### Phase 1 — Layer-2/3 inventory (always first, ~10 s)
+
+Identify which hosts on the segment are PXCs vs. supervisors vs. third-party BACnet equipment. Three primitives, in parallel:
+
+**ARP scan with vendor filter.** ARP-request the entire `/24`. Filter responses by Siemens OUI `00:a0:03` — every PXC and Automation Station NIC carries it. Cross-reference against the segment's known supervisor IP(s) to remove the supervisor itself. Result: candidate panel IPs.
+
+**TCP/5033 SYN-scan.** Against every Siemens-OUI host, send a TCP SYN to port 5033. SYN-ACK responses identify panels that accept P2 connections. RST/timeout means either the host doesn't speak P2 (e.g., a sensor) or the bouncer's segment-level filter is blocking your IP — in the latter case, Phase 2 Method E and Phase 3 fail identically and you'll know.
+
+**Optional — third-party fingerprint.** SYN-scan TCP/1628 (Trane Tracer SC), TCP/47808 (BACnet/IP routers that listen TCP), and TCP/80/443. Useful for cross-correlation but not required.
+
+```python
+import scapy.all as scapy
+
+# ARP sweep
+ans, _ = scapy.arping(f"{cidr}", verbose=0)
+siemens_hosts = [(r[1].psrc, r[1].hwsrc) for r in ans
+                 if r[1].hwsrc.lower().startswith("00:a0:03")]
+
+# TCP/5033 reachability
+panels = []
+for ip, mac in siemens_hosts:
+    pkt = scapy.IP(dst=ip)/scapy.TCP(dport=5033, flags="S")
+    resp = scapy.sr1(pkt, timeout=1, verbose=0)
+    if resp and resp.haslayer(scapy.TCP) and resp[scapy.TCP].flags & 0x12:
+        panels.append((ip, mac))
+        scapy.send(scapy.IP(dst=ip)/scapy.TCP(dport=5033, flags="R",
+                   seq=resp[scapy.TCP].ack), verbose=0)
+```
+
+### Phase 2 — Identity discovery: choose your method based on vantage
+
+The goal of this phase is to recover the names a scanner needs to establish P2 sessions: the **BLN** and **at least one panel's canonical name**. Useful but not strictly required: the supervisor name (for impersonation testing or for "looking like Desigo" in network logs).
+
+The five methods, ranked by preference:
+
+| | Method | Vantage required | Time | What you get |
+|---|---|---|---|---|
+| A | Passive 0x4634 routing-table push | On supervisor↔PXC path | ≤60 s | **Full topology in one frame** |
+| B | Passive panel-initiated CONNECT | On supervisor↔PXC path | ≤16 s | BLN, supervisor name, one panel name per emission |
+| C | Active BACnet ReadProperty | None (any host on VLAN) | ~2 s | Site code (BLN derived) — but BACnet inventory may be disjoint from P2 inventory |
+| D | Passive BACnet Who-Has listen | None (any host on VLAN) | 30–60 s | Site code |
+| E | Active P2 panel-name probe | None (any host on VLAN), needs BLN | ~1 s/panel | Per-panel canonical names IF a candidate guess matches |
+
+#### Method A — PREFERRED: passive observation of `0x4634` routing-table push
+
+The supervisor and every PXC emit a `0x4634` routing-table push every **60 seconds** in both directions on TCP/5033. Each frame carries the entire site's BLN-routable name list as TLV name+cost pairs in the body, with the BLN itself in routing slot 1 and the source name in slot 4. One frame = full topology.
+
+Verified body content from a representative corpus capture (sanitized names):
+
+```
+$paneldefault       cost=12
+101000              cost=1467
+NODE1 ... NODE11    cost=2500-2700      ← every panel name
+SITE-BMS            cost=5411           ← BMS registration name
+DCC-SVR             cost=2477           ← supervisor name (5033 form)
+DCC-SVR|5034        cost=2789           ← supervisor name (5034 form)
+```
+
+Routing slots of the same frame: `[MYBLN, panel-target-of-this-push, MYBLN, DCC-SVR|5034]`.
+
+To capture this passively, your scanner needs to see TCP/5033 traffic between the supervisor and any panel. Vantage options that satisfy this:
+
+- Run the scanner on the supervisor host itself
+- Run on any host whose switchport is configured as a SPAN/mirror destination for the supervisor's switchport
+- Run on the gateway/router if supervisor and PXCs are on different subnets and traffic is routed
+- Run inline (less common, requires bridging)
+
+```python
+import socket, struct, time
+
+def collect_4634(iface_pcap_path, timeout_s=90):
+    """Walk a pcap (or live capture) and return parsed 0x4634 bodies."""
+    import dpkt
+    topology = {}
+    with open(iface_pcap_path, "rb") as f:
+        pcap = dpkt.pcap.Reader(f)
+        for ts, buf in pcap:
+            eth = dpkt.ethernet.Ethernet(buf)
+            if not isinstance(eth.data, dpkt.ip.IP): continue
+            tcp = eth.data.data
+            if not isinstance(tcp, dpkt.tcp.TCP): continue
+            if 5033 not in (tcp.sport, tcp.dport): continue
+            if not tcp.data or len(tcp.data) < 30: continue
+            data = bytes(tcp.data)
+            # Skip routing slots, find opcode 0x4634
+            slots, p = parse_routing(data[12:])
+            if p < 0: continue
+            body = data[12+p:]
+            if len(body) < 4 or body[0] != 0x46 or body[1] != 0x34:
+                continue
+            # Parse TLV: 0x01 LL_hi LL_lo <name> <4-byte cost>
+            i = 2
+            while i + 7 < len(body):
+                if body[i] != 0x01: i += 1; continue
+                ll = (body[i+1] << 8) | body[i+2]
+                if not (1 <= ll <= 50): i += 1; continue
+                name = body[i+3:i+3+ll]
+                if not name.isascii() or not name.replace(b'-',b'').replace(b'|',b'').replace(b'$',b'').isalnum():
+                    i += 1; continue
+                cost = struct.unpack(">I", body[i+3+ll:i+3+ll+4])[0]
+                topology[name.decode()] = cost
+                i += 3 + ll + 4
+            return {'bln': slots[0], 'supervisor': slots[3], 'topology': topology}
+    return None
+```
+
+If you have path visibility, **stop here**. Method A gives you everything in one frame. Skip to Phase 3.
+
+#### Method B — PREFERRED (alternate): passive observation of panel-initiated CONNECT
+
+Same vantage as Method A. Each PXC opens a fresh TCP/5033 connection to the supervisor every **10–16 seconds**, sending an unsolicited CONNECT (`msg_type` 0x2E legacy or 0x2F modern) with full IdentifyBlock. Per the corpus, every panel announces 90+ times in a typical 25-minute capture window.
+
+Wire layout (verified, 88-byte legacy form):
+
+```
+00 00 00 58 00 00 00 2E <seq:4>           ← 12-byte P2 header (msg_type 0x2E)
+00 "MYBLN" 00 "DCC-SVR" 00 "MYBLN" 00 "panel1" 00   ← routing slots
+46 40                                              ← IdentifyBlock opcode
+01 00 06 "panel1"                                  ← LP-string: self-name
+01 00 04 "SITE"                                    ← LP-string: site code
+01 00 07 "MYBLN"                                   ← LP-string: BLN
+01 01 00 00 00 00 00 00 <8 bytes status/seq tail>
+```
+
+Result per frame: `(BLN, supervisor_name, panel_name, site_code)` in plaintext. Listen for ~16 s and you get one panel; listen for ~2 minutes and you typically get all of them.
+
+This method is interchangeable with Method A from a "what you learn" perspective; the difference is granularity. A is one frame with everything, B is many frames each carrying one panel's identity. Use whichever fires first in your capture.
+
+#### Method C — Active BACnet ReadProperty (no path visibility required)
+
+If you can't see supervisor↔PXC traffic, the cleanest active probe is BACnet `ReadProperty` against any Siemens BACnet device discovered in Phase 1 (or via a `Who-Is` broadcast). Read `object-name` (property 77) on the Device object — for higher-level PXCs (Automation Stations with instances `1xx000`), the returned string is typically site-prefixed, e.g. `SITE.Apogee.AS01` or similar. One round-trip per device.
+
+Wire format of the request (replace `<inst:4>` with target's device-instance, e.g. `02 00 92 28` for instance 103000):
+
+```
+81 0A 00 11 01 04 02 75 04 0C 0C <inst:4> 19 4D
+│           │     │  │  │  │     └─ context-tag 1, len 1, prop-id 0x4D = 77 (objectName)
+│           │     │  │  │  └─ context-tag 0, len 4, object-id (Device class << 22 | inst)
+│           │     │  │  └─ service: 0x0C = readProperty
+│           │     │  └─ invoke-id (any value)
+│           │     └─ APDU header: max-segs/max-resp byte
+│           └─ APDU type 0x00 = Confirmed-Request
+└─ BVLC: 0x81 0x0A = Original-Unicast-NPDU (4 bytes), NPDU 01 04 (expecting reply)
+```
+
+Send to `<device_ip>:47808` UDP. Parse the Complex-ACK response for the BACnet character-string in the property-value section. Apply regex `^([A-Z]{2,6})[._]` to extract the site prefix. From the site code, derive BLN candidates (Method E uses these).
+
+You can also try `Read­Property­Multiple` to fetch `device-name` (70), `description` (28), and `location` (58) in a single round-trip — the strings often complement each other.
+
+#### Method D — Passive BACnet Who-Has broadcast listen
+
+If active probing is undesirable (e.g., you want to be invisible) or BACnet ReadProperty is filtered, the Apogee Automation Stations periodically issue BACnet `Who-Has` broadcasts to `x.x.x.255:47808` carrying object names they're searching for. Bind UDP/47808, listen for BVLC `0x0B` packets with APDU `10 07`, decode the context-tag-3 objectName from each. Site-prefixed names appear within seconds in the corpus.
+
+Verified across three BACnet-bearing captures:
+
+| Capture | Span | Who-Has broadcasts | Site-prefixed | Time-to-first-prefix |
+|---------|-----:|-------------------:|--------------:|---------------------:|
+| `capture-all.pcapng` | 396 s | 378 | 12 | <10 s |
+| `capture-hvac.pcap` | 82 s | 48 | 5 | <10 s |
+| `capture-hvac2.pcapng` | 204 s | 119 | 12 | <10 s |
+
+Wire format and decoder are documented under Surface 4a of this spec. Apply regex `^([A-Z]{2,6})[._]` to extract the site prefix. Same outcome as Method C — yields the site code, from which BLN candidates are derived.
+
+#### Method E — Active P2 panel-name probe
+
+This is the harvest step that runs *after* you have the BLN (from any of A–D). Field-testing finding: the scanner identity in slot 4 is **not validated** by the bouncer, so the scanner can use any string. The supervisor name is not strictly required for read-only scanning.
+
+**Important caveat from field testing.** The bouncer's slot-2 check is strict — it routes only on names that case-fold-match a name in the panel's known peer list. Generic candidates like `panel1`, `pxc1`, `controller1` get **silent-dropped** if they don't case-fold to a real panel name at this site. Method E only succeeds when the candidate list happens to include a case-variant of a real panel name. The case-correction leak (Surface 1) is a *normalization* primitive (lowercase → canonical case), not an arbitrary-name acceptance.
+
+In practice:
+- **If the site uses a documented Siemens convention** (`NODE1`, `NODE2`, ..., `NODEn`), the lowercase guess `node1...nodeN` will hit immediately for any real panel.
+- **If the site uses a non-default convention** (e.g., `AS1`, `STATION1`, `<BUILDING>_PXC1`), Method E requires that you include those candidates in the guess list. Without inside knowledge or pattern observation, the search space is unbounded.
+- **For the typical reference site convention** (`NODE<n>` with `n` as a small integer): a Phase 1 scan of N panels usually maps cleanly to `NODE1..NODEN` via this method.
+
+For each panel from Phase 1:
+1. Open TCP/5033 to the panel
+2. Send a CONNECT (`msg_type` 0x33 legacy or 0x34 modern — try 0x34 first, fall back) with:
+   - Routing slots: `[MYBLN, panel-guess, MYBLN, scanner-identity]`
+   - `scanner-identity` can be any string (`p2-scanner|5034`, etc.)
+   - `panel-guess` in lowercase to trigger the case-correction leak if the case-folded name matches
+   - IdentifyBlock body with byte-accurate 16-byte trailer (see *Connection handshake*)
+3. Read the panel's response. If `panel-guess` case-folded to a real panel name, slot 4 of the reply contains the panel's canonical name. If not, the panel silent-drops.
+
+If Method A or B was used, you already have all panel names from the topology dump and can skip Method E entirely. Method E exists for the C/D path where you only have the BLN — and even then, it only works if your candidate names happen to include real panel-name variants.
+
+**Caveat — peer-state side effect:** if your CONNECT uses byte-accurate impersonation of a known supervisor identity (slot 4 = `DCC-SVR|5034`) AND a byte-accurate IdentifyBlock with `flags = 01 01 01` (supervisor role), the panel may register your IP in its peer state for an extended period (50+ minutes minimum, see *Field-testing findings → Panel peer-state side effect*). Using a non-supervisor scanner identity and `flags = 01 01 00` may avoid this — though the trigger conditions are not yet fully characterized.
+
+```python
+def harvest_panel_name(panel_ip, bln, scanner_identity=b"p2-scanner|5034", msg_type=0x34):
+    # Guess list should reflect the site's actual naming convention.
+    # For the default Siemens convention, NODE<n> is canonical:
+    candidates = [f"node{n}" for n in range(1, 32)]
+    for guess in candidates:
+        try:
+            s = socket.create_connection((panel_ip, 5033), timeout=2)
+            s.sendall(build_connect_frame(msg_type, bln, guess, scanner_identity))
+            resp = s.recv(4096)
+            s.close()
+            if resp and len(resp) >= 20:
+                slots = parse_routing_slots(resp)
+                if len(slots) >= 4 and slots[3]:
+                    return slots[3]   # canonical name in slot 4
+        except (socket.timeout, ConnectionResetError):
+            continue
+    return None  # exhausted candidate list - this site uses non-default naming
+```
+
+If your candidate BLN was wrong, the bouncer's TCP RST or silent FIN tells you to try the next form (`<SITE>EBLN`, `<SITE>BLN`, `<SITE>_BLN`, `<SITE>BACBLN`, `<SITE>`). Each candidate test is <50 ms, so the full list resolves in well under a second.
+
+### Phase 3 — Per-panel enrichment (always runs last, ~1 s/panel)
+
+For each `(IP, BLN, panel_name)` tuple now in hand, send opcode `0x010C` (system-info / firmware fingerprint) per the MVS appendix. Returns family string, version, build date, and serial. Useful for asset tracking, change-detection across audits, and PME1252-vs-PME1300 dialect confirmation that drives subsequent reads.
+
+### End-to-end output schema
+
+After Phases 1–3 the scanner emits, per panel:
+
+```json
+{
+  "ip": "10.0.0.X",
+  "mac": "00:a0:03:XX:XX:XX",
+  "vendor": "Siemens",
+  "tcp_5033_open": true,
+  "bacnet_device_instance": null,
+  "p2_bln": "MYBLN",
+  "p2_dialect": "modern",
+  "panel_name": "NODE3",
+  "firmware_family": "PME1300",
+  "firmware_version": "...",
+  "discovered_via": "method-A"
+}
+```
+
+…plus a separate site record:
+
+```json
+{
+  "site_code": "SITE",
+  "p2_bln": "MYBLN",
+  "supervisor_name": "DCC-SVR",
+  "supervisor_5034_name": "DCC-SVR|5034",
+  "supervisor_ip": "10.0.0.X",
+  "bms_name": "SITE-BMS",
+  "panel_count": 11,
+  "discovery_method": "A",
+  "discovery_runtime_seconds": 87
+}
+```
+
+### Failure modes and mitigations
+
+| Symptom | Likely cause | Mitigation |
+|---------|--------------|-----------|
+| Methods A/B silent within 90 s | No path visibility | Switch to Method C (active BACnet) or D (passive Who-Has) |
+| Methods C/D yield no site-prefixed strings | Quiet BACnet plane, non-default naming | Query device-name + description + location in one RPM; check for site context across the union |
+| Method E candidate-BLN attempts all RST | Site uses non-Siemens-default BLN | Extend candidate list with hostname-style strings observed in I-Am `device-name`; ask the operator after 10 misses |
+| Method E case-correction never fires | Site uses non-default panel naming (not `NODE<n>`) | Extend the candidate list with patterns observed in the site (`AS<n>`, `STATION<n>`, building-prefixed names). Without inside knowledge or Method A/B/D output, the search space is unbounded. |
+| Phase 1 SYN-scan blocked at switch ACL | Defensive segmentation | Methods A–D still work — site code alone is useful intelligence; report panel count from BACnet enumeration |
+| All phases silent | Wrong VLAN | Check switchport assignment and VLAN tagging |
+
+### What this runbook explicitly does NOT do
+
+- **Does not write to any panel.** All three phases are read-only — SYN scans, BACnet reads, P2 CONNECT and IdentifyBlock observation. No PPCL changes, no point writes, no priority overrides.
+- **Does not bypass the bouncer.** The BLN and slot-2 panel-name checks are the bouncer's discriminators; Phase 2 Method E satisfies them by trial against legitimate naming conventions, not by exploiting a flaw.
+- **Does not require credentials.** P2 has no per-user authentication — the BLN check is the entire access control, and that name is, as documented across this protocol spec, recoverable from observable traffic. This runbook is a fair characterization of the system's discovery surface, not a novel attack.
+- **Does not exploit unpatched vulnerabilities.** Every leak surface used is documented behavior of the protocol as designed, observable on any commissioned site running default Siemens configurations.
+
+The runbook is intended as discovery tooling for facility owners and the HVAC technicians who service their buildings — the same population that uses BACnet browsers, Modbus discovery tools, and vendor-supplied utilities like Siemens Insight. If you're running this against a network you don't have authority over, you're committing unauthorized access regardless of the technique.
