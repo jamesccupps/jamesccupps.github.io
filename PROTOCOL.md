@@ -260,7 +260,7 @@ The PXC validates handshake fields with two distinct failure signatures. Field-t
 **Other fields are NOT validated.** Specifically:
 - The **source identity in slot 4** can be any string — a scanner does not need to impersonate the supervisor name.
 - The **IdentifyBlock body fields** (self-name TLV, site code TLV, BLN TLV) are not validated beyond internal consistency with the routing slots.
-- The **trailer bytes** (timestamp, session ID) are not validated as authentication, though see "Panel peer-state side effect" in Field-testing findings for one observed effect of byte-accurate vs malformed IdentifyBlocks.
+- The **trailer bytes** (timestamp, session ID) are not validated as authentication, though see "Panel persistent reconnect side effect" in Field-testing findings for context on what the panel does with these fields when registering runtime peers.
 
 This means a read-only scanner only needs to know two things to establish a session: the **BLN name** (exact case-sensitive match) and **at least one panel name** (case-insensitive). Everything else is decorative.
 
@@ -299,16 +299,17 @@ SS SS                      2 bytes: session identifier (per-session constant)
 
 ### The role flag (third byte of the flag triplet)
 
-The third byte of the `01 01 XX` flag triplet — call it the role flag — has been observed in the corpus consistently set to `0x00` across all senders. Both real DCC and real panels use `01 01 00` in their CONNECT and DATA frames at the reference site.
+The third byte of the `01 01 XX` flag triplet — call it the role flag — takes different values depending on the relationship between sender and receiver:
 
-| Sender | msg_type | Third flag byte | Source |
-|--------|----------|-----------------|--------|
-| Supervisor (Desigo CC) | `0x33` (Mode B CONNECT with embedded `0x4640`) | `0x00` | Verified in 52 frames |
-| Panel | `0x2E` CONNECT (panel-initiated) | `0x00` | Verified in 51 frames |
+| Sender | Context | msg_type | Third flag byte | Source |
+|--------|---------|----------|-----------------|--------|
+| Supervisor (Desigo CC) | Outbound CONNECT to panel | `0x33` (with embedded `0x4640`) | `0x00` | Verified in 52 corpus frames |
+| Panel | Outbound CONNECT to **legitimately-configured supervisor** | `0x2E` | `0x00` | Verified in 51 corpus frames (NODE6 → real DCC) |
+| Panel | Outbound CONNECT to **runtime-registered peer** | `0x2E` | `0x01` | Verified in listener test — NODE6 → scanner IP registered via `msg_type = 0x2E` CONNECT |
 
-**A previous version of this document hypothesized that `0x01` was set when a supervisor was initiating a CONNECT.** This claim is not supported by the corpus — no real frame from either DCC or any panel has been observed with this byte set to `0x01`. The hypothesis was based on early reverse-engineering before the corpus was reviewed comprehensively. Treat this byte as `0x00` always; it may be a "fixed sentinel" rather than a role discriminator.
+`0x01` in this position is the panel's signal that the destination is a peer registered at runtime (typically through an inbound `msg_type = 0x2E` CONNECT) rather than a peer configured via NVRAM/commissioning. Real DCC always sends `01 01 00`; real panels send `01 01 00` to their commissioned supervisor and `01 01 01` to runtime-registered peers.
 
-**Important field-test note.** Sending a CONNECT with `flags = 01 01 01` (the value the prior hypothesis suggested) appears to put a PME1252 panel into an unintended state where it persistently attempts outbound TCP/5033 connections to the source IP. The trigger conditions are not fully characterized — see "Panel peer-state side effect" in Field-testing findings. **Recommendation: a scanner constructing CONNECT frames should use `01 01 00` matching what real DCC and panels send.**
+**For scanner authors:** send `flags = 01 01 00` matching what real DCC and real panels both send to legitimately-configured peers. The `0x01` value is the panel's outbound signal, not something a supervisor-emulating scanner needs to set.
 
 ### The 2-byte session identifier
 
@@ -1843,8 +1844,8 @@ The bouncer's BLN check appears to be **case-sensitive**: `SITEBLN` works, `site
 - **Backup/restore, firmware-upload** — distinct opcode sets used by Siemens' engineering tools, out of scope
 - **Opcodes `0x09A3 / 0x09A7 / 0x09AB / 0x09BB / 0x400F–0x4133`** — supervisor sends them, PXC rejects with `00 AC`; probably newer-firmware features. Not mapped.
 - **`has_more` flag in 0x0985 responses** — present at byte-offset -5 of the response body, but its value doesn't correlate with program boundaries in observed data. Either the semantic is different from what it appears to be, or it encodes something that happens to be almost constant in our captures. Ignored by the reference implementation.
-- **Panel peer-state side effect — trigger characterization** — sending a CONNECT with `msg_type = 0x2E`, `slot 4 = supervisor name`, `flags = 01 01 01`, random non-zero session ID puts a PME1252 panel into a state where it persistently attempts outbound TCP/5033 reconnection to the source IP. Persistence verified at 6+ hours; upper bound unknown, possibly until reboot. The exact trigger condition is not fully characterized — the frame in question does not match what either real DCC or real panels send, suggesting the trigger is "anomalous frame format" rather than "supervisor impersonation." Worth controlled testing with byte-accurate matching of real DCC's frame format to determine whether real DCC byte format avoids this side effect. Cleanup mechanism not documented in any captured opcode; power cycle is the only verified method.
-- **Modern PME1300 panel behavior** — the side effect above has only been verified against PME1252. Whether modern PME1300 panels exhibit the same edge case is untested.
+- **Panel persistent reconnect side effect — full mechanism** — sending an initial frame with `msg_type = 0x2E` to a panel from a non-panel source registers the source IP as a runtime peer; the panel will then persistently call back to that IP every ~16 seconds with `flags = 01 01 01` (the panel→runtime-peer marker). Verified at the reference site against PME1252 V2.8.10. This is documented protocol behavior — `0x2E` CONNECT is the panel-online-announcement message — not a parser bug. Read-only scanners that emulate DCC by sending `msg_type = 0x33` with inner `0x4640` IdentifyBlock as the initial frame do not trigger this, verified by extensive production scanning at the reference site. Open: whether responding to the panel's CONNECT with a `0x0100` SystemInfo causes operational data flow (COV, alarms); whether modern PME1300 panels exhibit the same behavior; whether vendor tooling can inspect/clear the registration; whether any deregistration opcode exists.
+- **Modern PME1300 panel behavior** — the side effect above has only been observed on a PME1252. Whether modern PME1300 panels exhibit the same edge case is untested.
 - **Whether modern PME1300 panels share legacy peer-state behavior** — only legacy PME1252 has been tested for the side effect. Worth verifying against NODE11 (PME1300 V2.8.18) at the reference site.
 - **Cold-discovery from non-supervisor vantage for legacy P2-only panels** — no zero-cost single-frame primitive has been found. Tested negatively: arbitrary slot-2 strings (silent drop), active 0x4634 query (TCP RST), BACnet ReadProperty (returns BACnet name not P2 name; legacy panels often don't appear in BACnet at all). Open paths: Siemens proprietary BACnet properties (vendor-id 7) untested; UDP discovery protocols other than BACnet untested.
 
@@ -1982,63 +1983,105 @@ An earlier corpus capture from the same VLAN that DID contain DCC↔panel frames
 
 The supervisor-host or SPAN-port requirement for Surfaces 5 and 6 is binding on properly-segmented networks. Tools that need Surface 5/6 visibility should be deployed on the supervisor itself, on a SPAN port, or on a flooding/unmanaged switch.
 
-### Panel peer-state side effect — caused by malformed CONNECT, not impersonation
+### Panel persistent reconnect side effect — `msg_type = 0x2E` registers a runtime peer
 
-When a scanner sends a CONNECT to a panel that is **structurally accepted by the bouncer but contains anomalous values not seen in normal supervisor or panel traffic**, the panel can enter a state where it persistently attempts outbound TCP/5033 connections back to the source IP. Field-verified at the reference site against a PME1252 V2.8.10 panel.
+**This finding's framing has been substantially revised after observing that production read-only scanners that emulate Desigo CC (using `msg_type = 0x33` with inner `0x4640` as the initial frame) do not trigger this behavior across many panels at the reference site, while a verification probe tool (using `msg_type = 0x2E` as the initial frame) did trigger it.** The corrected interpretation: this is documented protocol behavior that depends on the initial CONNECT envelope's `msg_type`, not a generic "any CONNECT triggers it" vulnerability.
 
-**The specific frame that triggered this at the reference site:**
+#### Initial-frame `msg_type` distinguishes role
+
+The protocol uses two different envelope types for the initial frame on a fresh TCP session, and the panel treats them differently:
+
+- **Initial frame `msg_type = 0x33` (DCC-style: `0x33` envelope with inner `0x4640` IdentifyBlock)** — supervisor-to-panel pattern. Panels respond to reads/CONNECTs but do not register the source as a peer. This is what real Desigo CC sends at the reference site, and what well-behaved read-only scanners send. The doc's *Connection-handshake modes* table calls this "the alternative `0x33` + inner `0x4640` initiation path" of the Mode A flow. **Verified safe across many panels at the reference site over an extended period of production scanning.**
+
+- **Initial frame `msg_type = 0x2E` (panel-style: `0x2E` CONNECT carrying `0x4640` IdentifyBlock directly)** — panel-to-supervisor pattern. This is the message a real panel sends to its real supervisor when the panel comes online. The doc's *Connection-handshake modes* table calls this the textbook "Mode A: Standard handshake" form. The panel that receives a `0x2E` CONNECT from a non-panel-named source past the bouncer treats it as a peer announcing itself, records the source IP as a runtime peer, and persistently calls back to that source on a 16-second cadence. **This is by-design announce-then-supervise protocol behavior, not a parser bug.**
+
+The bouncer's check is purely on BLN + slot 2 routing; it does NOT validate that the initial-frame `msg_type` matches the sender's actual role. A scanner that sends `msg_type = 0x2E` from an arbitrary IP can establish itself as a "panel" the receiving panel will faithfully poll forever, and a scanner that sends `msg_type = 0x33` from an arbitrary IP can read points as a "supervisor" without leaving any peer-table residue. The initial-frame msg_type encodes which role is being claimed.
+
+#### Reference site state — what created it
+
+A PME1252 V2.8.10 panel (NODE6) at the reference site entered this registered-peer state because a verification probe tool deliberately used `msg_type = 0x2E` CONNECTs to characterize the panel's response to panel-style frames. The probe at 20:04:07 UTC on 2026-04-30 had:
+
+- `msg_type = 0x2E`
+- `slot 1 (BLN) = SITEBLN` (passes bouncer)
+- `slot 2 (target) = "node6"` (case-folds to real panel name, passes bouncer)
+- `slot 4 (source identity) = "scanner-verify"` (arbitrary scanner identity)
+- Embedded `0x4640` IdentifyBlock with `flags = 01 01 00`, 16-byte trailer
+
+The panel correctly interpreted this as a peer named `scanner-verify` announcing itself, registered the source IP, and began the standard panel-supervisor heartbeat (one CONNECT every ~16 seconds). The state persisted for ~18 hours of continuous SYN attempts (verified across multiple captures) and was cleared by power-cycling NODE6, after which a follow-up capture showed zero outbound SYN attempts to the scanner IP and normal Desigo↔NODE6 traffic resuming immediately. **The registration is in volatile memory** — power cycle wipes it; no flash/NVRAM persistence.
+
+The earlier probe-impersonate at 20:03:40 (also `msg_type = 0x2E`, also bouncer-passing, but with `slot 4 = DCC-SVR` and `flags = 01 01 01`) likely *also* registered something, but the registration that actually drove subsequent callbacks is keyed on `scanner-verify`. Whether multiple registrations exist simultaneously isn't characterized — the panel's outbound CONNECTs only address `scanner-verify`, suggesting either probe-self overwrote the entry or the probe-impersonate registration is not actively driving callbacks.
+
+#### Frame the panel sends to a registered peer
+
+When a registered peer accepts the panel's TCP connection, the panel sends an 88-byte `0x2E` CONNECT frame:
 
 ```
-msg_type = 0x2E         (panel-style CONNECT, not DCC's 0x33)
-direction = 0x00        (request)
-slot 4 = "OCCDCC-SVR"   (DCC's bare name without |5034 suffix; matches what panels put in slot 2 when reaching DCC)
-flags = 01 01 01        (third byte = 0x01 — value not observed in any real DCC or panel frame)
-session_id = random non-zero  (DCC uses non-zero stable per session; panels use 00 00; scanner used random)
-IdentifyBlock self-name = "OCCDCC-SVR"  (matching slot 4)
+Length: 88 bytes (0x00000058)
+msg_type: 0x2E (CONNECT)
+sequence: monotonically incrementing per emitted frame
+direction: 0x00 (request)
+
+Routing slots:
+  slot 1 (BLN):              SITEBLN
+  slot 2 (target):           scanner-verify          ← REGISTERED PEER NAME
+  slot 3 (BLN echo):         SITEBLN
+  slot 4 (source identity):  NODE6               (panel's own name)
+
+Body (42 bytes):
+  opcode:    0x4640 (IdentifyBlock)
+  TLVs:      ["NODE6", "SITE", "SITEBLN"]
+  trailer (16 bytes):
+    separator   = 00
+    flags       = 01 01 01     ← role flag = 0x01 (panel→runtime-registered peer)
+    reserved    = 00 00 00 00 00
+    timestamp   = current Unix epoch
+    session_id  = 00 00
+    null        = 00
 ```
 
-**Why this is anomalous.** Comparing against what real DCC and real panels send:
-- Real DCC uses `msg_type = 0x33` (Mode B), not `0x2E` — verified in 52 corpus frames.
-- Real DCC uses `slot 4 = "OCCDCC-SVR|5034"` with the listen-port suffix — verified in 52 corpus frames.
-- Real DCC uses `flags = 01 01 00` — verified in 52 corpus frames.
-- Real DCC uses a session-stable non-zero session ID like `fe 98` — verified in 52 corpus frames.
-- Real panels use `msg_type = 0x2E`, `slot 4 = NODE6` (their own name), `flags = 01 01 00`, `session_id = 00 00`.
+This is the panel's "I'm here, who are you?" announcement directed at its registered peer. Real panels send the same frame to their real supervisors during normal operation; the only difference is the role flag (`01 01 00` to configured supervisors, `01 01 01` to runtime-registered peers).
 
-The frame the scanner sent had panel-style msg_type with DCC-style identity, a flag triplet not observed in any real frame, and a session ID format that mixed scanner-randomized non-zero with panel-style zero conventions. **Nothing in the corpus produces this exact byte signature.**
+#### Panel behavior with a held-open connection
 
-**Observed effect:**
+A second listener test (extended-listen variant) held each accepted connection open for 30 seconds without sending any P2 response. The panel:
 
-1. Session was established normally and closed cleanly (the bouncer accepted BLN + slot 2; the panel responded with the canonical name as expected).
-2. The panel began initiating outbound TCP/5033 SYNs from random source ports to the scanner's IP every ~16 seconds, retrying with classic exponential backoff (1s, 2s, 4s) before giving up with RST after ~5s.
-3. **This persisted for at least 6 hours** with no sign of expiry, while real DCC↔panel traffic continued normally — no operational disruption.
-4. Critically: **the scanner's IP does NOT appear in the panel's published `0x4634` routing table**. The panel is reaching out to the scanner but is not telling other systems "the scanner is a peer." The panel's published peer list shows only the legitimate site topology (`NODE1` through `NODE11`, `OCCDCC-SVR`, `OCC-SIEMENS-BMS`, etc.). This contradicts an earlier interpretation that the panel had registered the scanner as a supervisor.
+- Sent the CONNECT frame within ~50ms of TCP handshake completion
+- Re-sent the CONNECT frame every ~14-15 seconds while the connection stayed up, with each retransmission carrying a fresh timestamp and incrementing sequence number
+- Did not send keepalives or any other frame type
+- Did not time out the connection from its side
+- ACKed the listener's eventual FIN and immediately sent RST (no graceful close from panel side)
 
-**Most likely explanation.** The anomalous frame caused the panel to enter an internal state where some "active outbound connection" or "peer reconnection" entry was created without the corresponding routing-table or supervisor-list entry being created. This is more consistent with **a parser edge case or unhandled state transition** than with successful impersonation. Real DCC sending byte-correct frames does not cause this; sending the same CONNECT format that real panels use (msg_type `0x2E`, flags `01 01 00`, session_id `00 00`, scanner identity in slot 4) likely would not cause this either.
+Application-layer retransmit cadence (~14-15s) is slightly tighter than TCP-level connection-attempt cadence (~16s) — consistent with the application timer not waiting through TCP backoff after a successful connection. The panel will evidently retransmit its CONNECT indefinitely until the connection drops, the supervisor responds with `0x0100`, or the panel reboots.
 
-**What this is NOT (correcting earlier framing in this document):**
+#### What's NOT happening
 
-- It is **not** evidence of supervisor-impersonation registration. The scanner's IP is not in the panel's peer list.
-- It is **not** caused by "byte-accurate" impersonation — the frame in question was specifically *not* byte-accurate to anything real DCC sends.
-- It is **not** a security finding about the protocol per se. It is more accurately characterized as a side effect of a malformed-but-bouncer-accepted CONNECT triggering an edge-case code path in the panel's session manager.
+- **No operational data leaks to a passive listener.** The panel sends only the CONNECT identity announcement; it does not push COV updates, alarm reports, or any other operational data without first receiving a `0x0100` SystemInfo response from the listener. The "what does the panel push to a runtime-registered peer that responds properly?" question (Option C in earlier analysis) remains untested.
+- **No supervisor session is hijacked.** Real DCC's session continues normally throughout. The runtime-registered peer is tracked in addition to the configured supervisor, not in place of it.
+- **No `0x4634` routing-table entry is created.** The runtime-registered peer is recorded in some internal panel state but does NOT appear in the panel's published `0x4634` topology pushes. Other systems (other panels, BACnet routers) have no visibility into the registered peer.
 
-**What this IS:**
+#### Cleanup
 
-- A reproducible behavior whose trigger condition is "send a CONNECT with anomalous combinations of msg_type/flags/identity that pass the bouncer but don't match any normal sender."
-- A useful empirical caution for scanner authors: **send frames that match what real panels and real DCC actually send**, byte-for-byte where the field semantics matter (msg_type, flag triplet, session ID).
-- Persistent for at least 6+ hours; cleanup likely requires panel reboot.
+- **Power cycle is the verified cleanup.** A power cycle of NODE6 cleared the registration completely — confirmed by post-reboot capture showing zero outbound SYN attempts to the previously-registered scanner IP and normal Desigo↔panel traffic resuming. The registration is in volatile memory only. No P2 opcode for removing a peer entry has been identified; whether such an opcode exists is unknown.
+- **Accept-and-close does NOT clear the state.** Verified by Option A test: the panel resumes its 16-second cadence after a closed connection.
+- **Changing the scanner's IP is a useful workaround for the noise from the registered peer's perspective**, but the panel will continue firing SYN attempts at the old IP indefinitely until reboot. If a different host later inherits the old IP, that host will start receiving the panel's SYN attempts and may not understand why.
 
-**Open questions:**
+#### Implications for protocol-aware scanners
 
-1. Is the trigger specifically `flags = 01 01 01` (which neither DCC nor panels send), or any flag value other than `0x00` in that position?
-2. What if the frame matched real DCC exactly (`msg_type = 0x33`, `flags = 01 01 00`, `session_id = stable non-zero`, `slot 4 = OCCDCC-SVR|5034`)? Would there be no side effect, or would there be a different (possibly more concerning) effect like real-DCC session displacement?
-3. Does the same trigger condition apply to PME1300 modern panels?
-4. Does the panel actually send anything to the scanner if a TCP listener is bound on port 5033, or does it just open the connection and immediately close?
+**Use the `0x33` + inner `0x4640` initiation path** (with `0x34` fallback for modern dialects). This is what real Desigo CC sends and what well-behaved read-only scanners should send. It causes the panel to respond to reads without registering the scanner as a runtime peer.
 
-**Practical guidance for scanner authors:**
+**Avoid sending `msg_type = 0x2E` as the initial frame on a fresh TCP session unless you specifically want to be tracked as a peer.** A `0x2E` initial frame from a non-panel source is interpreted as a panel announcing itself — the panel will register your IP and call back persistently. There's no documented way to "deregister" without panel reboot.
 
-- For read-only diagnostics: use the documented Mode B form — `msg_type = 0x33` with embedded `0x4640` IdentifyBlock — and use `flags = 01 01 00` and `session_id = 00 00` (matching panel conventions). Use scanner's own identity in slot 4 (e.g., `p2-scanner|5034`); the bouncer doesn't validate slot 4.
-- Avoid the specific frame format documented above (`msg_type = 0x2E` + DCC identity + `flags = 01 01 01` + random session_id) unless you specifically want to study the behavior.
-- If you observe a panel persistently SYN-ing to your IP after testing, panel reboot is the only known clean cleanup.
+A production read-only scanner used at the reference site sends `msg_type = 0x33` with inner `0x4640` IdentifyBlock as its initial frame and has scanned panels at the reference site over extended periods without triggering this state. This is empirical confirmation that the protocol's role discrimination works correctly when scanners use the appropriate envelope.
+
+#### Why this matters for the protocol's security model
+
+The corrected framing is narrower than earlier doc versions claimed. The protocol's authentication model is "BLN+slot 2 = network-segment trust"; once past the bouncer, a sender's claimed role (via the initial-frame msg_type) is taken at face value. This means:
+
+- An attacker on the HVAC VLAN with the BLN can read points from any panel by emulating DCC (initial frame `msg_type = 0x33` + inner `0x4640`). This is the practical concern for unauthorized monitoring.
+- An attacker can also register themselves as a runtime peer (initial frame `msg_type = 0x2E`), which causes the panel to call back persistently. Without responding as a real supervisor, all the attacker gets is panel-identity disclosure (name, BLN, site) — already obtainable via Surface 7 BACnet broadcasts. Whether further data flows if the attacker responds with `0x0100` is untested but plausible.
+- Neither requires defeating any authentication. The security model is "VLAN access = trust," same as virtually every other building automation protocol of this era.
+
+For practical site security, the takeaway is: protect the HVAC VLAN. The protocol's read surface is open to anyone who can route to it. The runtime-peer registration is not a separately exploitable vulnerability beyond the read surface — it's just the supervisor-tracking mechanism showing through to anyone who can claim to be a panel.
 
 ### 0x4634 routing-table push — sender-restricted
 
@@ -2128,7 +2171,7 @@ What's been tested end-to-end against live PXCs on the reference site — both P
 | **Active 0x4634 query** | **Inside 0x33 DATA frame** | **✗ Verified rejected: panel TCP-RST within 3ms** |
 | **Surface 7 BACnet broadcast (any vantage)** | **scapy passive listen UDP/47808** | **✓ Verified at the reference site: 14 broadcasts in 90s from non-supervisor host** |
 | **Surfaces 5/6 (non-supervisor vantage)** | **scapy passive listen TCP/5033** | **✗ Verified NOT visible: 0/0 frames from non-supervisor host on properly-segmented network** |
-| **Panel persistent reconnect side effect** | **Anomalous CONNECT (`flags = 01 01 01` etc.)** | **△ Observed: panel attempts outbound TCP/5033 to source IP for 6+ hours; cause appears to be edge-case frame format, not impersonation; cleanup likely requires reboot** |
+| **Initial-frame `msg_type = 0x2E` registers source as runtime peer** | **Inbound `msg_type = 0x2E` as initial frame on a fresh TCP session, with valid BLN + slot 2 case-folding to a real panel name, registers source IP as a runtime peer; panel calls back every ~16s with `flags = 01 01 01`; persists across sessions until reboot** | **△ Verified by listener test against NODE6 (PME1252 V2.8.10); production scanners using `msg_type = 0x33` + inner `0x4640` initial frame do NOT trigger this; this is documented protocol behavior, not a vulnerability per se** |
 
 What's wire-format-documented but NOT live-tested:
 
@@ -2148,6 +2191,81 @@ What's wire-format-documented but NOT live-tested:
 | 0x0988 multi-string filter | Low priority — 0x0981 covers enumeration needs |
 
 Every wire format documented above has been either live-tested OR observed in a real Desigo CC capture and byte-verified against that capture. No speculation-only entries remain in the opcode tables.
+
+---
+
+## Point catalogs — what the protocol does and doesn't give you
+
+This document specifies the wire protocol — how to frame messages, address panels, send a read request, parse a response. It does not provide a **point catalog**: the metadata needed to turn raw protocol primitives into named, typed, useful point reads.
+
+A working scanner needs both. The protocol tells you *how* to read a point; the catalog tells you *which* points exist, *what* they're named, and *what data type* to expect. Without the catalog, you can issue P2 reads but you don't know what to ask for or how to interpret what comes back beyond raw bytes and inferred shape.
+
+### Two distinct catalog problems
+
+It's worth separating two things that often get conflated:
+
+**1. Vendor catalog — TEC application definitions.** Siemens TEC controllers run pre-built "applications" (numbered, like `2032`, `4031`, `6017`) loaded at the factory or by the integrator. Each application has a fixed slot layout: slot 1 = `CTLR ADDRESS`, slot 4 = `RM TEMP`, slot 41 = `DO 1`, etc. This layout is **portable across sites** — application 4031 has the same point layout in any building. The reading workflow is:
+
+1. Read the device's `APPLICATION` property → returns the application number (e.g., `4031`)
+2. Look up the application number in the vendor catalog → get the slot-by-slot point layout
+3. Issue the actual point read using slot number or point name from the catalog
+
+The vendor catalog is large but bounded — Siemens has shipped on the order of 800 TEC applications across the product line. A complete catalog covers most TECs the scanner will ever encounter.
+
+**2. Site catalog — per-installation configuration.** This is the data that varies building-to-building: BLN network name, scanner identity, panel-name-to-IP mapping, any custom application numbers used by the integrator, custom point names for user-defined panel applications. This is necessarily site-specific.
+
+Most published BAS scanners ship the vendor catalog as a static data file alongside the code (since it's portable) and consume the site catalog as user-provided config (since it's not).
+
+### What's in each catalog
+
+**Vendor catalog** (per-application, per-slot):
+- **Slot number** (1-99) — the addressing handle on the wire
+- **Point name** — e.g., `RM TEMP`, `OCC HTG STPT`, `DAMPER POS`
+- **Point type** — `analog_ro` / `analog_rw` / `digital_ro` / `digital_rw` — needed to dispatch the right value-extraction path
+- **Ptype byte** — the data-type code (the `XX` byte described in *Response parsing*)
+- **State labels** — for digital points, the `on_label` / `off_label` strings (`"NIGHT"` / `"DAY"`, `"OPEN"` / `"CLOSED"`)
+- **Units** — for analog points, when known
+- **Read-write flag** — whether the point accepts writes
+
+**Site catalog** (per-installation):
+- **BLN name** — required for the bouncer
+- **Site code** — typically a 3-letter prefix
+- **Scanner identity** — slot 4 / IdentifyBlock self-name (any string; the bouncer doesn't validate it)
+- **Panel name → IP mapping** — `NODE1 → 10.0.0.10`, etc.
+- **Panel-local points** — names of PPCL variables or virtual points the integrator defined, which won't be in the vendor catalog
+- **Application overrides** — if the integrator built a custom application, its slot layout
+
+### Where catalogs come from
+
+For the **vendor catalog**, three practical sources:
+
+1. **Walk the panel's enumerate output and aggregate.** Use the `0x0985` / `0x0986` / `0x0981` family documented earlier in this spec to programmatically traverse every TEC on accessible panels, then group results by `APPLICATION` value. With enough sites' worth of data, you converge on a complete catalog. This is the most thorough approach but takes time and access to many sites.
+
+2. **Vendor controller datasheets.** Siemens publishes installation guides for each TEC family (TEC-3110, TEC-2210, etc.) listing application numbers and their point layouts. Useful as a starting point.
+
+3. **Copy from existing catalogs.** Scanner projects that have done the work above can publish their catalog. A practical example: this repository ships [`tecpoints.json`](tecpoints.json), a 797-application vendor catalog used by the bundled scanner. The format is straightforward — see the README for layout. Whether to ship vendor data this way is project-dependent (licensing, completeness, maintenance), but a working catalog is essential for any practical scanner.
+
+For the **site catalog**, two sources:
+
+1. **Cold discovery + user input** — the runbook in this document discovers the BLN name and panel inventory automatically; the human supplies anything that isn't on the wire (preferred panel names, scanner identity).
+
+2. **Export from Insight or Desigo CC.** The supervisor already has the full site catalog. If the operator can export the point list (CSV, XML, or via the supervisor's API), it's faster than discovery. The format will be vendor-specific and may need normalization.
+
+### Conventions worth knowing
+
+Some naming patterns are widespread enough to be useful:
+
+- **Suffix conventions in PPCL variables:** `.DP` (data point alias), `.ENB` (enable flag), `.OCC` (occupancy state), `.NGT` (night/unoccupied state), `.STPT` (setpoint), `.MIN` / `.MAX` (limit values). These are PPCL-internal names, often readable but not always meaningful at the system level.
+- **TEC subpoint names follow factory defaults** unless the integrator overrode them: `RM TEMP` (room temperature), `OCC HTG STPT` (occupied heating setpoint), `DAMPER POS` (damper position percentage), `SF SPD` (supply fan speed), etc. Spaces in names are normal — the protocol's TLV encoding handles them transparently.
+- **BLN-virtual points** (system-wide — readable from any panel, typically from `$paneldefault`) are usually time-related (`SYSTIME`, `SYSDATE`) or weather-related on sites with weather integration. They behave differently from panel-local points; see *Reading a BLN virtual point*.
+
+### What this document deliberately does NOT include
+
+- A complete vendor TEC application catalog (would bloat a protocol spec; lives in a data file)
+- Site-specific data from any reference installation
+- Engineering-units conventions for specific equipment types
+
+These are vendor data and per-installation configuration, respectively — outside the scope of a protocol specification.
 
 ---
 
@@ -2204,10 +2322,8 @@ PAYLOAD
   00                           1 byte: trailer separator
   01 01 00                     3 bytes: flags. Third byte should be 0x00 —
                                this is what real DCC and panels both send.
-                               DO NOT use 0x01 here: this value has not been
-                               observed in any real frame and has been seen
-                               to put panels into an unintended persistent-
-                               reconnect state (see field-testing findings).
+                               Values other than 0x00 are not observed in
+                               any real frame.
   00 00 00 00 00               5 bytes: reserved padding (always zero)
   TT TT TT TT                  4 bytes: Unix epoch timestamp, big-endian
                                (struct.pack(">I", int(time.time())))
@@ -2215,6 +2331,12 @@ PAYLOAD
                                real panels send; real DCC uses a session-
                                stable non-zero value.
   00                           1 byte: trailing null
+                               
+  IMPORTANT: Match this exact byte split: sep(1)+flags(3)+rsv(5)+ts(4)+
+  sid(2)+null(1) = 16. Other splits that total 16 bytes (e.g.,
+  rsv(4)+ts(4)+sid(2)+null(2)) yield the right total length but place
+  fields at wrong offsets and may pass routing while failing deeper
+  validation in unpredictable ways.
 ```
 
 The PXC validates this and replies with a routing-flipped success acknowledgement carrying the panel's identity. You don't need to parse the response in detail — just confirm `msg_type=0x33`, `seq=1`, direction byte = `0x01`. If you get direction byte `0x05` instead, the bouncer rejected you (see "The bouncer" section).
@@ -2607,7 +2729,7 @@ For each panel from Phase 1:
 
 If Method A or B was used, you already have all panel names from the topology dump and can skip Method E entirely. Method E exists for the C/D path where you only have the BLN — and even then, it only works if your candidate names happen to include real panel-name variants.
 
-**Caveat — panel persistent reconnect side effect:** sending a CONNECT with anomalous flag values (specifically `flags = 01 01 01`, which neither real DCC nor real panels send) has been observed to put a PME1252 panel into a state where it persistently attempts outbound TCP/5033 connections back to the source IP. This persists for 6+ hours, possibly until reboot. **Recommendation: use `flags = 01 01 00`** matching what real DCC and panels actually send. See *Field-testing findings → Panel peer-state side effect* for full discussion.
+**Caveat — initial frame `msg_type = 0x2E` registers the source as a runtime peer:** sending an initial frame with `msg_type = 0x2E` to a panel with valid BLN + bouncer-passing slot 2 causes the panel to register the source IP as a runtime peer and call back persistently (~16-second cadence, `flags = 01 01 01`) until panel reboot. **This is documented protocol behavior** — `0x2E` CONNECT is the panel-online-announcement envelope. Read-only scanners should use **`msg_type = 0x33` with inner `0x4640` IdentifyBlock as their initial frame** (the form the doc's *Connection-handshake modes* table calls "the alternative `0x33` + inner `0x4640` initiation path"), which is what real Desigo CC sends and does not register the source. A production read-only scanner at the reference site uses this form exclusively and has scanned panels there over extended periods without triggering registration. See *Field-testing findings → Panel persistent reconnect side effect* for full details.
 
 ```python
 def harvest_panel_name(panel_ip, bln, scanner_identity=b"p2-scanner|5034", msg_type=0x34):
