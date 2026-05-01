@@ -400,11 +400,21 @@
                     <span class="name">HVAC Scanner</span>
                     <span class="desc">Multi-protocol BACnet scanner</span>
                 </a>
-                <div class="project-row multilink">
+                <a class="project-row" href="https://github.com/jamesccupps/P2Scanner" target="_blank" rel="noopener">
                     <span class="tag">[BAS]</span>
-                    <a class="name-link" href="https://github.com/jamesccupps/P2Scanner" target="_blank" rel="noopener">P2 Scanner</a>
-                    <span class="desc">P2 protocol scanner &middot; <a class="doc-link" href="protocol.html">PROTOCOL.md</a></span>
-                </div>
+                    <span class="name">P2 Scanner</span>
+                    <span class="desc">Siemens APOGEE P2 protocol scanner</span>
+                </a>
+                <a class="project-row" href="protocol.html">
+                    <span class="tag">[DOC]</span>
+                    <span class="name">P2 Protocol</span>
+                    <span class="desc">Wire-level reference for the Siemens APOGEE P2 protocol</span>
+                </a>
+                <a class="project-row" href="security.html">
+                    <span class="tag">[DOC]</span>
+                    <span class="name">BAS Security</span>
+                    <span class="desc">Practical security recommendations for HVAC/BAS networks</span>
+                </a>
                 <a class="project-row" href="https://github.com/jamesccupps/NoteForge" target="_blank" rel="noopener">
                     <span class="tag">[APP]</span>
                     <span class="name">NoteForge</span>
@@ -451,7 +461,7 @@
                     <span class="desc">Ubiquiti Store restock alert tool</span>
                 </a>
             </div>
-            <div class="dim">       12 project(s) &mdash;  Type HELP for commands</div>
+            <div class="dim">       14 project(s) &mdash;  Type HELP for commands</div>
         </div>
 
         <hr class="sep">
@@ -531,7 +541,7 @@
         ver: () => `<span class="amber">CUPPS-DOS v6.22</span>\nShell: COMMAND.COM\nUptime: ${getUptime()}`,
         uptime: () => `Session uptime: ${getUptime()}`,
         matrix: () => { startMatrix(); return '<span class="cyan">Entering the Matrix...</span>'; },
-        dir: () => `<span class="dim"> Volume in drive C is CUPPS_REPOS\n Directory of C:\\CUPPS\n\n ABOUT    TXT\n PROJECTS DIR  12 project(s)\n CONTACT  TXT\n\n        3 item(s)</span>`,
+        dir: () => `<span class="dim"> Volume in drive C is CUPPS_REPOS\n Directory of C:\\CUPPS\n\n ABOUT    TXT\n PROJECTS DIR  14 project(s)\n CONTACT  TXT\n\n        3 item(s)</span>`,
     };
 
     const bootTime = Date.now();

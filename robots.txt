@@ -4,9 +4,10 @@
 User-agent: *
 Allow: /
 
-# Don't index the raw markdown — the styled HTML version at /protocol.html
-# is the canonical page for this content. Disallowing here prevents the
-# raw file from competing with the HTML page in search results.
+# Don't index the raw markdown files — the styled HTML versions are the
+# canonical pages for this content. Disallowing here prevents the raw
+# files from competing with the HTML pages in search results.
 Disallow: /PROTOCOL.md
+Disallow: /BAS_SECURITY.md
 
 Sitemap: https://jamesccupps.github.io/sitemap.xml
