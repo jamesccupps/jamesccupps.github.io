@@ -16,7 +16,7 @@
 
         :root {
             --green: #1aff1a;
-            --green-dim: #0d8a0d;
+            --green-dim: #3dc03d;
             --green-glow: rgba(26, 255, 26, 0.4);
             --amber: #ffb800;
             --cyan: #00e5ff;
@@ -33,10 +33,14 @@
             background: var(--bg);
             color: var(--green);
             font-family: 'IBM Plex Mono', 'Consolas', 'Menlo', 'Courier New', monospace;
-            font-size: 0.95rem;
-            line-height: 1.55;
+            font-size: 1.05rem;             /* was 0.95rem */
+            line-height: 1.6;               /* was 1.55 */
             overflow-x: hidden;
             min-height: 100vh;
+            /* Crisper text rendering */
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            text-rendering: optimizeLegibility;
         }
 
         /* ── CRT Monitor Frame ── */
@@ -50,42 +54,10 @@
             box-shadow: inset 0 0 120px rgba(0,0,0,0.8), inset 0 0 40px rgba(26,255,26,0.03);
         }
 
-        /* Scanlines */
-        .crt-frame::before {
-            content: "";
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: repeating-linear-gradient(
-                0deg,
-                transparent,
-                transparent 2px,
-                rgba(0, 0, 0, 0.15) 2px,
-                rgba(0, 0, 0, 0.15) 4px
-            );
-            pointer-events: none;
-            z-index: 100;
-        }
-
-        /* Subtle flicker (reduced opacity for long reading) */
-        .crt-frame::after {
-            content: "";
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(26, 255, 26, 0.008);
-            pointer-events: none;
-            z-index: 99;
-            animation: flicker 0.3s infinite;
-        }
-
-        @keyframes flicker {
-            0%, 100% { opacity: 0.5; }
-            50% { opacity: 0.7; }
-        }
-
         /* ── Header navigation ── */
         .page-nav {
             font-family: 'VT323', monospace;
-            font-size: 1.2rem;
+            font-size: 1.35rem;     /* was 1.2rem */
             display: flex;
             justify-content: space-between;
             align-items: baseline;
@@ -93,9 +65,9 @@
             border-bottom: 1px dashed var(--green-dim);
             margin-bottom: 24px;
         }
-        .page-nav .prompt-path { color: var(--amber); text-shadow: 0 0 6px rgba(255,184,0,0.4); }
+        .page-nav .prompt-path { color: var(--amber); text-shadow: 0 0 3px rgba(255,184,0,0.45); }
         .page-nav .prompt { color: var(--green); }
-        .page-nav .glow { text-shadow: 0 0 6px var(--green-glow), 0 0 12px rgba(26,255,26,0.15); }
+        .page-nav .glow { text-shadow: 0 0 3px var(--green-glow); }
         .page-nav a.back {
             color: var(--cyan);
             text-decoration: none;
@@ -115,7 +87,7 @@
         #content h1, #content h2, #content h3, #content h4 {
             font-family: 'VT323', 'Cascadia Mono', 'Consolas', monospace;
             color: var(--amber);
-            text-shadow: 0 0 6px rgba(255,184,0,0.4);
+            text-shadow: 0 0 3px rgba(255,184,0,0.45);
             margin-top: 28px;
             margin-bottom: 12px;
             font-weight: normal;
@@ -123,7 +95,7 @@
         #content h1 {
             font-size: 2.2rem;
             color: var(--green);
-            text-shadow: 0 0 8px var(--green-glow);
+            text-shadow: 0 0 4px var(--green-glow);
             border-bottom: 1px dashed var(--green-dim);
             padding-bottom: 8px;
             margin-top: 0;
@@ -133,7 +105,7 @@
             border-bottom: 1px dotted rgba(255,184,0,0.25);
             padding-bottom: 4px;
         }
-        #content h3 { font-size: 1.3rem; color: var(--cyan); text-shadow: 0 0 4px rgba(0,229,255,0.3); }
+        #content h3 { font-size: 1.3rem; color: var(--cyan); text-shadow: 0 0 3px rgba(0,229,255,0.45); }
         #content h4 { font-size: 1.1rem; color: var(--green); }
 
         #content p {
@@ -334,7 +306,7 @@
             opacity: 0;
             pointer-events: none;
             transition: opacity 0.2s;
-            text-shadow: 0 0 6px var(--green-glow);
+            text-shadow: 0 0 3px var(--green-glow);
         }
         #scroll-top.visible {
             opacity: 0.85;
