@@ -1826,28 +1826,40 @@ The bouncer's BLN check appears to be **case-sensitive**: `SITEBLN` works, `site
 
 ## What's still unknown
 
-- **Property state sentinel** (`3FFFFFFF` vs `00000000`) — still not cracked; observation across all pcaps suggests it's a generic "wildcard / no filter" sentinel rather than a quality-flag register
-- **Opcode `0x0273` (full semantics)** — now observed only in alarm-acknowledgement workflows immediately preceding `0x0509`. ACK-only response, same wire shape as `0x0271` but `00 00` trailer. Whether it's strictly required before `0x0509`, or has independent uses outside alarm flows, hasn't been tested in isolation
-- **Alarm-class identifier (`"CC#"` in 0x0508 / 0x0509)** — constant in observed samples; may take other values for different alarm priorities, fault types, or system contexts. Triggering different alarm classes deliberately would surface variants
-- **0x0508 optional 4-char marker** — present in some alarm records (a 4-byte ASCII string between two zero-pad runs), absent in others. Likely an alarm-instance identifier or a class-derived tag, but specific encoding not pinned down
-- **0x0508 trailing flag block** — the ~30 bytes after the last BACnet datetime contain priority/escalation/state flags. Bit-level mapping not yet determined; would benefit from captures spanning multiple alarm transitions on the same point (raise → ack → return-to-normal → re-raise)
-- **0x4106 parameter bytes** — the trailing `00 01 7F FF` is stable across observations but only one variant has been observed. If Desigo has a "clear SOME tracebits" or "clear on condition" mode, those parameters would surface different values here. The same trailer appears in `0x4103`, suggesting the trailer is a shared "program-runtime command" framing rather than ClearTracebits-specific
-- **Subscription / unsubscription opcodes** — not observed. The 5034 push channel operates without a visible handshake in captures. A capture of a PXC coming online from reset would resolve this
-- **Subscribe-from-graphic path** — if Desigo uses a different mechanism to request ad-hoc subscriptions when a floor plan is opened (vs the always-on 5034 pushes), that exchange wasn't in any capture window
-- **Full data-type code table** — empirically pinned for the dominant codes (0x00, 0x02, 0x03, 0x06; see "Data-type codes" sub-section under point-read responses). Codes `0x01`, `0x04`, `0x05` referenced in the SHAPE B detection heuristic but unobserved across all captures analyzed — semantics speculative
-- **0x4634 cost function** — now known to be a per-observer metric (not a global link cost), with DCC reporting consistently lower values than PXCs. Exact computation (latency EWMA? hop-weighted RTT? integer ping sample?) still not pinned down
-- **0x0982 timestamp format** — embedded timestamps (e.g. `79 09 07 02 0C 16 FF 2A`) match the BACnet date+time encoding documented in the alarm-reporting section: `year-1900 / month / day-of-month / day-of-week / hour / minute / second / hundredths`. The `0xFF` byte in observed samples is BACnet's "unspecified / wildcard" sentinel — probably indicates trend or schedule queries that match any value in that field. Whether the trailing byte is `hundredths` (as in 0x0508) or a `tz/dst` field unique to 0x0982 needs more samples
-- **0x098D `88 0C XX YY` schedule-time field** — bytes 0–1 are constant (`0x88 0x0C`); byte 3 always matches the date's day-of-week. Byte 2 varies across `0x19`–`0x1F`, possibly a packed time-of-day field. Not yet decoded
-- **0x098C–0x098F state-set trailer** — every response in the family ends with `fc 13`, which decodes via `0x040A` as the `UNOCC_OCC` state-set. Whether the trailer is always this specific cursor, or whether it varies by schedule type, would need more samples from non-occupancy schedules to determine
-- **0x0976 multistate / binary handling** — the op only returns analog (f32) subpoints. Whether a separate flag in the request can include multistate / binary subpoints, or whether they require separate ops, is not yet established
-- **MSTP gateway traffic** — BACnet-over-P2 tunneling may use a different opcode set when PXCs bridge to third-party BACnet devices
-- **Backup/restore, firmware-upload** — distinct opcode sets used by Siemens' engineering tools, out of scope
+- **Property state sentinel semantics** (`3FFFFFFF` vs `00000000`) — the parser predicate is fully solved (lock 3 bytes for `3F FF FF`, lock 4 zero bytes for the all-zero case; see *Sentinel-validation rule*). The remaining open question is purely **what the field semantically encodes** — observation across the corpus suggests "generic wildcard / no-filter sentinel" rather than a quality-flag register, but the underlying meaning hasn't been pinned to a reference. This is parser-irrelevant; only matters for documentation completeness.
+- **Opcode `0x0273` — independent use outside alarm-ack flows** — corpus analysis confirms 0x0273 is overwhelmingly used as a point-existence probe during UI browsing (3,022 frames; ~500× more common than 0x0509). The alarm-ack usage is a minority case. What remains untested: whether 0x0273 is *strictly required* before 0x0509 (the panel might accept 0x0509 standalone), and whether the panel's response shape varies between probe-use and ack-use.
+- **Alarm-class identifier (`"CC#"` in 0x0508 / 0x0509)** — constant in observed samples; may take other values for different alarm priorities, fault types, or system contexts. Triggering different alarm classes deliberately would surface variants.
+- **0x0508 trailing 32-byte flag block bit-mapping** — the corpus narrows the structure (common 11-byte tail framing, byte +7 varies as occurrence ID, byte +9 `0x1e` is plausible priority code, one alarm carries an embedded float pair as threshold/at-trigger value). Full bit-level mapping requires captures of the same alarm transitioning through multiple states (raise → ack → return-to-normal → re-raise) on the same point.
+- **0x4106 parameter bytes** — the trailing `00 01 7F FF` is stable across observations but only one variant has been observed. If Desigo has a "clear SOME tracebits" or "clear on condition" mode, those parameters would surface different values here. The same trailer appears in `0x4103`, suggesting the trailer is a shared "program-runtime command" framing rather than ClearTracebits-specific.
+- **Connection-establishment-time subscribe** — confirmed: no per-property subscribe/unsubscribe exchange exists for 5034 push (1601+ corpus responses, no per-property handshake). The 5034 channel is a connection-level bind. **Still open**: whether a panel cold-boot capture would surface a one-time, connection-level "subscribe-everything" announcement at session start. The corpus does not contain a panel cold-boot capture.
+- **Subscribe-from-graphic path** — if Desigo uses a different mechanism to request ad-hoc subscriptions when a floor plan is opened (vs the always-on 5034 pushes), that exchange wasn't in any capture window.
+- **Full data-type code table** — empirically pinned for the dominant codes (0x00, 0x02, 0x03, 0x06; see "Data-type codes" sub-section under point-read responses). Codes `0x01`, `0x04`, `0x05` referenced in the SHAPE B detection heuristic but unobserved across all captures analyzed — semantics speculative.
+- **0x4634 cost function — exact computation** — confirmed per-observer metric (corpus-wide statistics: DCC sees nodes at 2477-2789, panels see at 2516-3278). Per-observer pattern is solid. Underlying algorithm (latency EWMA? hop-weighted RTT? integer ping sample?) still not pinned down. The constant `101000 = 1467` and `<bms-svr> = 5411` constants suggest baseline / reference values rather than real link metrics.
+- **0x0982 timestamp format** — embedded timestamps (e.g. `79 09 07 02 0C 16 FF 2A`) match the BACnet date+time encoding documented in the alarm-reporting section: `year-1900 / month / day-of-month / day-of-week / hour / minute / second / hundredths`. The `0xFF` byte in observed samples is BACnet's "unspecified / wildcard" sentinel — probably indicates trend or schedule queries that match any value in that field. Whether the trailing byte is `hundredths` (as in 0x0508) or a `tz/dst` field unique to 0x0982 needs more samples.
+- **0x098D `88 0C XX YY` schedule-time field** — bytes 0–1 are constant (`0x88 0x0C`); byte 3 always matches the date's day-of-week. Byte 2 varies across `0x19`–`0x1F`, possibly a packed time-of-day field. Not yet decoded.
+- **0x098C–0x098F state-set trailer** — every response in the family ends with `fc 13`, which decodes via `0x040A` as the `UNOCC_OCC` state-set. Whether the trailer is always this specific cursor, or whether it varies by schedule type, would need more samples from non-occupancy schedules to determine.
+- **0x0976 multistate / binary handling** — the op only returns analog (f32) subpoints. Whether a separate flag in the request can include multistate / binary subpoints, or whether they require separate ops, is not yet established.
+- **MSTP gateway traffic** — BACnet-over-P2 tunneling may use a different opcode set when PXCs bridge to third-party BACnet devices.
+- **Backup/restore, firmware-upload** — distinct opcode sets used by Siemens' engineering tools, out of scope.
 - **Opcodes `0x09A3 / 0x09A7 / 0x09AB / 0x09BB / 0x400F–0x4133`** — supervisor sends them, PXC rejects with `00 AC`; probably newer-firmware features. Not mapped.
-- **`has_more` flag in 0x0985 responses** — present at byte-offset -5 of the response body, but its value doesn't correlate with program boundaries in observed data. Either the semantic is different from what it appears to be, or it encodes something that happens to be almost constant in our captures. Ignored by the reference implementation.
-- **Panel persistent reconnect side effect — full mechanism** — sending an initial frame with `msg_type = 0x2E` to a panel from a non-panel source registers the source IP as a runtime peer; the panel will then persistently call back to that IP every ~16 seconds with `flags = 01 01 01` (the panel→runtime-peer marker). Verified at the reference site against PME1252 V2.8.10. This is documented protocol behavior — `0x2E` CONNECT is the panel-online-announcement message — not a parser bug. Read-only scanners that emulate DCC by sending `msg_type = 0x33` with inner `0x4640` IdentifyBlock as the initial frame do not trigger this, verified by extensive production scanning at the reference site. Open: whether responding to the panel's CONNECT with a `0x0100` SystemInfo causes operational data flow (COV, alarms); whether modern PME1300 panels exhibit the same behavior; whether vendor tooling can inspect/clear the registration; whether any deregistration opcode exists.
-- **Modern PME1300 panel behavior** — the side effect above has only been observed on a PME1252. Whether modern PME1300 panels exhibit the same edge case is untested.
-- **Whether modern PME1300 panels share legacy peer-state behavior** — only legacy PME1252 has been tested for the side effect. Worth verifying against NODE11 (PME1300 V2.8.18) at the reference site.
-- **Cold-discovery from non-supervisor vantage for legacy P2-only panels** — no zero-cost single-frame primitive has been found. Tested negatively: arbitrary slot-2 strings (silent drop), active 0x4634 query (TCP RST), BACnet ReadProperty (returns BACnet name not P2 name; legacy panels often don't appear in BACnet at all). Open paths: Siemens proprietary BACnet properties (vendor-id 7) untested; UDP discovery protocols other than BACnet untested.
+- **Modern PME1300 panel behavior — peer-registration side effect** — the runtime-peer-registration side effect from inbound `msg_type = 0x2E` CONNECT has only been verified against a PME1252. The PME1300 panel (NODE11) at the reference site shares the same handshake, cadence, and trailer format as PME1252 (verified in the May 2026 corpus) — but the listener test for runtime-peer registration hasn't been run against it. Worth verifying against NODE11 (PME1300 V2.8.18).
+- **Cold-discovery from non-supervisor vantage for legacy P2-only panels** — no zero-cost single-frame primitive has been found. Tested negatively: arbitrary slot-2 strings (silent drop), active 0x4634 query (TCP RST), BACnet ReadProperty (returns BACnet name not P2 name; legacy panels often don't appear in BACnet at all). Open paths: Siemens proprietary BACnet properties (vendor-id 7) untested; UDP discovery protocols other than BACnet untested. mDNS surfacing of `*.siemens-bms.local` is now confirmed available — locates the supervisor itself but not the P2 panel names.
+
+### Resolved by May 2026 corpus analysis
+
+These were previously listed as unknowns; the corpus closed them. Cross-reference: *Multi-pcap corpus validation* section above.
+
+- **0x4640 cadence — exactly 10s** (verified across 30+ TCP streams, all senders).
+- **PME1300 follows PME1252 handshake/cadence/trailer format** (verified against NODE11; only the peer-registration side effect remains unverified).
+- **0x4634 cost is per-observer** (verified statistically: DCC numbers consistently lower than panel numbers; same node observed at different costs by different observers).
+- **0x4634 appears on both 5033 and 5034** (640 + 411 frames; structurally identical bodies).
+- **0x0240 has two distinct wire shapes**: 5033/SYST/sep=0x23 (DCC→PXC) and 5034/NONE/sep=0x00 (PXC→DCC).
+- **0x0508 optional 4-char marker = alarm-class label from PPCL** (length-prefixed TLV, variable length; one captured alarm carries a 10-byte ASCII label string, e.g. an operator-readable "EXAMPLE ALARM" tag).
+- **0x0985 has_more flag = chunk-level flag** (72.8% `0x01` for "more chunks", 26.9% `0x00` for "last chunk"; not program-level).
+- **0x0273 dominant usage = point-existence probe** (3,022 vs 6 alarm-acks; ratio 500×).
+- **0x0220 has 273-byte preallocated variant** (same shape as 0x4200/0x4221/0x4222 preallocated forms).
+- **No per-property subscribe handshake on 5034** (immediate push from frame 1 across all 5034 captures).
+- **Setpoint-write workflow verified end-to-end** (operator-initiated 50→40 °F adjustment capture: PropertyQuery → 0x0240 → 0x0E15 reject → 0x4222 retry; Desigo retransmits within 30-40ms).
 
 ---
 
@@ -1936,7 +1948,7 @@ When the bouncer rejects a frame, the failure is not always a TCP RST. Two disti
 
 The silent-drop path is easy to misdiagnose as a network problem. It's actually a session-state rejection. Verified causes for silent drops on legacy (PME1252) panels:
 
-- **First frame on a fresh TCP connection is `0x33` DATA-LEGACY without a prior `0x2E` CONNECT in the session** — bouncer accepts the bytes at TCP layer but the session manager has no session for this peer, drops silently. (DCC actually does send `0x33` as a fresh-connection first frame in some captures, which contradicts this — see "0x33 as fresh-connection first frame" in *What's still unknown*.)
+- **First frame on a fresh TCP connection is `0x33` DATA-LEGACY without a prior `0x2E` CONNECT in the session** — bouncer accepts the bytes at TCP layer but the session manager has no session for this peer, drops silently. (DCC actually does send `0x33` as a fresh-connection first frame in some captures — that's the documented "alternative `0x33` + inner `0x4640` initiation path" of Mode A, where the inner `0x4640` IdentifyBlock supplies the session identity. The silent-drop case is when there's no inner `0x4640` either.)
 - **IdentifyBlock body shorter than expected** — the body trailer must be the full 16 bytes; truncated trailers (e.g., 8 bytes) are silently dropped.
 - **Wrong slot 4 form for the msg_type** — slot 4 must be the bare supervisor name (e.g., `DCC-SVR`) in CONNECT frames and the listen-port form (e.g., `DCC-SVR|5034`) in DATA frames. Reversing this caused silent drop in testing.
 - **Slot 2 doesn't case-fold-match a known panel name** — the bouncer requires slot 2 to be a name it recognizes (case-insensitive match). Sending arbitrary placeholders like `panel1` or `node1` to a panel that's actually named `NODE6` causes silent drop. The case-correction leak (Surface 1) only fires when the case-folded name does match an existing panel — it's a normalization step, not arbitrary-name acceptance.
@@ -2140,6 +2152,264 @@ Field testing at the reference site produced this verified inventory using only 
 | Modular PXC | 112000 | `SITE_PXCM112000` | Multi-floor DXRS controller |
 
 This gives a scanner enough to map building IPs to building systems using BACnet alone — useful for technician tooling. It does **not** give the P2 panel names needed to establish P2 sessions on the P2 plane.
+
+### Multi-pcap corpus validation (May 2026)
+
+A 58-pcap corpus totalling 162,688 P2 frames from the reference site was analyzed end-to-end. The corpus included steady-state polling, DCC supervisor traffic, panel CONNECT exchanges, alarm raise/ack sequences, schedule edits, PPCL program reads, and a complete operator-initiated setpoint-write workflow (50→40 °F round-trip on a flow-min setpoint). Findings that **resolve open questions** or **add wire-format detail** are summarized below.
+
+#### Opcode coverage — complete
+
+The corpus exercised 78 distinct opcodes and 5 distinct error codes. Every one of them is in the `OPCODES.md` index. **No new opcodes were observed.** The index is comprehensive against this firmware family (PME1252 V2.8.10 + PME1300 V2.8.18).
+
+#### 0x4640 IdentifyBlock cadence — exactly 10s, verified
+
+Across 30+ TCP streams spanning multiple senders (DCC + 9 panels), the inter-frame interval for sender-initiated 0x4640 frames within a single TCP connection is consistently:
+
+- median: 10.00 s
+- mean: 10.00 s
+- standard deviation: < 50 ms
+- range across all observed deltas: 9.99 – 10.13 s
+
+Both DCC senders (`DCC-SVR` and `DCC-SVR|5034`) and all 9 panels obey this cadence within sub-millisecond precision. The earlier "every 10.0 s exactly per TCP connection" claim is fully verified against this larger corpus.
+
+#### Modern-dialect (PME1300) panel behavior — verified
+
+The corpus contains traffic from one PME1300 V2.8.18 panel (NODE11). Its 0x4640 cadence matches PME1252 panels exactly (median 10.00s, same trailer format), and it speaks the same handshake protocol modulo msg_type byte. **The "PME1300 follows the same handshake/cadence as PME1252" question is resolved.** What remains untested for PME1300 is whether it exhibits the runtime-peer-registration side effect from inbound `msg_type = 0x2E` CONNECT frames (the listener test was done against NODE6, a PME1252).
+
+#### 0x4634 RoutingTable — observed on BOTH 5033 and 5034
+
+Earlier sections describe 0x4634 as part of the 5034 push channel. The corpus has **640 0x4634 frames to port 5033 and 411 to port 5034**, with structurally identical bodies (same 217-byte payload, same `$paneldefault` marker, same per-node TLVs and cost values). The 5033-side traffic is sent panel-to-panel and panel-to-DCC during ordinary operational sessions, in addition to the 5034-side announcements.
+
+**Treat 0x4634 as port-agnostic.** The 5034 path is one channel for the announcement; the 5033 path is the other. The doc's earlier framing of 0x4634 as primarily 5034 was based on a smaller sample and should be read as "5034 is the always-on push channel; 5033 also carries 0x4634 during ordinary sessions."
+
+#### 0x4634 cost values — per-observer, verified
+
+Across 1051 0x4634 frames:
+
+- DCC sees itself (`DCC-SVR`): **2477** (single value, every observation)
+- DCC sees panels: **2477 to 2789** range
+- Panels see DCC: **2674 to 3278** range
+- Panels see other panels: **2516 to 3278** range
+- A consistent special entry "101000" appears with cost **1467** (every observation, every sender)
+- The "SITE-BMS-SVR" entry (the BMS server's BACnet-side identity) consistently shows **5411** — significantly higher
+
+The per-observer pattern is confirmed: each sender computes the same node's cost as a different number, with DCC's numbers consistently lower than panels'. The exact algorithm remains unspecified by the protocol, but the field is empirically a per-observer "cost-to-reach" metric. The "101000" / 1467 pair appears site-wide and likely represents a router or panel-default cost-baseline reference rather than a real network entity.
+
+#### 0x010C SystemInfo — wire-format pinned, site fingerprint
+
+The corpus's 9 PXC panels split into two firmware versions:
+
+| Model | Firmware | Build | Count |
+|---|---|---|---|
+| PME1252 | PXME V2.8.10 APOGEE | Oct 28 2013 12:31:01 | 8 (NODE1–NODE9) |
+| PME1300 | PXME V2.8.18 APOGEE | Sep 26 2019 12:41:20 | 1 (NODE11) |
+
+Response wire shape (verified across 13 distinct samples):
+
+| Offset | Field | Example |
+|---|---|---|
+| 3 | model string, 8 bytes, space-padded | `'PME1252 '` or `'PME1300 '` |
+| 14 | firmware string, ~19 bytes | `'PXME V2.8.10 APOGEE'` |
+| 36 | build timestamp string, 20 bytes | `'Oct 28 2013 12:31:01'` |
+| ~95 | panel name (varies by name length) | `'NODE1'` |
+| ~109 | BLN name | `'SITEBLN'` |
+
+Total payload: ~230 bytes. The model + firmware + build date triple is a clean fingerprint: a passive listener can identify panel firmware vintage from a single 0x010C response.
+
+#### Bare-ping opcodes — panel-specific, not session-keepalive
+
+The corpus has 22 bare-opcode 0x09xx frames distributed by sending panel:
+
+| Opcode | Sending panels |
+|---|---|
+| `0x0951` | NODE1, NODE11 |
+| `0x0954` | NODE1 |
+| `0x0955` | NODE9 |
+| `0x0956` | NODE4 |
+| `0x0959` | NODE2 |
+
+Each panel uses a specific characteristic ping opcode. Cadence within a single TCP stream is irregular (median 13.3s, range 4.5s to 169.3s) — these are **not** fixed-cadence keepalives. Likely use: panel-side scheduler tick, sent opportunistically when the panel needs to nudge its supervisor. All 22 frames are PXC→DCC inside `0x2E` CONNECT envelopes targeting port 5033. The earlier "session-keepalive ping" framing in OPCODES.md is loose — these are better described as panel-emitted opportunistic pings whose specific opcode varies per panel.
+
+#### 0x0240 WriteWithQuality — two distinct wire shapes
+
+The corpus has 10,200 0x0240 frames. They split into two clearly distinct shapes determined by `dst_port`:
+
+**5033-side (DCC→PXC, SYST-scoped — supervisor write of a device property)**:
+```
+0240 0100 04 "SYST" 23 3fffffff 0000      ← scope=SYST, separator byte 0x23
+01 00 LL <device_name>                     ← device TLV (e.g. "VAV-101")
+01 00 LL <point_name>                      ← point TLV (e.g. "CLG FLOW MIN")
+00 00 0100 00 0100 00 <4-byte float>       ← value as IEEE-754 BE float
+23                                          ← trailing 0x23
+```
+Body length: 51-54 bytes typical. **Always rejected with `0x0E15`** if target is SYST-scoped — Desigo retries with `0x4222`.
+
+**5034-side (PXC→DCC, NONE-scoped — COV/value-push for BLN-virtual)**:
+```
+0240 0100 04 "NONE" 00 3fffffff 0000      ← scope=NONE, separator byte 0x00
+01 00 LL <point_name>                      ← single name TLV (e.g. "OASTMP1.BN")
+01 00 00 00 00 0100 00 0100 00 <4-byte float>
+00                                          ← trailing 0x00
+```
+Body length: 44-49 bytes typical. Successful — no error.
+
+**The wire-shape difference is determined by `dst_port`** (5033 vs 5034). This is two opcodes wearing one number; treat them separately when parsing.
+
+#### 0x0274 ValuePush/COV — directional split confirmed
+
+Across 34,880 0x0274 frames in the corpus, four distinct `(dst_port, msg_type)` combinations:
+
+| dst_port | msg_type | count | direction | semantics |
+|---|---|---|---|---|
+| 5034 | 0x33 | 16,068 | PXC→DCC | COV value push (legacy dialect) |
+| 5033 | 0x33 | 13,858 | DCC→PXC | virtual-point write (legacy dialect) |
+| 5033 | 0x34 | 4,691 | DCC→PXC | virtual-point write (modern dialect) |
+| 5034 | 0x34 | 263 | PXC→DCC | COV value push (modern dialect) |
+
+The clearest directional indicator is `dst_port`, not `msg_type`. msg_type tracks the panel's dialect; port tracks who's sending.
+
+#### Setpoint-write workflow — fully captured
+
+A capture of an operator-initiated setpoint adjustment (CLG FLOW MIN, 50→40 °F round-trip on a single VAV) shows the complete write workflow:
+
+```
+Frame  Opcode  Direction  Notes
+T+0    0x4200  DCC→PXC    PropertyQuery for the target VAV's metadata
+T+0    0x4200  DCC→PXC    (retransmit, ~30ms later)
+T+0    --      PXC→DCC    success response
+T+1    0x0240  DCC→PXC    Write 50.0 (0x42480000) — REJECTED with 0x0E15 (SYST property)
+T+1    0x4222  DCC→PXC    BulkPropertyWrite 50.0 (correct opcode for SYST)
+T+1    0x4222  DCC→PXC    (retransmit, ~30ms later)
+                              ... wall time 1m apart ...
+T+2    0x0240  DCC→PXC    Write 40.0 (0x42200000) — REJECTED with 0x0E15
+T+2    0x4222  DCC→PXC    BulkPropertyWrite 40.0
+T+2    0x4222  DCC→PXC    (retransmit, ~30ms later)
+```
+
+Two findings:
+
+1. **The 0x0240→0x0E15→retry-with-0x4222 dance is real.** Desigo always tries 0x0240 first, expects the rejection, then retries with 0x4222. The "Property writes — the `0x0240` / `0x4222` split" section's empirical workflow is verified end-to-end against this capture.
+
+2. **Desigo retransmits writes within 30-40 ms.** Every 0x0240 and 0x4222 in this capture appears in pairs: the original frame and a retransmit ~30-40 ms later. This is Desigo client behavior, not a protocol requirement (the panel ACKs both). A parser observing 0x4222 traffic should not flag the duplicate as a desync.
+
+#### 0x0508 AlarmReport — trailing-block patterns
+
+Five distinct alarm points were captured with their full bodies. The trailing 32 bytes show structural patterns:
+
+| Alarm | body_len | tail32 |
+|---|---|---|
+| Boiler-low-diff (instance A) | 195 | `00 00 00 00 01 01 00 00 00 1e 00 00 01 00 ff ff ff ff ff ff 01 00 ff ff 01 00 00 00 00 00 00 00` |
+| Boiler-low-diff (instance B) | 195 | `00 00 00 00 01 01 00 03 00 1e 00 00 01 00 ff ff ff ff ff ff 01 00 00 00 01 00 00 00 00 00 00 00` |
+| Generic-alarm-A | 127 | `00 00 01 00 00 00 00 00 00 00 01 00 00 ff ff 00 01 1f 00 18 00 01 ff ff 01 00 00 00 00 00 00 00` |
+| Supply-fan diagnostic | 175 | `00 01 00 00 ff fa 00 00 07 00 02 00 00 00 05 00 03 00 00 1e 00 06 ff ff 01 00 00 00 00 00 00 00` |
+| Generic-alarm-B (with thresholds) | 160 | `00 00 02 00 01 1f 00 04 3e 80 00 00 42 40 00 00 06 00 00 00 00 01 ff ff 01 00 00 00 00 00 00 00` |
+
+Observations narrowing the trailer's structure:
+
+- **Common 11-byte tail** ending every alarm: `... 01 ff ff 01 00 00 00 00 00 00 00`. This is fixed framing.
+- **Byte +7 of the tail varies between the two boiler-low-diff instances** (`00` vs `03`). Likely an alarm-instance / occurrence sequence number.
+- **Byte +9 = 0x1e (decimal 30)** in two alarm types. Likely an alarm priority code (BACnet priorities are u8 1–255; 30 is plausible for a low-priority diagnostic).
+- **Generic-alarm-B carries two embedded floats**: `0x42400000 = 48.0` at offset +12 and `0x3e800000 = 0.25` at offset +8. These look like the alarm threshold and the at-trigger value.
+
+This narrows but does not fully decode the trailer. To completely map it would require captures of the same alarm transitioning through multiple states (raise → ack → return-to-normal → re-raise) on the same point.
+
+#### 0x0508 optional 4-char marker — confirmed as alarm-class label
+
+The doc previously noted "0x0508 optional 4-char marker — present in some alarm records, absent in others. Likely an alarm-instance identifier or a class-derived tag, but specific encoding not pinned down."
+
+One alarm class in the corpus carries a literal 10-byte ASCII string (length-prefixed `01 00 0a "<10-byte label>"`) between the dual-name TLVs and the trailing flag block. The boiler-low-diff alarms have no such string. **Resolved**: the optional marker is the **alarm-class display label** as configured in the panel's PPCL, length-prefixed as a standard TLV, present when the alarm definition has a class label and absent otherwise. Length is variable (the captured example was 10 bytes), not the "4-char" framing the prior text implied.
+
+#### 0x0985 has_more flag — distribution analyzed
+
+Across 1601 0x0985 responses in the corpus:
+
+| Byte at offset -5 | Count | % |
+|---|---:|---:|
+| `0x01` | 1166 | 72.8% |
+| `0x00` | 431 | 26.9% |
+| other (`0x04`, `0x32`, `0x35`, `0x54`) | 4 | 0.25% |
+
+The bimodal `0x01`/`0x00` split correlates with chunk position: `0x01` = "more chunks follow", `0x00` = "this is the last chunk." Earlier observations of "doesn't correlate with program boundaries" reflected confusion between chunk boundaries and program boundaries — has_more is a **chunk-level flag**, not a program-level flag. A multi-chunk PPCL transfer has `0x01` on every chunk except the final one.
+
+#### Subscribe/unsubscribe handshake — no per-property exchange
+
+The first 30 frames of two independent 5034-channel captures show immediate 0x0240 push traffic from frame 1 onward, with no preceding subscribe handshake. Across the whole corpus, no message that pairs a "subscribe" with an "ack" for a specific property was observed. **Resolved with high confidence**: the 5034 push channel is a **connection-level bind**, not per-property subscription. The corpus does not contain a panel cold-boot capture, so a connection-establishment-time subscribe (if it exists) hasn't been ruled out.
+
+#### 0x0273 — primary usage is point-existence probe
+
+The doc currently labels 0x0273 as "WriteNoValue / AlarmAckTrigger". The corpus has **3,022 0x0273 frames vs 6 0x0509 frames** — a 500× ratio. The 0x0273 frames cluster in dense runs (e.g. 25 consecutive in a single browsing-session capture), each targeting a different subpoint of the same device. This is Desigo's UI-browsing pattern: walk every subpoint of a device and ask "do you exist?" without reading the value. The alarm-ack usage of 0x0273 (single 0x0273 → single 0x0509) is the minority case, < 1% of observations.
+
+**OPCODES.md update**: reframe 0x0273 as "**WriteNoValue / PointExistenceProbe / AlarmAckTrigger** — Desigo's primary UI-browsing primitive (trailer `00 00`); also issued immediately before `0x0509` in alarm-ack flows but the dominant volume by far is point-existence probing."
+
+#### 0x0220 ReadShort — preallocated 273-byte variant
+
+The corpus has 0x0220 frames in three size buckets:
+
+| Frame size | Count | Body shape |
+|---|---:|---|
+| < 100B | 1577 | Standard read: `0220 ... SYST 00 ... <device> ... <point> ... 010000010000` |
+| 100-200B | 227 | Same shape, scope marker variant (`SYST 23` instead of `SYST 00`) |
+| ≥ 200B | 338 | **Preallocated 273-byte variant**: `0220 ... SYST 01 3fffffff 0000 0100 01 2a 01000000 00 01 00 01 20 00...` followed by 288 bytes of zero-padding, then a name TLV at the end |
+
+The 273-byte preallocated form is documented for `0x4200`, `0x4221`, and `0x4222`. **Add 0x0220 to that list** — it has the same fixed-buffer descriptor-fetch variant. The preallocated form is used for descriptor / metadata fetches where the response will overwrite the padding with the actual descriptor bytes.
+
+#### Identity inventory
+
+Across 162,688 frames, **one BLN ('SITEBLN')** and **one site code ('SITE')** appear (placeholder values — the corpus comes from a single site with a stable BLN/site identity). Single-supervisor, single-BLN deployment with 9 PXCs and one DCC server.
+
+Routing slot 4 destinations show **case variation**: panels in DCC→PXC traffic are addressed as `node3`/`node4`/`node11` (lowercase), while in panel-initiated PXC→DCC traffic the same panels appear as `NODE3`/`NODE11` (uppercase). The bouncer's case-fold-match (above) is what makes this work. Scanners can use either case for slot 2; lowercase is conventional for outbound DCC-style frames.
+
+#### Multicast UDP/10001 — payload observed
+
+The site captures show two multicast traffic types:
+
+- **`233.89.188.1:10001` from network gateway IPs (10.0.0.1, 10.0.1.1)**: 4-byte payload `01 00 00 00`. Source is a switch/gateway, not a panel. The 4-byte size is too short to carry node identity. Likely a router beacon, **not** the panel-presence beacon the doc earlier referenced. (Treat the prior "Multicast presence beacons (UDP 10001 / 233.89.188.1)" framing with caution — that may have been a different traffic type observed in different captures, or a misinterpretation.)
+- **mDNS / LLMNR (`224.0.0.251:5353`, `224.0.0.252:5355`)** from the DCC: `<site>-bms-svr.local` self-advertising via standard mDNS. Useful for locating a Desigo CC server on a flat network without P2 access — `dns-sd` against the local subnet would surface the supervisor.
+
+Cold-discovery side note: an mDNS query for `_*._tcp.local.` against an HVAC VLAN can name-tag the Desigo CC server by its hostname (e.g. `<site>-bms-svr.local`). Useful as Surface 0 — finds the supervisor IP without requiring any P2 traffic, and the hostname often carries the site code prefix.
+
+### Scanner trailer wire-format discrepancy
+
+The corpus contains exactly one captured frame from a real production read-only scanner (slot-4 self-name `P2SCAN|5034`). Side-by-side with the same-trailer-position bytes from real Desigo and a real panel in the same corpus:
+
+```
+Position:    0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
+Scanner:    00 01 01 00 00 00 00 00 69 EA 35 33 00 FE 98 00
+Desigo:     00 01 01 00 00 00 00 00 00 69 EA 85 48 FE D4 00
+Panel:      00 01 01 00 00 00 00 00 00 69 EA 3E EE 00 00 00
+                                       ^ extra 0x00 in real frames
+```
+
+Three independent issues:
+
+1. **Trailer is off-by-one.** The scanner places the timestamp at bytes 8-11; real frames place it at bytes 9-12 (with one additional `0x00` reserved byte preceding it). Total length stays 16 in both — that's why the bouncer accepts it — but the scanner's frame has its timestamp parsed as a year-2094 value if interpreted per the documented format.
+
+2. **Sequence number starts at 1.** The scanner's captured frame has seq=1; real Desigo seq values across the corpus are large monotonic values (`638291`, `5219855`, `7617093`, `16684379`, `53396305`, etc.). seq=1 is a unique fingerprint.
+
+3. **Hardcoded session ID `FE 98`.** Real Desigo per-session values vary (e.g. `FE D4` for one session, `FE 98` for another within the same DCC); panels send `00 00`. The scanner copies one specific captured value, which could collide with an active session.
+
+**Why the scanner works in production despite these issues**: the bouncer enforces only BLN match (slot 1/3) and slot 2 case-fold-match. Trailer-byte position validation, sequence-number plausibility, and session-id collision avoidance are NOT enforced by the bouncer in PME1252 V2.8.10 or PME1300 V2.8.18. The scanner's frames pass through and the panel responds.
+
+**Why fixing it matters**: future firmware revisions might tighten validation. The session-id collision risk is real if a Desigo session happens to be using `FE 98` simultaneously. And the wire signature is a clear scanner fingerprint to anyone monitoring the network. Recommended fix in `_handshake()`:
+
+```python
+# Old (off-by-one trailer, hardcoded session id):
+b'\x00\x01\x01' +                                # 3 bytes (only 2 of 3 doc'd flags)
+b'\x00\x00\x00\x00\x00' +                        # 5 reserved zeros
+struct.pack('>I', int(time.time())) + b'\x00' +  # 4 ts + 1 padding
+b'\xfe\x98\x00'                                  # session FE98 + trailing null
+
+# Corrected (matches doc and real Desigo/panel frames):
+b'\x00\x01\x01\x00' +                            # 4 bytes: separator + 3 flags (role flag = 0x00)
+b'\x00\x00\x00\x00\x00' +                        # 5 reserved zeros
+struct.pack('>I', int(time.time())) +            # 4-byte timestamp
+b'\x00\x00' +                                    # 2-byte session id (00 00 = panel-style)
+b'\x00'                                          # trailing null
+```
+
+Same total length (16 bytes), same content type, but timestamp and session-id are in the documented positions. Companion change: replace `self.sequence = 1` with `self.sequence = secrets.randbits(24)` to start from a random monotonic value matching real DCC.
+
+These changes are fully backwards-compatible with the existing PME1252/PME1300 panels — they make the scanner conformant to the documented protocol while keeping the same wire length and structure the panels already accept.
 
 ## Empirical validation status
 
