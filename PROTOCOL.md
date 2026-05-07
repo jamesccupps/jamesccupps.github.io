@@ -25,6 +25,7 @@ Siemens APOGEE P2 is the building-automation protocol used by Siemens PXC contro
   - **UI-browse capture** (~686 KB) — operator clicking through tree views in Desigo CC. Surfaces the small-form (~30–40 byte) variant of `0x4200` PropertyQuery, distinct from the large pre-allocated 222-byte form used by deep property reads.
   - **Cold-probe captures** (`enumeratetest1-3.pcapng`) — focused tests of malformed / experimental request bodies. Useful as negative examples: probes `0x0245` and `0x4500` with 3–4 byte bodies always error; this is included as a guard for scanner authors.
   - **Two-node validation capture** (~1.6 MB, ~11k packets, 35 minutes, 2 panels) — server-side capture covering both legacy-dialect (NODE3, PME1252) and modern-dialect (NODE11, PME1300) panels in normal steady-state operation. Surfaced opcode `0x0295` (a previously-undocumented 02xx read variant), provided byte-level validation for the documented `0x0274` / `0x0240` wire formats against live data, and exposed an error in the previous routing-header "Name ordering" correction below — see *Routing header* for details.
+  - **May 2026 Protocol-folder corpus** (58 pcaps, ~190 k P2 frames, ~80 unique request opcodes) — second-pass audit batch. Adds focused enumerate / iterate probes (`enumeratetest{1,2,3}`, `iteratetest{1,2}`), version-comparison captures (`newtestversion`, `testversion3desigo`, `testversion4`), Mode-C-heavy long sessions (`desigopcap`, `desigoall`, `pcap2429`), and a complete property-write capture (operator-driven 50→40 °F adjustment on a flow-min setpoint). Closed the `0x0241`, `0x0263`, `0x4220`, `0x0291`, `0x02A8` "unknown" entries via paired-response analysis, pinned constant body shapes for `0x098B`/`0x5354`/`0x0050`, surfaced the `0x4100`/`0x4103` SYST scope footer, and confirmed `0x0508` rides Mode-C `0x2E`/`0x2F` envelopes in addition to ordinary DATA. See *May 2026 Protocol-folder corpus addendum* below for byte-level evidence.
 
 Every stream across all captures parsed cleanly against the framing rules below with zero desyncs.
 
@@ -284,7 +285,7 @@ Full layout (CONNECT example, panel `NODE1` reaching back to supervisor `DCC-SVR
 "NODE1"\0                  source — sender's self-name (slot 4)
 46 40                      0x4640 IdentifyBlock marker
 01 00 05 "NODE1"           TLV: self-name (tag=0x01, u16 BE length) — matches slot 4
-01 00 03 "ACM"             TLV: site code
+01 00 03 "SITE"             TLV: site code
 01 00 07 "SITEBLN"         TLV: BLN name
 ─── 16-byte trailer ───
 00                         trailer separator (1 byte)
@@ -408,7 +409,7 @@ After the routing header, the payload contains a big-endian 16-bit opcode follow
 | `0x0273` | 5033 | WriteNoValue / AlarmAckTrigger | Same wire format as 0x0271, trailer `00 00` instead of `00 FF`. Gets ACK-only response. Now observed sent immediately before `0x0509` AlarmAck for the same point in operator alarm-acknowledgement flows — likely the operator-action trigger or a state-clear precondition for the formal ack. Wire format is identical to a legacy read; the trailer is the only structural difference |
 | `0x0274` | both | ValuePush / COVNotification | See below — behavior depends on direction |
 | `0x0240` | 5034 only | WriteWithQuality | PXC→DCC push of a BLN-sourced virtual point value, with a quality/sentinel header. Device name is literally `"NONE"` for panel-global points. ACK-only response. **DCC also issues this on 5033 against `SYST`-tagged properties — those reliably error with `0x0E15`, see "Property writes" below** |
-| `0x0241` | 5033 | Unknown | Adjacent to 0x0240 but no value payload on the wire; body carries a `SYST\0#` prefix and device/point TLVs. Hypothesized: a property-operation (flag-set, reset, or trigger) against a subpoint. Only 4 samples, semantics unconfirmed |
+| `0x0241` | 5033 | PropertyEcho / DefaultPropertyResolve (SYST) | **Wire format pinned May 2026** — 10 paired samples surface two distinct response behaviors. For requests carrying `(device-TLV, point-TLV)` the response is a plain echo (acts as a property-existence confirmation, like SYST-scoped `0x0273`). For requests carrying `(name-TLV, EMPTY-TLV)` the response can fill in a default property name in the empty slot (e.g. `MODE` for `EXAMPLE.ZN`) — the same shape works as a "what's the canonical property of this object?" resolver. See *May 2026 Protocol-folder corpus addendum → 0x0241 paired wire format* for byte-level evidence. |
 | `0x4221` | 5033 | BulkPropertyRead | Bulk read of all properties on a SYST-tagged point. Constant-size 273-byte body. Used by Desigo CC when populating a property dialog |
 | `0x4222` | 5033 | **BulkPropertyWrite** | Write a value to a SYST-tagged property. Body is a SYST-prefixed point reference + value bytes. **The correct opcode for setpoint writes** — `0x0240` rejects with `0x0E15` on these properties. Wire format and end-to-end workflow documented in "Property writes" below |
 | `0x4220` | 5033 | BulkProperty (variant) | Single sample observed; same SYST/point structure as 0x4221/0x4222 but appears to carry a configuration header rather than a value. Exact semantic unconfirmed |
@@ -509,7 +510,7 @@ XX XX XX XX                 f32 BE value
 [trailer]
 ```
 
-**SHAPE B — PPCL-computed variable with value but no quality register** (e.g. `BLR.MIN.STPT / "BLR HW STPT MIN" / 100.00 DEG F` on a modern-dialect panel):
+**SHAPE B — PPCL-computed variable with value but no quality register** (e.g. `EXAMPLE.STPT / "BLR HW STPT MIN" / 100.00 DEG F` on a modern-dialect panel):
 
 ```
 [routing header]
@@ -713,7 +714,7 @@ A previously undocumented family of `09xx` opcodes drives Desigo CC's weekly-sch
 | `0x0969` | ScheduleObjectList | `[01 00 04 "SYST"][01 00 LL <object>]` | List of schedule object names under a parent | Returns names like `"LIGHTING.SAMPLE.SCH"` — schedule objects in a panel namespace |
 | `0x0971` | EnhancedPointRead | Like `0x0981` but with extra trailing config bytes | Description + value + units + resolution + min + max + type-code | More complete than `0x0981`. Returned `ROOM TEMP = 71.75 °F`, resolution `0.25`, max `48.0` for one tested point. Use this when a UI needs limits, not just current value |
 | `0x0974` | MultistatePointEnumerate | Like `0x0964` but state-set-aware | Object name + current state index + state-set ref | Used for points like `EXAMPLE.HP.ZN/MODE` — pulls current multistate value plus the cursor reference into the matching state-set |
-| `0x0975` | NodeDiscoveryWithLines | Cursor + line-number trailer like `0x0985` | Node + line + column index | Used to map PPCL programs to nodes. Sample returned `NODE9TEST / D / 00010 C / 0A` |
+| `0x0975` | NodeDiscoveryWithLines | Cursor + line-number trailer like `0x0985` | Node + line + column index | Used to map PPCL programs to nodes. Sample returned `TESTPROG / D / 00010 C / 0A` |
 | `0x0976` | DeviceAllSubpointsRead | `[01 00 04 "SYST"][01 00 LL <device>]` plus 2-byte slot count | App number (u16) + description + per-slot `(slot_index, f32)` tuples | Powerful "give me everything on this device" op. Sample returned app=`0x07E7` (= 2023, indicating the application code), description "VAV-19", and 18 (slot, value) pairs |
 | `0x0979` | ShortVariant | `0x0976`-like body with trailing `02 71` | Variable | The `02 71` trailer references opcode `0x0271` (extended point read). Looks like a "cross-opcode lookup" — request says "use 0x0271 semantics on this object" |
 | `0x098B` | NewerFeature | `0x0981`-shape | 100% `0x0003`/`0x00AC` on PME1252 | Newer-firmware enumerate. Captures show Desigo trying it, panels rejecting it |
@@ -795,6 +796,8 @@ fc 13                            state-set ref
 Live sample (sanitized): a VAV controller returned 18 entries in 286 bytes — way faster than walking the same 18 points individually via `0x0220`.
 
 **Caveat.** `0x0976` only returns analog (`f32`) subpoints. Multistate or binary subpoints on the same device are skipped from the response. To get those, fall back to `0x0974` for multistates or `0x0220`/`0x0271` for binaries.
+
+**Wire-format observation, May 2026 corpus.** The May 2026 batch contains 9 `0x0976` requests, all of them in Mode-C `0x2E` envelopes against panel `node4`, with body shape `[09 76][00 00][01 00 01 2A][00 00][01 00 LL <device-name>]` — i.e., the cursor-pagination format (single `*` filter + device-name cursor), **not** the SYST-tagged form documented above. Every one of those 9 requests went unanswered — Desigo retransmitted each seq 2–3 times with no panel response, eventually moving on. Two interpretations are consistent with the data: (a) the corpus's `node4` was non-responsive in those Mode-C streams for unrelated reasons (silent-drop is plausible since the supervisor was using the bare `DCC-SVR` slot 4 form across them), or (b) the SYST-tagged shape is the only one that elicits a response and Desigo was probing alternate shapes. Treat the SYST form as authoritative for actively eliciting a response; treat the cursor form as observed-but-unconfirmed and don't rely on it as a primary path.
 
 #### Why this family exists
 
@@ -1013,13 +1016,13 @@ The captures consistently show Desigo CC emitting a wider opcode set than panels
 | `0x0241` | 5033 | 14 | SYST + device + point | Point existence probe — returns echo of `(device, point)` on success. Shape is similar to `0x0220` but no value extracted |
 | `0x0244` | 5033 | 2 | SYST-scoped query | Returns `0x0002` (object_unknown) on out-of-scope objects; scope-restricted variant of `0x0240` |
 | `0x0245` | 5033 | 2 | 3-byte body | Test probe; always errors. Not a real op — appears only in `enumeratetest1.pcapng` |
-| `0x0263` | 5033 | 4 | Object lifecycle / delete-related | Pairs with `0x0260` |
-| `0x0203`, `0x0204`, `0x0260` | 5033 | 2–4 each | `XX XX [02–04] 00 02 00 00 [LP name] 01 00 00 00 01 [LP name] 01 00 00 01 00 00 3F FF FF FF` | **Object lifecycle family.** Probes seen carrying client-test names (`test1`, `test2`, `test4`, `test434`). The trailing `3F FF FF FF` is the same property-state sentinel used in `0x0050`. `0x0204` is doc-named CreateObject (returns `0x0E11 already_exists` if the name is taken). `0x0203` and `0x0260` likely sibling create/probe variants — only seen with client-debug names in the corpus, so semantics aren't pinned down beyond "object-lifecycle 02xx family" |
-| `0x0291`, `0x0294`, `0x02A8` | 5033 | 2–8 each | SYST + device + point + value-like trailing bytes; some carry an inline byte `0xC8` followed by a type code and 4-byte float | Read/write variants in the 02xx family. `0x0291` and `0x02A8` carry value bytes (writes); `0x0294` carries no value (read). Separator after SYST is `0x23` for the value-carrying ones, `0x00` for the read-only one. **Two body shapes for 0x0294**: small (53-byte) form uses separator `0x00`; large (222-byte) preallocated form uses separator `0x01` |
+| `0x0263` | 5033 | 4 | ObjectLifecycle (probable delete, SYST) | **Wire format pinned May 2026** (4 paired samples). Request body: `[02 63][SYST tag][23][3F FF FF FF][00 00][01 00 LL <object>][01 00 00 00 00 01 00 00 01 00 00]`; response body is fixed `[00 00 01 00 00 01 00 00]` (empty ACK regardless of the object name). Targets are client-test artifacts (`test1`, `test2`, `test4`, `test434`) created by adjacent `0x0204` calls, so **delete semantics are inferred but not proven** — the corpus has no follow-up reads after the `0x0263` to verify the object actually disappeared. Could equally be a property-clear or lifecycle-finalize op. |
+| `0x0203`, `0x0204`, `0x0260` | 5033 | 2–4 each | `XX XX [02–04] 00 02 00 00 [LP name] 01 00 00 00 01 [LP name] 01 00 00 01 00 00 3F FF FF FF` | **Object lifecycle family.** Probes seen carrying client-test names (`test1`, `test2`, `test4`, `test434`). The trailing `3F FF FF FF` is the same property-state sentinel used in `0x0050`. `0x0204` is doc-named CreateObject (returns `0x0E11 already_exists` if the name is taken). The body of `0x0260`/`0x0203`/`0x0204` carries an embedded IEEE-754 float `0x3F800000` (= 1.0) as the initial value, plus a SYST-scope footer `01 00 04 "SYST" 23 3F FF FF FF` after the body. Two body shapes for `0x0204`: 91-byte form carries TWO `3F800000` floats (initial value + min/max), 74-byte form carries one. Companion to `0x0263` ObjectDelete in test sequences. |
+| `0x0291`, `0x0294`, `0x02A8` | 5033 | 2–8 each | SYST + device + point + value-like trailing bytes; some carry an inline byte `0xC8` followed by a type code and 4-byte float | Read/write variants in the 02xx family. `0x0291` and `0x02A8` carry value bytes (writes); `0x0294` carries no value (read). Separator after SYST is `0x23` for the value-carrying ones, `0x00` for the read-only one. **Two body shapes for 0x0294**: small (53-byte) form uses separator `0x00`; large (222-byte) preallocated form uses separator `0x01`. **0x0291 and 0x02A8 paired-response evidence (May 2026):** both succeed against `SYST`-scoped properties without the `0x0E15` error that `0x0240` produces — they're a **separate SYST write path** that uses the `01 00 c8 [type] [f32]` value marker. `0x02A8` differs from `0x0291` by appending a fixed 6-byte trailer `00 01 00 00 50 00` (the `50 00` likely encodes a write priority or sub-property selector). |
 | `0x0295` | 5033 | 25 | `02 95 [01 00 04 "SYST"][01 00 LL <obj>][01 00 LL <prop>]?` | Sibling of `0x0294` — SYST-scoped read against a single named object, optionally followed by a property-name TLV. Surfaced in the two-node validation capture, all 25 samples DCC→PXC. Most samples carry just an object name (short single-token plant-equipment status-register names — boiler/pump/tower enables, alarms, status); two carry `<schedule-object>, MODE` suggesting a multistate-aware variant. Wire shape mirrors `0x0294` small-form; semantics are the same family of "read a SYST-scoped property" probes. Add to the same dispatcher branch as `0x0294` |
 | `0x0368` | 5033 | 1 | `03 68 04 01 00 00 01 00 05 <node-name> 00 01 00 1F` | Node-routing query. Carries a node name and what looks like a 16-bit flag/mask field |
 | `0x0606`, `0x5354` | 5033 | 6 / 6 | `XX YY 01 00 04 "SYST" 23 3F FF FF FF` | Same shape as `0x0050`. `0x0606` returns empty body (heartbeat-like ping); `0x5354` always errors `0x0003` |
-| `0x4220` | 5033 | 1 | SYST + point + property descriptor bytes | Bulk variant adjacent to `0x4221` and `0x4222`. Single sample; appears to read or modify property metadata rather than the value itself |
+| `0x4220` | 5033 | 1 | SYST + point + property descriptor bytes | **Wire format observed May 2026 (single paired sample only):** 222-byte preallocated request body has `00 10 FF FF` after the sentinel where `0x4200` carries the trailing `FF FF` wildcard property-id; response (129 B) carries the same value+units+resolution+max+type-code shape as `0x4221`. **Interpreting `00 10` as a property-id selector is plausible but unverified beyond the single sample** — it could equally be an opcode-internal sub-mode flag. Don't over-rely on this until more samples confirm. |
 | `0x4500` | 5033 | 5 | 4-byte body | Test probe; always errors. Not a real op — appears only in `enumeratetest{1,2,3}.pcapng` |
 | `0x400F`, `0x4010`, `0x4011`, `0x4133` | 5033 | 1–6 each | Constant 12–17 byte bodies with `00 13` or `00 10` prefixes | Newer-firmware ops. Panel responds with `0x00AC` not_supported |
 | `0x09A3`, `0x09A7`, `0x09AB`, `0x09BB`, `0x09C3`, `0x098B` | 5033 | 1–6 each | Cursor-pagination shape | All return `0x00AC` not_supported on legacy firmware. Newer-firmware features |
@@ -1029,7 +1032,7 @@ The captures consistently show Desigo CC emitting a wider opcode set than panels
 | `0x5038` | 5033 | 3 | See *Object display labels* | Display-label enumerate — fully documented above |
 | `0x5020`, `0x5022` | 5033 | 2 each | See *Schedule property writes* | Schedule write pair — fully documented above |
 | `0x4100`, `0x4103`, `0x4104` | 5033 | 1–2 each | See *PPCL editor opcodes* | PPCL line edit family — fully documented above |
-| `0x099F` | 5033 | 36 | `09 9F 00 04 XX` (5-byte body — confirmed by capture) | GetPortConfig — see *Point enumeration (09xx family)*. Response carries dot-separated config: `;bd=<baud>;pa=<parity>;mk=<mask>` then `;mid=<BLN-id>;ety=<encoding-type>;pdl=<pad>` then port label. Index `0xFF` = USB Modem port, `0x00` = HMI port, `0x04` = undefined |
+| `0x099F` | 5033 | 36 | `09 9F 00 04 XX` (5-byte body — confirmed by capture) | GetPortConfig — see *Point enumeration (09xx family)*. Response carries dot-separated config: `;bd=<baud>;pa=<parity>;mk=<mask>` then `;mid=<BLN-id>;ety=<encoding-type>;pdl=<pad>` then port label. Index `0xFF` = USB Modem port, `0x00` = HMI port, `0x04` = undefined. **Confirmed May 2026:** across 36 corpus samples, Desigo iterates exactly six indices per port-config audit cycle — `0xFF, 0x00, 0x01, 0x02, 0x03, 0x04` (each appearing 6 times = 36 / 6 panels). The full 0–255 range is **not** walked; the index set is small and fixed. |
 | `0x5003` | 5033 | 39 | `[01 00 04 "SYST"][01 00 LL <object>]` | Schedule object info query. Returns object name (twice) plus state-set ref `fc 13`. Used as a probe before deeper schedule reads |
 
 These are documented for forensic completeness — a passive listener will see them appear, and parsing should not fail on them.
@@ -1559,6 +1562,8 @@ Two separate write opcodes exist, neither is universal, and Desigo CC's standard
 
 `0x0240` against a `SYST`-tagged property reliably returns the new error code `0x0E15`. `0x4222` against a `NONE`-style virtual hasn't been observed in any capture; the two scopes don't overlap.
 
+**Alternate SYST write paths (`0x0291` / `0x02A8`).** The May 2026 corpus surfaced two additional opcodes that succeed against SYST-scoped properties without the `0x0E15` rejection that `0x0240` produces. Both use the value marker `01 00 c8 [type-byte] [f32 BE]` instead of `0x4222`'s embedded format, and both return an ACK echoing the (device, point) pair (no value back). `0x02A8` differs from `0x0291` by appending a fixed 6-byte trailer `00 01 00 00 50 00` — likely a write-priority or sub-property selector. The corpus shows Desigo using all three SYST write opcodes (`0x4222`, `0x0291`, `0x02A8`) within the same session against the same target, which suggests they are not interchangeable — each may modify a different property class (canonical value vs. setpoint vs. priority-write). For a scanner that only writes setpoints, `0x4222` is the canonical choice (matches Desigo's setpoint-write workflow). For full feature parity with Desigo, all three need implementation; see *May 2026 Protocol-folder corpus addendum → 0x0291 / 0x02A8 paired wire format* for byte-level details.
+
 ### Empirical workflow — operator changes a setpoint
 
 Sequence captured during a 50→40 numeric setpoint change. Times are seconds-relative-to-capture-start; sequence numbers are the wire `seq` field; floats are the value being written.
@@ -1667,7 +1672,12 @@ Panel replies:  05 "SITEBLN" "DCC-SVR" "SITEBLN" "NODE1" 00 03
 
 The panel did not implement the request (returned `0x0003 not_found`) but still leaked `NODE1` as its canonical name. A passive observer on any conversation gets the panel's name from the very first response, regardless of payload. An active scanner that has correctly guessed even one approximately-correct node name (e.g. lowercase) gets the canonical form back. But a scanner sending arbitrary non-name strings gets silent drop.
 
-**Empirical rate (case-correction only).** Across 6 captures totaling 39,820 P2 frames, 4,573 request/response pairs were checkable for the case-correction leak. Of those, 3,409 (74.5%) showed the lowercase→canonical-case correction (e.g. `node1` request → `NODE1` in slot 4 of the response); 1,164 (25.5%) returned an unrelated frame or didn't fire the leak. The 74.5% rate means a scanner that sends two distinct lowercase variants of a known-or-suspected panel name has ≈93.5% probability of harvesting the canonical name from at least one response.
+**Empirical rate (case-correction only).** Two measurements, both consistent with "the leak fires reliably when slot 2 case-folds to a real panel":
+
+- **6-capture sample (initial measurement):** 4,573 request/response pairs were checkable for the case-correction leak; 3,409 (74.5%) showed the lowercase→canonical-case correction (e.g. `node1` request → `NODE1` in slot 4 of the response); 1,164 (25.5%) returned an unrelated frame or didn't fire the leak.
+- **58-capture sample (May 2026 wider corpus):** 23,808 checkable pairs, 20,826 fired (87.5%). The remaining 12.5% are typically request/response pairs where the response was an error (`0x05` direction) and slot 4 still echoed the lowercase form — i.e. error responses are less consistent about applying the case-correction than success responses.
+
+The leak is reliable enough that a scanner sending two distinct lowercase variants of a known-or-suspected panel name has well over 95% probability of harvesting the canonical name from at least one response.
 
 ### 2. `0x4640` IdentifyBlock success response
 
@@ -1678,7 +1688,7 @@ A successful response to a panel-bound IdentifyBlock request carries the panel's
 "SITEBLN" "DCC-SVR" "SITEBLN" "NODE6"     routing (panel name in slot 4)
 46 40                           0x4640 IdentifyBlock marker
 01 00 05 "NODE6"                LP-string: panel's node name (matches slot 4)
-01 00 03 "ACM"                  LP-string: site code
+01 00 03 "SITE"                  LP-string: site code
 01 00 07 "SITEBLN"              LP-string: BLN name
 00 01 01 00 00 00 00 00 00      9 bytes: separator + flags(01 01 00) + 5 zero pad
 69 EA 3E F5                     4 bytes: Unix epoch timestamp
@@ -1698,11 +1708,11 @@ PXME V2.8.18 APOGEE             <-- detailed firmware version
 Sep 26 2019 12:41:20            <-- build timestamp
 ... binary status flags ...
 NODE11                          <-- node name (also in routing slot 4)
-ACM                             <-- site name
+SITE                            <-- site name
 SITEBLN                         <-- BLN name
 ```
 
-Different panels carry different application identifiers in the same field — observed values include `R911FTR`, `DIVV9`, `DIVV9-NAMED`, `APPLICATION`. These are the application-program names installed on each panel. **A scanner that hits `0x010C` against every IP on a subnet builds a complete asset inventory: firmware version, build date, application program, node/site/BLN — in one frame per panel.**
+Different panels carry different application identifiers in the same field — observed values look like `<APP-NAME>`, `<APP-NAME>-NAMED`, or generic strings like `APPLICATION`. These are the application-program names installed on each panel and are typically site-specific. **A scanner that hits `0x010C` against every IP on a subnet builds a complete asset inventory: firmware version, build date, application program, node/site/BLN — in one frame per panel.**
 
 ### 4. `0x0050` and `0x0606` lightweight probes
 
@@ -1728,7 +1738,7 @@ Wire layout (verified, 88-byte legacy form):
 00 "SITEBLN" 00 "DCC-SVR" 00 "SITEBLN" 00 "NODE1" 00   routing slots
 46 40                                              IdentifyBlock opcode
 01 00 05 "NODE1"                                   LP-string: self-name
-01 00 03 "ACM"                                     LP-string: site code
+01 00 03 "SITE"                                     LP-string: site code
 01 00 07 "SITEBLN"                                 LP-string: BLN
 01 01 00 00 00 00 00 00 ...                        fixed pattern + tail
 ```
@@ -1758,7 +1768,7 @@ APDU:    10 07                       (Unconfirmed-Request, service=0x07 Who-Has)
          09 00                       (context-tag 0: low instance limit = 0)
          1B 3F FF FF                 (context-tag 1: high instance limit = max)
          3D 0A 00                    (context-tag 3: objectName, length 10, charset 0)
-         "ACM_RM416"                 the leaked string
+         "SITE_RM416"                the leaked string (placeholder for the real site-prefixed object name observed)
 ```
 
 A scanner that wants the site code without sending any packet binds to UDP/47808, filters for BVLC `0x0B` + APDU `10 07`, and extracts the context-tag-3 objectName from each frame. Apply regex `^([A-Z]{2,6})[._]` to the captured names; the most-frequent prefix is the site code. In all three corpus captures, the site code surfaced within the first 10 seconds of capture.
@@ -1847,7 +1857,7 @@ The bouncer's BLN check appears to be **case-sensitive**: `SITEBLN` works, `site
 
 ### Resolved by May 2026 corpus analysis
 
-These were previously listed as unknowns; the corpus closed them. Cross-reference: *Multi-pcap corpus validation* section above.
+These were previously listed as unknowns; the corpus closed them. Cross-reference: *Multi-pcap corpus validation* section above and *May 2026 Protocol-folder corpus addendum* below.
 
 - **0x4640 cadence — exactly 10s** (verified across 30+ TCP streams, all senders).
 - **PME1300 follows PME1252 handshake/cadence/trailer format** (verified against NODE11; only the peer-registration side effect remains unverified).
@@ -1855,11 +1865,21 @@ These were previously listed as unknowns; the corpus closed them. Cross-referenc
 - **0x4634 appears on both 5033 and 5034** (640 + 411 frames; structurally identical bodies).
 - **0x0240 has two distinct wire shapes**: 5033/SYST/sep=0x23 (DCC→PXC) and 5034/NONE/sep=0x00 (PXC→DCC).
 - **0x0508 optional 4-char marker = alarm-class label from PPCL** (length-prefixed TLV, variable length; one captured alarm carries a 10-byte ASCII label string, e.g. an operator-readable "EXAMPLE ALARM" tag).
+- **0x0508 also rides Mode-C `0x2E`/`0x2F` envelopes** in addition to `0x33`/`0x34` DATA — alarm pushes appear inside CONNECT-only TCP flows when the panel opens a fresh connection just to deliver the alarm.
 - **0x0985 has_more flag = chunk-level flag** (72.8% `0x01` for "more chunks", 26.9% `0x00` for "last chunk"; not program-level).
 - **0x0273 dominant usage = point-existence probe** (3,022 vs 6 alarm-acks; ratio 500×).
 - **0x0220 has 273-byte preallocated variant** (same shape as 0x4200/0x4221/0x4222 preallocated forms).
 - **No per-property subscribe handshake on 5034** (immediate push from frame 1 across all 5034 captures).
 - **Setpoint-write workflow verified end-to-end** (operator-initiated 50→40 °F adjustment capture: PropertyQuery → 0x0240 → 0x0E15 reject → 0x4222 retry; Desigo retransmits within 30-40ms).
+- **0x0241 wire format pinned, semantics partially resolved** (10 paired samples). Two response behaviors: fully-qualified (device, point) requests get a plain echo (looks like a property-existence confirmation); single-name + empty-2nd-TLV requests sometimes get a default-property name filled in (e.g. `MODE`) — like a "what's the canonical property of this object?" resolver. The wire format is reliable; the semantic label is "PropertyEcho / DefaultPropertyResolve."
+- **0x0263 wire format pinned, delete semantics inferred not proven** (4 paired samples). Request body shape and fixed empty-ACK response are byte-stable. Targets are client-test artifacts created by adjacent `0x0204` calls so delete is plausible, but no follow-up "object after `0x0263`" reads exist in the corpus to confirm the object actually disappears. Could equally be a property-clear or lifecycle-finalize op.
+- **0x4220 wire format observed (single sample)** — 222-byte preallocated request, response shape identical to `0x4221` BulkPropertyRead. The `00 10` bytes at a position where `0x4200` carries the trailing `FF FF` wildcard *might* be an explicit property-id selector, but with one sample this is hypothesis, not confirmed.
+- **0x0291 / 0x02A8 wire format pinned, "write" semantics inferred** (4 paired samples each). Both succeed against `SYST`-scoped properties without `0x0E15`. Both carry a `01 00 c8 [type] [f32]` value-bearing payload. Response is a small ACK echoing (device, point); no value returned. Whether the value is actually written, or whether this is a property-tag / override / subscribe op that just carries a value as metadata, can't be told from the wire alone — the corpus has no before/after read evidence. Treat the wire format as load-bearing; treat the "write" label as best-guess.
+- **0x098B body = constant 8 bytes `09 8B 00 01 00 FA 00 00`** (across all panels and firmwares — never returns success in this corpus; the `00 FA` = 250 and `00 01` look like a hardcoded feature-ID probe).
+- **0x5354 body = constant 14 bytes `53 54 01 00 04 "SYST" 00 3F FF FF FF`** (always errors `0x0003`; note the `0x00` separator distinguishes it from `0x0050`/`0x0606` which use `0x23`).
+- **Bare-ping `09xx` body length = exactly 2 bytes** (verified across all 22 corpus samples). Slot 4 = panel canonical name in uppercase; slot 2 = supervisor bare form (no `|5034`). The 11 `0x0951` samples come from two distinct panels (NODE1, NODE11) — the per-panel-specific opcode mapping noted in the multi-pcap corpus validation continues to hold.
+- **0x0509 AlarmAck can return `0x0003` on a follow-up ack** for the same alarm point on the same connection (1 corpus pair: EXAMPLE.ALARM ack at seq 305135 → OK, ack at seq 305142 → `0x0003`). The seq gap is 7 client-side increments, which I can't translate to a precise time delta from the analysis pipeline alone — anywhere from sub-second to tens of seconds. Plausible: the alarm cleared in between, or the panel only treats the first ack as actionable. Treat `0x0003` on a follow-up `0x0509` as benign.
+- **0x099F port enumeration walks a small fixed index set** during port-config audits — exactly six indices observed across the corpus (`0xFF, 0x00, 0x01, 0x02, 0x03, 0x04`), each appearing 6 times = 36 total requests. Not a full 0–255 walk.
 
 ---
 
@@ -2216,19 +2236,19 @@ Response wire shape (verified across 13 distinct samples):
 
 Total payload: ~230 bytes. The model + firmware + build date triple is a clean fingerprint: a passive listener can identify panel firmware vintage from a single 0x010C response.
 
-#### Bare-ping opcodes — panel-specific, not session-keepalive
+#### Bare-ping opcodes — opportunistic, not strictly per-panel
 
-The corpus has 22 bare-opcode 0x09xx frames distributed by sending panel:
+The wider May 2026 corpus has 22 bare-opcode 0x09xx frames distributed by sending panel:
 
-| Opcode | Sending panels |
+| Opcode | Sending panels (count) |
 |---|---|
-| `0x0951` | NODE1, NODE11 |
-| `0x0954` | NODE1 |
-| `0x0955` | NODE9 |
-| `0x0956` | NODE4 |
-| `0x0959` | NODE2 |
+| `0x0951` | NODE1 (1), NODE9 (5), NODE11 (5) |
+| `0x0954` | NODE1 (2) |
+| `0x0955` | NODE9 (3) |
+| `0x0956` | NODE4 (2) |
+| `0x0959` | NODE1 (2), NODE2 (2) |
 
-Each panel uses a specific characteristic ping opcode. Cadence within a single TCP stream is irregular (median 13.3s, range 4.5s to 169.3s) — these are **not** fixed-cadence keepalives. Likely use: panel-side scheduler tick, sent opportunistically when the panel needs to nudge its supervisor. All 22 frames are PXC→DCC inside `0x2E` CONNECT envelopes targeting port 5033. The earlier "session-keepalive ping" framing in OPCODES.md is loose — these are better described as panel-emitted opportunistic pings whose specific opcode varies per panel.
+The earlier "each panel uses a specific characteristic ping opcode" framing is **partly wrong** — the wider corpus shows NODE1 emitting three different ping opcodes (`0x0951`, `0x0954`, `0x0959`) and `0x0951` being emitted by three different panels (NODE1, NODE9, NODE11). The opcode-to-panel mapping is many-to-many; what holds is that the bare-ping form (PXC→DCC, body length 2 bytes, inside `0x2E` envelopes targeting dport 5033) is reliably distinguishable from the schedule-operation 09xx family. Cadence within a single TCP stream is irregular (median 13.3s, range 4.5s to 169.3s) — these are **not** fixed-cadence keepalives. Likely use: panel-side scheduler tick, sent opportunistically when the panel needs to nudge its supervisor.
 
 #### 0x0240 WriteWithQuality — two distinct wire shapes
 
@@ -2247,7 +2267,7 @@ Body length: 51-54 bytes typical. **Always rejected with `0x0E15`** if target is
 **5034-side (PXC→DCC, NONE-scoped — COV/value-push for BLN-virtual)**:
 ```
 0240 0100 04 "NONE" 00 3fffffff 0000      ← scope=NONE, separator byte 0x00
-01 00 LL <point_name>                      ← single name TLV (e.g. "OASTMP1.BN")
+01 00 LL <point_name>                      ← single name TLV (BLN-virtual, .BN-suffixed)
 01 00 00 00 00 0100 00 0100 00 <4-byte float>
 00                                          ← trailing 0x00
 ```
@@ -2411,6 +2431,236 @@ Same total length (16 bytes), same content type, but timestamp and session-id ar
 
 These changes are fully backwards-compatible with the existing PME1252/PME1300 panels — they make the scanner conformant to the documented protocol while keeping the same wire length and structure the panels already accept.
 
+## May 2026 Protocol-folder corpus addendum
+
+A second-pass audit run against a 58-pcap corpus from the reference site (`C:\…\Protocol\*.pcap{,ng}`, ~190 k P2 frames) added paired request/response evidence for several previously-unknown opcodes and pinned a handful of constant-body shapes. Findings are inlined into the relevant sections above; this addendum collects the byte-level evidence in one place for parser authors.
+
+**A note on certainty.** The pcaps prove **wire format** and **panel response shape**. They don't prove **operation semantics** in cases where the wire alone is ambiguous. Where the addendum says "probable" or "inferred" below, the wire format is pinned but the operation's effect (delete? write? subscribe?) is a hypothesis not validated by before/after observation. Implementations should treat the wire format as load-bearing and the semantic labels as best-guess until follow-up testing confirms them.
+
+**Spot-check audit of pre-existing claims (May 2026).** Beyond the new findings, several previously-stated counts were re-verified against this corpus:
+
+- **0x0273 vs 0x0509 ratio** — claimed 500×; measured 504× (3022 vs 6). Confirmed.
+- **0x4634 port distribution** — claimed 640 / 411 (5033 / 5034); measured 640 / 411 exact. Confirmed.
+- **0x0274 (port, msg_type) distribution** — claimed 16068 / 13858 / 4691 / 263; measured exact match. Confirmed.
+- **Routing-header destination-first** — corpus-wide check against 13,542 CONNECT/ANNOUNCE frames: 100% have `slot 2 != slot 4` (basic sanity); IP-direction cross-checks remain consistent with destination-in-slot-2.
+- **Case-correction leak rate** — earlier claim 74.5% (3409 / 4573 pairs); wider corpus measures 87.5% (20826 / 23808 pairs). Both numbers retained above; the wider sample suggests the leak is more reliable than the original 74.5% number implied.
+- **Bare-ping per-panel mapping** — earlier claim "each panel has a specific opcode"; wider corpus shows NODE1 emitting three different ping opcodes and `0x0951` being emitted by three different panels. The mapping is many-to-many. Section above corrected.
+- **Panel CONNECT cadence** — claim "~10–16s"; measured median 9.93s, 73.9% in [9, 17]s band. Consistent.
+- **0x4640 10s cadence** — could **not** be re-verified from the addendum corpus because per-frame packet timestamps are lost during TCP stream coalescing in the analysis pipeline. The original 30+-stream measurement stands; this addendum doesn't have an independent confirmation.
+
+The corpus is bigger and more varied than the two-node validation capture cited earlier — it adds focused enumeratetest / iteratetest probes, a property-write capture (`k412coolflowmin…50…40`), Mode-C-heavy desigopcap / desigoall sessions, schedule-edit and PPCL-edit captures, and a 24 k-frame pcap2429 that exercises 66 distinct request opcodes including the 02xx and 4220 variants the addendum focuses on.
+
+### Identity inventory across the addendum corpus
+
+Single site, single supervisor pair, 11 panels (the routing-slot strings are kept as placeholders here per the doc's no-real-site-strings convention; the corpus was sanitized at audit time):
+
+- BLN: one fixed name across all 325 k routing-slot occurrences.
+- Site: one 3-letter prefix.
+- Supervisor: one DCC, two routing-slot forms (`<SVR>` bare for CONNECT/ANNOUNCE/0x0050, `<SVR>|5034` listen-port form for DATA/HEARTBEAT/0x4634). Verified per-form usage in the 14 k+ supervisor-name slot occurrences.
+- Panels: NODE1–NODE11. NODE11 is PME1300 V2.8.18; the others are PME1252 V2.8.10 (verified by `0x010C` responses for the panels with sysinfo captures, inferred for the rest).
+- The slot-2 case-correction leak fires consistently: panels appear in panel→DCC traffic as `NODE3` (uppercase) and in DCC→panel traffic as `node3` (lowercase). The bouncer's case-fold accept routes both.
+
+### Beacon corpus (UDP/10001) — re-verified
+
+26 of 58 pcaps carry beacons. Total: 1040 packets across the corpus, payload **always** `01 00 00 00` (zero variation). Two source IPs (gateway IPs), two destinations (multicast group `233.89.188.1` and directed broadcast `255.255.255.255`). Inter-pair intervals: median **10.4994 s**, range 10.4559–10.6543 s, all 108 measured intervals fall within `[10.0, 11.0]` s — confirms the hardcoded ~10.5 s cadence. Multicast/broadcast within-source pair-deltas: 89 sub-100 µs, 193 in 100–500 µs, 27 in 500 µs–1 ms, 5 over 1 ms — the dual-emission timing already documented.
+
+### 0x0241 paired wire format — PropertyEcho / DefaultPropertyResolve (SYST)
+
+Two response behaviors, both observed across 10 paired samples in the corpus.
+
+**Behavior 1 — fully-qualified `(device, point)` request → echo response:**
+
+Request body:
+
+```
+02 41                              opcode
+01 00 04 "SYST"                    SYST scope tag
+23                                 separator (literal '#')
+3F FF FF FF                        property-state sentinel
+00 00                              gap
+01 00 LL <device-name>             e.g. "TEC1", "TEC2", "TITLE.GROUP"
+01 00 LL <point-name>              e.g. "CHK STATUS", "ROOM TEMP", "RM STPT DIAL", "DAY CLG STPT", "HEAT.COOL"
+00 00 01 00 00 01 00 00 00         9-byte fixed trailer
+```
+
+Success response body — plain echo of (device, point):
+
+```
+00 00                              separator
+01 00 LL <device-name>             echoed back
+01 00 LL <point-name>              echoed back
+00 00                              terminator
+```
+
+Use this shape as a "does this property exist?" probe — the echo is the success signal.
+
+**Behavior 2 — single-name request with empty 2nd TLV → default-property resolution:**
+
+Request body has the 2nd TLV empty (`01 00 00`):
+
+```
+02 41 01 00 04 "SYST" 23 3F FF FF FF 00 00 01 00 0B "EXAMPLE.ZN" 01 00 00 00 00 01 00 00 01 00 00
+```
+
+Response can fill in a property name in the empty 2nd-TLV slot:
+
+```
+00 00 01 00 0B "EXAMPLE.ZN" 01 00 04 "MODE" 00 00
+```
+
+Or the empty slot may be preserved:
+
+```
+00 00 01 00 0C "EXAMPLE.STPT" 01 00 00 00 00
+```
+
+The `MODE`-fill case looks like the panel saying "the canonical property of this object is MODE." Useful for Desigo to discover whether a SYST-scoped object has multistate semantics before issuing a state-set fetch via `0x040A`. The empty-fill case suggests the object has no canonical default property exposable via this op (or the panel doesn't track one).
+
+The opcode is read-only — no value, no quality, no live metadata in the response, just identity TLVs.
+
+### 0x0263 paired wire format — ObjectLifecycle (probable delete, SYST)
+
+Request:
+
+```
+02 63                              opcode
+01 00 04 "SYST" 23 3F FF FF FF     SYST scope + sentinel
+00 00                              gap
+01 00 LL <object-name>             e.g. "test1", "test2", "test4", "test434"
+01 00 00 00 00 01 00 00 01 00 00   11-byte fixed trailer
+```
+
+Body length 35–37 bytes. Success response is a **fixed empty ACK**, regardless of which object was named in the request:
+
+```
+00 00 01 00 00 01 00 00            8-byte ACK (no body content)
+```
+
+All 4 paired responses in the corpus carry the identical 8 bytes — the response shape encodes no per-object data.
+
+**Delete semantics are inferred, not proven.** Targets are client-test artifacts (`test1`/`test2`/`test4`/`test434`) created by adjacent `0x0204` calls in the same DCC session, and the empty-ACK is consistent with delete. But the corpus has no follow-up `0x0241` / `0x0220` / `0x0271` reads after `0x0263` to verify that the named object has actually disappeared. The op could equally be a property-clear, lifecycle-finalize, or unsubscribe op that returns the same empty ACK shape. Treat as "lifecycle terminator, probably delete" until follow-up testing confirms.
+
+### 0x4220 paired wire format — BulkProperty variant (single sample)
+
+Request body (222-byte preallocated):
+
+```
+42 20                              opcode
+01 00 04 "SYST" 23 3F FF FF FF     SYST scope + sentinel
+00 10 FF FF                        4 bytes — interpretation uncertain (see below)
+00 00                              gap
+01 00 LL <device-name>             e.g. "TEC1"
+01 00 LL <point-name>              e.g. "RM STPT DIAL"
+00 00 01 00 00 01 00 00            8-byte trailer
+00 00 ... 00                       zero-pad to 222 bytes total
+```
+
+The `00 10 FF FF` after the sentinel sits at the same body offset where `0x4200`'s wildcard property-id `FF FF` appears in the trailing position. **Interpreting the `00 10` as a property-id selector is plausible but unverified beyond this single corpus sample** — could equally be an opcode-internal sub-mode flag, a length hint, or a fixed magic value specific to `0x4220`. With one sample, hypotheses can't be ruled out. Response (129 B) does have the same value+units+resolution+max+type-code shape as `0x4221`:
+
+```
+00 00 01 00 LL <device> 01 00 LL <point>      identity echo
+03 00 02 00 00 01 00 LL <device> 01 00 LL <point>
+00 01 01 00 LL <device> 01 00 LL <point>      SHAPE A enumerate-style header
+01 00 00 00 00 00 00 00 01                    quality/metadata block (9 bytes)
+42 90 00 00                                   f32 BE = value (e.g. 72.0 = ROOM TEMP)
+23 00 00 01 00 LL <units>                     units string TLV (e.g. "DEG F")
+00 00 00 00 00 00 02 00 01 11 00 0D            extra metadata
+3E 80 00 00 42 40 00 00                       resolution (0.25) + max (48.0)
+06 00 00 00 00 01 00 00 00 00                  type-code 0x06 (analog32) + trailer
+```
+
+The response shape aligns cleanly with the `0x4221` BulkPropertyRead pattern, so calling `0x4220` a "BulkPropertyRead variant" is reasonable. The narrower "with explicit property-id selector" framing requires more samples to confirm.
+
+### 0x0291 / 0x02A8 paired wire format — SYST property op (probable write)
+
+Both opcodes succeed against `SYST`-scoped properties without the `0x0E15` error that `0x0240` produces. The wire payload carries what looks like a value: a `01 00 c8` marker followed by a type-code byte and an IEEE-754 BE float. Each opcode also has a no-value form (`01 00 c8 00`).
+
+**Write semantics are inferred but not proven.** The corpus shows Desigo issuing these against real TEC subpoints (e.g., `TEC1 / ROOM TEMP` with `02 42 70 00 00` = 60.0), and the response is a small ACK echoing the (device, point) pair with no value returned. ROOM TEMP is normally a sensor input on a TEC — a true write to overwrite the live sensor reading wouldn't make physical sense, so either (a) the op writes to a different property of the named target than the live sensor value (the `01 00 c8` / `0xC8` marker may select a specific property aspect like "user override" or "manual setpoint"), or (b) the op is some form of tag/notify/subscribe rather than a direct write. A before/after read pattern in the corpus would resolve which — none exists. Treat the wire format as load-bearing; treat the "write" label as best-guess.
+
+`0x0291` request body, set-with-value form (51 bytes for `TEC1 / ROOM TEMP / 60.0`):
+
+```
+02 91                              opcode
+01 00 04 "SYST" 23 3F FF FF FF     SYST scope + sentinel
+00 00                              gap
+01 00 LL <device>                  e.g. "TEC1"
+01 00 LL <point>                   e.g. "ROOM TEMP"
+00 00 01 00 00 01 00 00            8-byte separator
+01 00 c8                           value-write marker
+02                                 type-code byte (0x02 = small int; 0x03 = analog; 0x06 = analog32)
+42 70 00 00                        f32 BE value (60.0)
+```
+
+Clear-without-value form (47 bytes) ends at `01 00 c8 00` (no float).
+
+`0x02A8` request body adds a 6-byte trailer:
+
+```
+[same as 0x0291 up to value]
+00 01 00 00 50 00                  fixed 6-byte trailer (priority/sub-property?)
+```
+
+Both opcodes' success response is a small ACK echoing the (device, point) pair with `00 00` framing — same shape as `0x0241`'s response. **No value returned** — the writes are fire-and-forget from the client's perspective.
+
+The single-name BLN-virtual variant (e.g. `TITLE.GROUP`) replaces the device+point TLV pair with one LP-string + a separator + the point name, adding ~6 bytes to the body length.
+
+### 0x098B / 0x5354 / 0x0050 / 0x0606 — constant-body status probes
+
+These four opcodes have **fixed body bytes** across every observation in the corpus (irrespective of target panel, firmware, or session). Useful as low-volume cold-discovery probes.
+
+| Opcode | Body bytes | Body length | Behavior |
+|---|---|---:|---|
+| `0x0050` StatusFlagQuery | `00 50 01 00 04 "SYST" 23 3F FF FF FF` | 14 | OK; response carries supervisor name |
+| `0x0606` ping | `06 06 01 00 04 "SYST" 23 3F FF FF FF` | 14 | OK; empty body response |
+| `0x098B` newer-feature | `09 8B 00 01 00 FA 00 00` | 8 | always `0x0003` |
+| `0x5354` (unknown) | `53 54 01 00 04 "SYST" 00 3F FF FF FF` | 14 | always `0x0003` |
+
+`0x5354`'s `00` separator (vs `0x23`) sets it apart from `0x0050`/`0x0606`. `0x098B`'s `00 01 00 FA 00 00` is byte-identical across PME1252 and PME1300 panels — Desigo emits the same probe regardless of firmware.
+
+Detailed `0x0050` response (30 bytes, decoded from corpus sample):
+
+```
+01 00 04 "SYST"                    echoed scope tag
+23 3F FF FF FF                     echoed sentinel
+00 02                              count (always 2 in corpus — perhaps 2 entries follow)
+01 00 LL <SVR-NAME>                supervisor LP-string in BARE form (no |5034)
+01 00 00                           empty terminator TLV
+```
+
+The `00 02` is interesting — it's positioned as a count field but every observation has exactly one supervisor name following it. Could be "u16 count" with value 2 reflecting "2 list slots used" (one for the SVR name, one for the empty terminator), or it may be a fixed `0x0002` flag. Don't over-interpret without more samples.
+
+### 0x4100 / 0x4103 trailers — SYST scope footer
+
+PROTOCOL.md previously documented `0x4100` as ending after the `00 0A` line-number trailer and `0x4103` as ending after the `00 01 7F FF` mode-scope. The corpus shows both opcodes append a fixed SYST-scope footer:
+
+```
+... [opcode-specific body] ...
+[gap zero bytes — 5 for 0x4100, 0 for 0x4103]
+01 00 04 "SYST" 23 3F FF FF FF     9-byte SYST scope footer
+```
+
+For `0x4100`, the gap between the `00 0A` line-number and the SYST scope footer is **5 zero bytes** (`00 00 00 00 00`). For `0x4103`, there is no gap — the `00 01 7F FF` mode-scope runs straight into `01 00 04 "SYST" 23 3F FF FF FF`. Total body lengths in the corpus: `0x4100` = 48 bytes (with a 7-char line content `"00010 C"`), `0x4103` = 32 bytes.
+
+Caveat: the corpus contains exactly **one unique `0x4100` request body** (captured twice — same bytes), and exactly **one unique `0x4103` request body** (captured once). Both targets are a single Desigo-internal test program (`TESTPROG`, line 10 set to a `C` comment). The SYST footer's presence is the load-bearing claim; the exact gap byte count for `0x4100` may vary in other line-write workflows that aren't in this corpus.
+
+### 0x0050 supervisor-name leak — supervisor-name-form is BARE
+
+Confirms a doc claim worth re-stating clearly: `0x0050` returns the registered supervisor name in its **bare form** (no `|5034` suffix), while `0x0050` itself rides DATA frames where slot 4 carries the listen-port form. The `0x0050` response is the cleanest way to get the bare form for any supervisor-emulation logic that wants to issue CONNECT/ANNOUNCE frames (which expect bare slot 2).
+
+### 0x0976 unanswered Mode-C probe sequences
+
+The corpus has 9 `0x0976` requests; all of them are Mode-C `0x2E` envelopes carrying the cursor-pagination format (single `*` filter + device-name cursor, no SYST scope). **None received a response** in the captured connection — Desigo retransmitted each seq 2–3 times at ~30 ms intervals, then moved on. The targeted panel was `node4` in the same session that successfully received `0x0974` and `0x0979` traffic, so this isn't a connection-wide silent-drop.
+
+The earlier doc-cited 286-byte 18-entry response sample came from a different capture not included in this batch. Implementations relying on `0x0976` should either (a) use the SYST-tagged form documented in the schedule-operations section, or (b) treat `0x0976` as best-effort and fall back to per-slot reads via `0x0220`/`0x0271` if no response arrives within 100 ms.
+
+### 0x0509 AlarmAck — second-ack `0x0003` pattern
+
+The corpus contains two `0x0509` frames acking the same point (`EXAMPLE.ALARM`) on the same TCP connection, with byte-identical bodies. The first (seq 305135) gets an OK response carrying the point name; the second (seq 305142, 7 client-side seq increments later) gets `0x0003`. Without per-frame packet timestamps preserved through the analysis pipeline I can only bracket the time gap: between fractions of a second and tens of seconds, given Desigo's typical 0x4640-keepalive cadence of 10 s and the panel's frame rate.
+
+The plausible interpretations: the alarm's state changed between the two acks (auto-cleared, externally acked, or moved off-active), or the panel only treats the first ack of a given (alarm-class, point) as actionable and rejects subsequent ones with `0x0003`. Either way, a consumer that treats `0x0003` on a follow-up `0x0509` for the same alarm as a hard error will misclassify a normal duplicate-ack pattern as a failure. Treat `0x0003` on `0x0509` as benign in this context.
+
+---
+
 ## Empirical validation status
 
 What's been tested end-to-end against live PXCs on the reference site — both PME1252 V2.8.10 legacy-dialect panels and a PME1300 V2.8.18 modern-dialect panel:
@@ -2442,6 +2692,14 @@ What's been tested end-to-end against live PXCs on the reference site — both P
 | **Surface 7 BACnet broadcast (any vantage)** | **scapy passive listen UDP/47808** | **✓ Verified at the reference site: 14 broadcasts in 90s from non-supervisor host** |
 | **Surfaces 5/6 (non-supervisor vantage)** | **scapy passive listen TCP/5033** | **✗ Verified NOT visible: 0/0 frames from non-supervisor host on properly-segmented network** |
 | **Initial-frame `msg_type = 0x2E` registers source as runtime peer** | **Inbound `msg_type = 0x2E` as initial frame on a fresh TCP session, with valid BLN + slot 2 case-folding to a real panel name, registers source IP as a runtime peer; panel calls back every ~16s with `flags = 01 01 01`; persists across sessions until reboot** | **△ Verified by listener test against NODE6 (PME1252 V2.8.10); production scanners using `msg_type = 0x33` + inner `0x4640` initial frame do NOT trigger this; this is documented protocol behavior, not a vulnerability per se** |
+| **0x0241 PropertyEcho / DefaultPropertyResolve (SYST)** | Paired-response analysis on May 2026 corpus | △ Wire format pinned (10 paired samples). Two response behaviors: echo for fully-qualified targets, default-property resolution for single-name targets. Semantic label is best-guess. |
+| **0x0263 ObjectLifecycle (probable delete, SYST)** | Paired-response analysis on May 2026 corpus | △ Wire format pinned (4 paired samples). Delete semantics inferred, not proven — corpus has no follow-up reads to verify the object disappears. |
+| **0x4220 BulkProperty variant** | Paired-response analysis (single sample) on May 2026 corpus | △ Wire format observed (1 sample). Response shape matches `0x4221`. The `00 10` bytes might be a property-id selector but with one sample this is hypothesis. |
+| **0x0291 / 0x02A8 SYST property ops (probable writes)** | Paired-response analysis on May 2026 corpus | △ Wire format pinned (4 paired samples each). Both succeed against SYST without `0x0E15`. "Write" semantics inferred from value-bearing body, not proven by before/after read evidence. |
+| **0x098B / 0x5354 / 0x0050 / 0x0606 constant-body status probes** | Body-shape audit on May 2026 corpus | ✓ Pinned. All four have fixed body bytes; `0x098B`/`0x5354` always error; `0x0050`/`0x0606` always succeed. |
+| **0x099F port enumeration index set** | Capture of supervisor port-config audit | ✓ Confirmed. Six indices walked per cycle (`0xFF, 0x00, 0x01, 0x02, 0x03, 0x04`); not a full 0–255 walk. |
+| **0x0509 follow-up ack `0x0003` pattern** | Paired-response analysis on May 2026 corpus | ✓ Documented (1 corpus pair). Treat `0x0003` on a follow-up `0x0509` for the same alarm-point as benign. Time delta between the OK and ERR acks not precisely measured from the analysis pipeline. |
+| **0x0508 rides Mode-C `0x2E`/`0x2F` envelopes** | May 2026 corpus traces | ✓ Confirmed. Alarm pushes appear inside CONNECT-only TCP flows alongside ordinary DATA-mode pushes. |
 
 What's wire-format-documented but NOT live-tested:
 
