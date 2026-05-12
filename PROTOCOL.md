@@ -29,6 +29,8 @@ Siemens APOGEE P2 is the building-automation protocol used by Siemens PXC contro
 
 Every stream across all captures parsed cleanly against the framing rules below with zero desyncs.
 
+**Corpus-housekeeping footnote (corpus duplicates).** Two pairs of files in the local corpus are byte-identical despite their `…5033.pcapng` / `…5034.pcapng` paired-naming convention: `k412coolflowminadjustupto50andbackto405033.pcapng` and `…5034.pcapng` share md5 `645f93805142a2e49ce15f8380456312`; `pw401andk412desigoreadallsubpoints5033.pcapng` and `…5034.pcapng` share md5 `d824a135eaecaa536b841302c84697f8`. They are not paired-vantage captures with one file per port — they are the same capture file under two filenames. Don't double-count their frames in corpus-wide statistics, and don't try to correlate them as if they were two vantages on the same event.
+
 Treat every claim here as "observed to be true in tested environments, not officially documented."
 
 **Terminology note.** The network on which P2 runs is called the **BLN** (Building Level Network) in original APOGEE documentation and the **ALN** (Automation Level Network) in newer Desigo-era Siemens documentation — the two names refer to the same network layer. Above it sits the **MLN** (Management Level Network) where Desigo CC / Insight workstations live; below it sits the **FLN** (Field Level Network, running the P1 protocol) where TEC devices live. This document uses BLN throughout, consistent with APOGEE-era naming and the panels it describes.
@@ -1064,6 +1066,8 @@ Observed error codes in captures (counts approximate):
 
 The `0x05` / `0x0003` pair is the dominant error in the pcap — it fires on ~46% of `0x0220` reads, consistent with scanners probing for BLN-sourced virtual points that don't exist on the target panel. A naive parser that doesn't check the status byte will attempt to parse an error response's `00 03` prefix as the start of a point value block and hallucinate a value; the first-byte check is cheap and mandatory.
 
+**Error response payload is exactly 2 bytes.** Across 1,471 error frames in the corpus (1,418 × `0x0003`, 42 × `0x00AC`, 7 × `0x0E15`, 2 × `0x0E11`, 2 × `0x0002`), the body after the routing header is **always exactly the 1-byte direction `0x05` + the 2-byte error code, with zero trailing bytes**. No opcode/error-code combination has been observed with additional payload after the error code. Parser implication: when the direction byte is `0x05`, read exactly 2 bytes for the error code and stop — do not scan for a value block, and do not expect the request opcode to be echoed.
+
 ---
 
 ## Reading a point
@@ -2025,6 +2029,24 @@ The 4-byte length field at offset 0 of every frame counts **the entire frame inc
 
 Real Desigo CC frames use a session-monotonic sequence number that increments per-frame. Across one captured session, observed values ranged from `0x00018fec` to `0x00019008` over ~10 frames in 30 seconds (so ~2-3 increment per frame, occasionally retransmitted with the same value). A scanner that sends `0x00000000` for seq is flagged behavior — real DCC is never observed with seq=0. The bouncer may or may not validate this strictly, but a scanner sending non-zero "plausible" values blends in better. Recommend starting at a random 24-bit value and incrementing per frame.
 
+**Pipelined-response seq lag (explains the 4.4% non-match):** Across 73,314 paired request/response frames in the wider corpus, **91.12% exact seq match** — slightly lower than the doc's earlier 95.6% figure. Every miss is the panel's response seq running **1–17 behind** the request seq it's answering, never ahead. The lag correlates with the in-flight pipeline depth at the moment of the response: when Desigo pipelines `N` requests faster than the panel can answer, the panel's first response carries the seq for request #1, the second response carries seq for request #2, etc., so response-N's seq trails request-(N+pipelined)'s seq by `pipelined_depth - 1`. Captures with heavy supervisor pipelining (`5033.pcapng` 49%, `p2withbrowsing.pcapng` 31%) drag the corpus-wide echo rate down. Parser implications: pair requests and responses by seq, but tolerate a sliding-window mismatch up to ~20 frames — do NOT require strict seq equality.
+
+### TCP / IP fingerprint (verified, fingerprintable)
+
+The PXC's Nucleus NET stack has constant TCP/IP field values that distinguish panel traffic from supervisor traffic at line-rate inspection. Verified across the entire corpus:
+
+| Field | Panel (PXC) | Supervisor (Windows) | Fingerprint use |
+|-------|-------------|----------------------|-----------------|
+| **IPv4 TTL** | **64** (universally) | **128** (universally) | Linux-style TTL on panels, Windows-style on supervisors — but the panels run Nucleus PLUS on PowerPC, so the TTL=64 is a Nucleus NET 5.1 default, not Linux. Same value across PME1252 and PME1300. |
+| **Initial TCP window** | **16000** (constant — Siemens-fixed) | ~64240 advertised, varies | A non-canonical Linux/Windows default — 16000 is the Siemens-tuned Nucleus NET buffer size. Panel-side TCP window=16000 is a clean fingerprint for "this host is a Nucleus-NET-based Siemens device." |
+| **TCP zero-window emissions** | Yes — observed during burst loads (Desigo pipelining setpoint writes) | Rare | Panels apply explicit zero-window backpressure when their P2 receive queue fills. A scanner that ignores zero-window will see the panel ACK its packets but never respond. Honor TCP flow control. |
+| **OS-level TCP keepalives** | None | One-less-than-expected-seq probes when idle | Supervisor sends standard TCP keepalive probes (Windows default ~2-hour idle threshold); panels rely on P2-level `0x4640` IdentifyBlock for liveness and never emit OS-level keepalives. |
+| **Outbound source-port allocation** | Mostly ephemeral; at least one panel observed using a fixed source port (3513 for 5034 connections) | Strictly sequential ephemeral (Windows allocator: 50164, 50165, 50166, ...) | DCC's sequential source-port allocation lets a passive observer cluster which panel each DCC-side flow belongs to without parsing the routing slots. |
+
+**Combined-signal classifier (host is a PXC vs. host is a Windows supervisor):** TTL==64 AND TCP-window==16000 AND no-OS-keepalive AND TCP/5033-listener → PXC, with very high confidence. The combination is far stronger than any single signal.
+
+**Implication for cold-discovery from a non-supervisor vantage:** even without P2 visibility, ARP-sweep + TCP-window fingerprint of 5033 SYN-ACK responses identifies PXCs cleanly. The SYN-ACK from a PXC will advertise window=16000 (or the half-RTT-adjusted version); a supervisor or other Windows host would advertise ~64K. Combined with the Siemens OUI filter, this is a two-criteria classifier.
+
 ### Connection vantage matters for cold-discovery
 
 A scanner running on the supervisor host itself sees DCC↔panel traffic natively (no SPAN required) — this is a *privileged* vantage equivalent to "owning the supervisor." A scanner running on an arbitrary host on the same VLAN sees only broadcast traffic (Surface 7) and its own active probes. Most cold-discovery surfaces (5, 6) require the supervisor-host or SPAN vantage. Tools that claim to work "without SPAN" need to be tested from a non-supervisor host to verify the claim.
@@ -2135,6 +2157,13 @@ The corrected framing is narrower than earlier doc versions claimed. The protoco
 
 For practical site security, the takeaway is: protect the HVAC VLAN. The protocol's read surface is open to anyone who can route to it. The runtime-peer registration is not a separately exploitable vulnerability beyond the read surface — it's just the supervisor-tracking mechanism showing through to anyone who can claim to be a panel.
 
+**Cross-reference to public Siemens advisories.** Two published advisories bracket this protocol's security history:
+
+- **SSA-180579** (2022, V1.1 2023) — eight CVEs against the underlying Nucleus NET TCP/IP stack and Siemens' privilege management layer. Affects **P2 Ethernet panels < V2.8.20** and **BACnet panels < V3.5.5**. The Nucleus DNS/TCP-stack CVEs (CVE-2020-15795, -27009, -27736, -27737, -27738, -28388, CVE-2021-25677) are pre-application-layer — they enable TCP session injection / off-path attacks against any port on the panel, not just 5033. The 2026-era V2.8.20+ firmware on the reference site addresses these. CVE-2022-45937 (privilege management) is a Siemens-layer auth bypass — applies to HMI/Telnet/web, not directly to P2's bouncer.
+- **SSA-718393** (2025-05-13) — CVE-2025-40555, BACnet `createObject` partial-DoS via unsolicited broadcast amplification. **Names only the BACnet-personality SKUs as affected; P2 Ethernet SKUs are NOT in the affected-products list.** No fix planned by Siemens. Has no impact on TCP/5033 P2 traffic. Listed here for completeness — a site running mixed BACnet/P2 inventory should be aware that the BACnet-mode panels in the same building may be DoS-able by a BACnet-plane attacker, but this advisory does not extend the P2 attack surface.
+
+Neither advisory addresses the bouncer-bypass-by-VLAN-access read surface this section describes — that surface is documented protocol behavior, not a vulnerability that vendor patches address.
+
 ### 0x4634 routing-table push — sender-restricted
 
 Active probe testing established that **panels reject inbound `0x4634` frames with TCP RST**, even from session-holders with valid BLN and panel name. Specifically: a session was established to NODE6 successfully (CONNECT got 86-byte response), but sending `0x4634` as the opcode of a subsequent `0x33` DATA frame triggered an immediate TCP RST from the panel (3 millisecond response time).
@@ -2216,6 +2245,8 @@ Both DCC senders (`DCC-SVR` and `DCC-SVR|5034`) and all 9 panels obey this caden
 
 The corpus contains traffic from one PME1300 V2.8.18 panel (NODE11). Its 0x4640 cadence matches PME1252 panels exactly (median 10.00s, same trailer format), and it speaks the same handshake protocol modulo msg_type byte. **The "PME1300 follows the same handshake/cadence as PME1252" question is resolved.** What remains untested for PME1300 is whether it exhibits the runtime-peer-registration side effect from inbound `msg_type = 0x2E` CONNECT frames (the listener test was done against NODE6, a PME1252).
 
+**Polling-cadence delta between dialects.** The PME1300 NODE11 capture (`node11pcap.pcapng`) walks `0x0981` points at a median inter-message interval of **10–11 ms** (very tight IQR), compared with PME1252's typical Desigo poll cadence of **~47 ms median** (IQR 25–65 ms) for `0x0220` / `0x0271` / `0x0273` / `0x4221`. The modern dialect's faster cadence is consistent with the firmware platform jump (different hardware, different network stack) — not a protocol change. Practical implication: a scanner that throttles at 30 ms inter-request will avoid backpressure against PME1252 panels but is roughly 3× slower than what PME1300 firmware will tolerate. Both panels enforce TCP flow control (zero-window emissions) when their receive queue fills, so honoring TCP backpressure is more important than picking a fixed inter-request delay.
+
 #### 0x4634 RoutingTable — observed on BOTH 5033 and 5034
 
 Earlier sections describe 0x4634 as part of the 5034 push channel. The corpus has **640 0x4634 frames to port 5033 and 411 to port 5034**, with structurally identical bodies (same 217-byte payload, same `$paneldefault` marker, same per-node TLVs and cost values). The 5033-side traffic is sent panel-to-panel and panel-to-DCC during ordinary operational sessions, in addition to the 5034-side announcements.
@@ -2234,6 +2265,8 @@ Across 1051 0x4634 frames:
 - The "SITE-BMS-SVR" entry (the BMS server's BACnet-side identity) consistently shows **5411** — significantly higher
 
 The per-observer pattern is confirmed: each sender computes the same node's cost as a different number, with DCC's numbers consistently lower than panels'. The exact algorithm remains unspecified by the protocol, but the field is empirically a per-observer "cost-to-reach" metric. The "101000" / 1467 pair appears site-wide and likely represents a router or panel-default cost-baseline reference rather than a real network entity.
+
+**`$paneldefault` is mandatory.** Every one of the 1051 `0x4634` frames in the corpus carries the `$paneldefault` entry — zero exceptions across every sender, dialect, and port. The entry is the table's anchor and is always emitted first. A parser that doesn't see `$paneldefault` in the first TLV of a `0x4634` body is looking at a malformed or truncated frame and should reject it rather than continue.
 
 #### 0x010C SystemInfo — wire-format pinned, site fingerprint
 
@@ -2407,6 +2440,8 @@ The site captures show two multicast traffic types:
 - **mDNS / LLMNR (`224.0.0.251:5353`, `224.0.0.252:5355`)** from the DCC: `<site>-bms-svr.local` self-advertising via standard mDNS. Useful for locating a Desigo CC server on a flat network without P2 access — `dns-sd` against the local subnet would surface the supervisor.
 
 Cold-discovery side note: an mDNS query for `_*._tcp.local.` against an HVAC VLAN can name-tag the Desigo CC server by its hostname (e.g. `<site>-bms-svr.local`). Useful as Surface 0 — finds the supervisor IP without requiring any P2 traffic, and the hostname often carries the site code prefix.
+
+**Footnote on `multicastpcap.pcapng` specifically.** The pcap named `multicastpcap.pcapng` in the reference corpus does NOT contain UDP/10001 / 233.89.188.1 beacons despite its name. It contains only mDNS (`224.0.0.251:5353`) and LLMNR (`224.0.0.252:5355`) traffic from the supervisor advertising its hostname. The actual 233.89.188.1 beacons are captured in other pcaps (e.g. `pcapall.pcapng`, `desigoall.pcapng`, the dedicated capture referenced under *Multicast presence beacons*). Don't be misled by file naming — verify multicast destination IPs before relying on a capture for beacon evidence.
 
 ### Scanner trailer wire-format discrepancy
 
@@ -2699,11 +2734,13 @@ Documents reviewed:
 | Trane TR200 APOGEE Communications Protocol Operating Instructions | BAS-SVX27B-EN | 2009 | The 99-slot FLN device point map for a TR200 drive — the kind of structure surfaced by P2 opcode `0x0981` when a TR200 is on a PXC's FLN. |
 | Generating Honeypot Traffic for ICS (Lin et al., AFIT thesis + ICCIP'17) | AD1054692 / ICCIP Ch.11 | 2017 | Independent corroboration of P2/TCP transport choice; no payload-level observations. Cites "Siemens, APOGEE Building Level Network on TCP/IP, doc 149-967, 2003" — the earliest published Siemens artifact naming the protocol layer. |
 | System 600 APOGEE Database Dynamos for Intellution's 32-Bit FIX Owner's Manual | 125-2161 / A6V10324337 | 2000 | Pre-Desigo, pre-Ethernet-P2 era. Documents the serial-only P2 architecture: FIX HMI → MsgManager service → **AsyncSvc service** → LocalNet device driver → DigiBoard serial card → **TI-II (Trunk Interface II)** → RS-485 BLN cable → "P2 Controller". The **AsyncSvc** naming carries forward 16 years later into the IT-whitepaper's "Insight Async service" on TCP/5442 — strong evidence the async-message-queue architecture is the same, just relocated from RS-485 to TCP. Documents the address format **`network.trunk.cabinet.point`** (where "cabinet" is the legacy term for what's now called "panel" or "node"). Registry path uses the historical Landis&Staefa heritage: `HKLM\Landis&Staefa\Intellution\PlugIn\ProxyNetwork`. |
-| Field Panel GO User's Manual | 545-001 / A6V10320406 | 2012 | Field Panel GO (FPGO) is a **web-based UI hosted on the panel itself**, requiring the **Power Open Processor with Ethernet ALN** or **Power MEC with Ethernet ALN**. Uses Microsoft Java VM client-side. **Critical vendor confirmation**: at line 376-378 the manual states *"The Building Automation Level Network (BLN) is now called the Automation Level Network (ALN). However, all firmware prompt strings continue to use the BLN abbreviation."* — this is the direct vendor explanation for why the wire protocol's identity TLVs and HMI reports use "BLN name" even though modern Siemens marketing has renamed the concept to "ALN". |
+| Field Panel GO User's Manual | 545-001 / A6V10320406 | 2012 | Field Panel GO (FPGO) is a **web-based UI hosted on the panel itself**, requiring the **Power Open Processor with Ethernet ALN** or **Power MEC with Ethernet ALN**. Client-side requirements (load-bearing fingerprint): **Internet Explorer 6.0** (specific version) + **Microsoft Java Virtual Machine (MSJVM)** — *not* Sun Java; both are deprecated Microsoft technologies (IE6 EOL 2014, MSJVM EOL 2007). The "FPGO is installed" signal on a panel therefore implies a long-tail compatibility constraint on operator workstations. Sessions are capped at **two simultaneous FPGO sessions per panel**. Closing a browser without explicit logoff leaves the session open until the ALN/BLN user account's autologoff delay fires, blocking other users. File transfer for translation files (`translations\en-us\headings.xml`), graphics (`\graphics`), and TEC templates (`\tectemplates`) uses the panel's TCP/21 FTP listener, authenticated against the same ALN/BLN user database as the HMI Telnet — gated by the `LSM-FPGO` license SKU. **Critical vendor confirmation**: at line 376-378 the manual states *"The Building Automation Level Network (BLN) is now called the Automation Level Network (ALN). However, all firmware prompt strings continue to use the BLN abbreviation."* — this is the direct vendor explanation for why the wire protocol's identity TLVs and HMI reports use "BLN name" even though modern Siemens marketing has renamed the concept to "ALN". |
 | PPCL (Proprietary Process Control Language) User Guide | 125-1986 / A6V10374898 | 2025 | 159-page PPCL programming-language reference. Title uses "Proprietary"; the body text uses "Powers" (line 487: *"Siemens Building Automation controllers use PPCL (Powers Process Control Language)"*) — both names are vendor-current. Documents the **ACT / DEACT / ENABL / DISABL / Set() / Goto() / Return()** statement set. Notes that **ACT and ENABLE are interchangeable** for the same operation. PXC.A panels deprecate ACT/DEACT/ENABL/DISABL in favor of Goto()/Return() flow control. Several legacy statements (ADAPTM, DPHONE, OIP, ALARM, NORMAL) are not supported on PXC.A. Maps directly to the wire-level PPCL editor opcodes (`0x4100` / `0x4103` / `0x4104` / `0x4106`) documented in this protocol spec. |
-| Siemens Security Advisory SSA-180579 | cert-portal | 2022 / V1.1 2023 | Definitive product/firmware matrix from Siemens ProductCERT. Affected products: **APOGEE PXC Compact (BACnet) < V3.5.5**, **APOGEE PXC Compact (P2 Ethernet) < V2.8.20**, **APOGEE PXC Modular (BACnet) < V3.5.5**, **APOGEE PXC Modular (P2 Ethernet) < V2.8.20**, **TALON TC Compact (BACnet) < V3.5.5**, **TALON TC Modular (BACnet) < V3.5.5**. CVE-2022-45937 (privilege management), CVE-2020-28388 (Predictable Initial TCP Sequence Numbers in Nucleus RTOS TCP/IP stack), DNS implementation CVEs. Confirms the protocol's TCP layer (Nucleus NET 5.1) is structurally vulnerable to off-path session injection before V2.8.20. |
+| Siemens Security Advisory SSA-180579 | cert-portal | 2022 / V1.1 2023 | Definitive product/firmware matrix from Siemens ProductCERT. Affected products: **APOGEE PXC Compact (BACnet) < V3.5.5**, **APOGEE PXC Compact (P2 Ethernet) < V2.8.20**, **APOGEE PXC Modular (BACnet) < V3.5.5**, **APOGEE PXC Modular (P2 Ethernet) < V2.8.20**, **TALON TC Compact (BACnet) < V3.5.5**, **TALON TC Modular (BACnet) < V3.5.5**. Eight CVEs total: **CVE-2020-15795** + **CVE-2020-27009** (DNS / Nucleus NET — cross-referenced to SSA-185699), **CVE-2020-27736** + **CVE-2020-27737** + **CVE-2020-27738** + **CVE-2021-25677** (Nucleus stack — cross-referenced to SSA-705111), **CVE-2020-28388** (Predictable Initial TCP Sequence Numbers in Nucleus RTOS TCP/IP stack), **CVE-2022-45937** (privilege management). Confirms the protocol's TCP layer (Nucleus NET 5.1) is structurally vulnerable to off-path session injection before V2.8.20. |
+| Siemens Security Advisory SSA-718393 | cert-portal | 2025-05-13 V1.0 | **BACnet-only DoS, NOT affecting P2-mode panels.** CVE-2025-40555 (CWE-440 Expected Behavior Violation, CVSS v3.1 4.7 / v4.0 5.3). Affected products: **APOGEE PXC + TALON TC Series (BACnet) — all versions; no fix planned.** A specially crafted BACnet `createObject` request triggers the target device to start sending unsolicited BACnet broadcast messages; only a power cycle restores normal operation. The advisory does NOT name the P2 Ethernet variants — `(P2 Ethernet)` SKUs are absent from the affected-products list. Reported by researchers from Southeast University, UMass Lowell, Drexel. Listed here as a scope note: the BACnet-personality firmware shares a codebase with the P2-personality firmware on most PXC/TALON hardware, so the underlying parser bug *may* exist in P2 panels' BACnet listener if BACnet mode is licensed, but the advisory's scope is BACnet-only. Has no impact on TCP/5033 P2 traffic. |
+| PXC Series Controller Selection Chart | 153-305P11 / A6V10590761 | 2021 | Single-page product/SKU/license matrix. Adds product-side detail not derivable from the wire protocol: SKU suffix conventions (`-E` = BACnet/IP, `-PE` = P2 over Ethernet TCP/IP, `-P` = P2 over RS-485 ALN only), maximum module/point counts per family (PXC Modular: 64 modules / 500 points; PXC Compact 36: 4 modules), and the **LSM-** license-SKU family that gates protocol features at runtime: **`LSM-VAEM`** ("Virtual AEM for Compact and Modular series — requires P2 ALN on RS-485") gates the TCP/3001 Virtual AEM bridging documented elsewhere; **`LSM-FPGO`** ("Field Panel GO on PXC Compact 36 and Modular panels — proprietary") gates Field Panel GO and its FTP/Java-applet stack; **`LSM-SNMP`** ("Enables SNMP Agent on PXC Modular") gates the LSM-SNMP feature behind the UDP/5033 SNMP claim in vendor docs; **`LSM-FLN(36.A)`** gates FLN device support; **`LSM-INT-MDBS / -BMSTP / -JCIN2M / -BC8000 / -SBTXLS / -TRANE / -YORKISN / ...`** gate integration drivers for third-party protocols. The chart is the authoritative source for which licensed features must be loaded before various vendor-documented behaviors actually become observable on the wire. |
 | APOGEE Open System Communication Tech Spec Sheet | 149-404 / A6V10320293 | 2002 | 3-page marketing-level architecture summary. Names the protocols Siemens supports at each layer: **Management/Information Level** = BACnet over TCP/IP, OPC over TCP/IP, Web access. **Controller Level** = Modbus, LonWorks, BACnet, "Vendor specific protocols". **The proprietary APOGEE P2 protocol is NOT named** in this customer-facing doc — it's tucked under "Vendor specific protocols" without further detail, confirming Siemens deliberately doesn't publish P2 details. The doc is useful as a vendor-confirmed organization chart of which protocols ride at which layer. |
-| Apogee Firmware OSS readme V2.8.10 / V3.2.5 | (no public doc number; mirrored at `assets.new.siemens.com`) | 2013 | Open source software bill of materials for the firmware that runs on APOGEE PXC panels. Reveals the implementation stack: **Mentor Graphics Nucleus PLUS 1.15.3** (RTOS), **Nucleus NET 5.1** (TCP/IP stack — what serves TCP/5033), **Cimetrics BACstac 4.3** (BACnet stack), **TinyXML 2.3.3**, **ECHELON LONstack 1**, **PENSAR LON Drivers**, **CyboSoft MFA 1.72** (adaptive control), **Flexera FLEXlm embedded 1.2.0.0** (local license check, not Rainbow), **Micro Digital smxFSFile 2.09** + smxUSBD/smxUSBH (file system + USB). **No TLS/SSL/SSH/SNMPv3 libraries** in the BOM — confirms P2 is cleartext, no TCP-layer encryption available. P2 TCP listener is hand-rolled C on Nucleus PLUS using Nucleus NET sockets. |
+| Apogee Firmware OSS readme V2.8.10 / V3.2.5 | (no public doc number; mirrored at `assets.new.siemens.com`) | 2013 | Open source software bill of materials for the firmware that runs on APOGEE PXC panels. Reveals the implementation stack: **Mentor Graphics Nucleus PLUS 1.15.3** (RTOS) targeting **Freescale/Motorola PowerPC MPC852 and MPC860 cores** (Diab C compiler) — i.e., the PXC hardware platform is PowerPC, not ARM or x86, **Nucleus NET 5.1** (TCP/IP stack — what serves TCP/5033; bundles the **RSA Data Security MD5 Message-Digest** reference implementation for internal use), **Cimetrics BACstac 4.3** (BACnet stack), **TinyXML 2.3.3**, **IEC Intelligent Technologies PEAK 3.14** (LON-side IEC 1131 control extension), **ECHELON LONstack 1**, **PENSAR LON Drivers**, **CyboSoft MFA 1.72** (adaptive control), **Flexera FLEXlm embedded 1.2.0.0** (local license check — what gates the LSM-* license SKUs in the Selection Chart), **Micro Digital smxFSFile 2.09** + smxUSBD/smxUSBH (file system + USB). **No TLS/SSL/SSH/SNMPv3 libraries** in the BOM — confirms P2 is cleartext, no TCP-layer encryption available. P2 TCP listener is hand-rolled C on Nucleus PLUS using Nucleus NET sockets. The single OSS readme covers both **V2.8.10** (P2-era APOGEE) and **V3.2.5** (BACnet-era APOGEE) — same library set, different application layer. |
 
 ### Vocabulary — vendor-documented synonyms
 
@@ -2762,7 +2799,7 @@ Provided for completeness — these are the ports used by the *successor* genera
 |------|----------|---------|-------------------|
 | UDP 47808 | UDP | BACnet/IP | yes |
 | TCP 47808 | TCP (WS/WSS) | BACnet/SC (WebSocket / WebSocket Secure) | yes |
-| UDP 47999 | UDP | BACnet local-group broadcast (BBMD isolation) — **not** a P2-style presence beacon | yes |
+| UDP 47999 | UDP | BACnet local-group broadcast (BBMD isolation) — **not** a P2-style presence beacon. Per PXC.A Reference Manual A6V12954388 line 967: "UDP port for local group communication." | yes |
 | TCP 80, 443 | TCP | HTTP, HTTPS — embedded web UI for engineering | yes |
 | UDP 67, 68 | UDP | DHCP | no |
 | TCP/UDP 53 | TCP/UDP | DNS | no |
@@ -2817,6 +2854,43 @@ The BACnet ALN Field Panel User's Manual (125-3020) Appendix C publishes the ful
 
 This table closes one of the largest "what's still unknown" gaps in the protocol document: the meaning of error codes the panel emits. Every code observed in captures now has a vendor-authored definition. Codes not yet observed in captures are listed as testable — a scanner that deliberately triggers each (e.g. write-too-many-trend-points to trigger `E10`, attempt a coldstart-required op without coldstarting to trigger `E171`, command a value above slope/intercept range to trigger `E11`) can verify the mapping.
 
+#### Additional vendor-documented codes (Appendix C, not in the main table above)
+
+Appendix C of the BACnet ALN Manual enumerates a larger E-code set than the main table reproduces. The following codes are documented but unobserved in any of the captures analyzed — they remain testable but not field-validated. Including them here makes the doc's error-code coverage match the published vendor table:
+
+| Hex code | E-code | Siemens text (Appendix C) |
+|----------|--------|---------------------------|
+| `0x0008` | E8 | Field-panel general error |
+| `0x0017` | E23 | Not coded yet (placeholder) |
+| `0x0019` | E25 | Not coded yet (placeholder) |
+| `0x001A` | E26 | Cannot override |
+| `0x001B` | E27 | Too many commands |
+| `0x001C` | E28 | Report active |
+| `0x001E` | E30 | (slope/intercept error) |
+| `0x001F` | E31 | (slope/intercept negative-case error) |
+| `0x0022` | E34 | (Hostcaller-related error) |
+| `0x0028` | **E40** | **Line of program code was accessed but not traced** — PPCL tracebit-clear condition; the panel-side counterpart to `0x4106` ClearTracebits |
+| `0x0032`-`0x0037` | E50-E55 | Tape/save-related errors (legacy cassette backup; never triggered on Ethernet-only sites) |
+| `0x0039` | E57 | Destination node failed |
+| `0x003A` | E58 | SCB outstanding |
+| `0x003B`-`0x003F` | E59-E63 | Tape/trunk errors (legacy) |
+| `0x0040` | **E64** | **TIU busy** — Trunk Interface Unit busy. Legacy term; the modern equivalent of "TIU" is the panel's own ALN listener. |
+| `0x0041` | E65 | No more alarm devices |
+| `0x0042` | E66 | (general fault) |
+| `0x0043` | E67 | (Node defined-but-not-ready) |
+| `0x0050`-`0x0055` | E80-E85 | Report-state errors (data not ready, report busy, multiple-attempt-required) |
+| `0x0064` | E100 | Tuner needs more data |
+| `0x0065` | **E101** | **Command not supported** — function selected is not supported in this field panel. Sibling of `0x00AC E172` but at a different field-panel feature granularity. |
+| `0x0066` | E102 | (general) |
+| `0x0068` | E104 | Bad category number (destination number invalid) |
+| `0x0070` | E112 | (general) |
+| `0x00AB` | **E171** | **Coldstart required** — "The field panel cannot accept a tape load without being coldstarted." Modern equivalent: "the requested operation requires a coldstart first." |
+| `0x00B6` | E182 | (general) |
+| `0x00FB`-`0x00FD` | E251-E253 | I/O / FLN trunk failure variants |
+| (no hex mapping) | **R0–R13** | PPCL **R-codes** — parse / compile errors specific to PPCL program lines, listed *after* the E-code block in Appendix C (lines 24428+). Examples: R1 = "A program line was not accepted but the field panel cannot determine the specific problem"; R3 = "A program line was entered without a valid line number, re-enter the line with a number from 1 to 32,767"; R6 = "Unrecognized statement"; R9 = "Line numbers are out of order"; R10 = "Too many arguments in the statement"; R13 = "Invalid binary operator." R-codes are surfaced via the HMI program-entry workflow as `R<n>`, *not* as 16-bit hex codes in P2 frames. They don't map to the `0x05`-direction P2 error-response payload — that channel carries E-codes only. |
+
+**Why this is parser-relevant.** A scanner that maps any 16-bit hex value to a known E-code name produces better diagnostics than one that only knows the captured subset. The trade-off is that codes outside the captured subset are vendor-claim-only — they have not been confirmed to actually emit on the wire in the 16-bit hex form Appendix C lists. The mapping is taken from a doc table that interleaves multiple opcodes' error-domain entries, and the column layout occasionally breaks across pages (the `0x0E14` / `0x0E15` ambiguity earlier in this table is a known consequence). Treat the codes above as best-effort labels for forensic display.
+
 ### Identity fields — vendor-confirmed IdentifyBlock TLV mapping
 
 The BACnet ALN Field Panel User's Manual at §"Field Panel Name Report" prints the three identity strings carried by every PXC, surfaced via the HMI command `S, H, F, C, N, D`. The exact output from the manual:
@@ -2840,9 +2914,44 @@ These three strings map directly to the IdentifyBlock body TLVs documented earli
 
 Constraints from the manual:
 - **All three are alphanumeric fields** (no special-character whitelist published).
+- **DNS node names** are capped at 30 characters and may not contain spaces (PXC Compact Tech Ref line 437).
 - **Modifying the Node name or the ALN/BLN name forces a panel coldstart.** This is documented as a CAUTION in §"Modifying Ethernet Capable Field Panel Names" — operators are expected to schedule downtime for any rename.
 - **The Site name is functionally significant**, not cosmetic. The manual states: *"BACnet panels and Insight software on same IP subnet should have the same site name. The site name affects which discovery and replication times are used."* This is the vendor explanation for why the site code TLV exists as a separate field — it gates per-site discovery/replication timing on the supervisor side.
 - **The BLN name must be identical to the System Name of the BACnet ALN in the System Profile** — i.e. every panel that participates in the same ALN must carry the exact same BLN string. Lines up with the reverse-engineered bouncer behavior: a wrong BLN name returns TCP RST, because to the panel the frame doesn't belong on its network.
+
+### HMI command chords — vendor-documented (BACnet ALN Manual menu structure)
+
+The panel's HMI (reachable via TCP/23 Telnet when enabled, or via a directly-attached serial console) presents a chord-driven menu. The top-level prompt is:
+
+```
+> Point, Application, Time, Message, Cancel, System, passWord, Bye?
+```
+
+Each capitalized letter is a single-keystroke selector that descends into a sub-menu. The full menu tree (per BACnet ALN Manual lines 1077 onward) is dense; the chords useful for a forensic reader trying to interpret a leaked HMI capture are:
+
+| Chord | Sub-menu / report | Useful for |
+|-------|-------------------|------------|
+| `S, H, F, C, N, D` | Field Panel Name Report — prints `BLN name / Site name / Node name` in cleartext | What this doc calls the IdentifyBlock body's three TLVs. Single chord, plain ASCII. |
+| `S, H, F, D` | Field Panel Configuration Report — prints firmware revision, firmware checksum, BLN name, COV Resubscribe Period (default `30` min), COV Poll Rate (default `60` s), UDP Port (BACnet, default `47808`), MSTP baud, Keep Alive Poll Rate (default `60` s), Discovery Poll Rate (default `60` s), Default Device Reserved Instance Base (default `10000`) | Comprehensive operator-visible fingerprint of every supervisor-side timer this panel exposes. |
+| `S, H` | `>Fieldpanels, Ethernet, nodeNametable, Disks, Reportprinter, Licensemanager, Quit?` | Drill into Ethernet config, node-name routing table, license manager (LSM-* SKUs). |
+| `S, S, D` / `S, S, A` / `S, S, R` | DST display / add / remove | Daylight-saving table is a manual date-pair list (year range 1959–2048), not a rules engine — fingerprintable as an old-school BAS convention. |
+| `S, E, E` / `S, E, I` | System-error dialing enable / inhibit | Toggles whether system errors auto-dial out to a configured paging destination. |
+| `S, B, P, M` | BACnet priority slot map | The vendor-default BACnet priority-slot assignments for OPER/SMOKE/EMER/PDL/SCHED/PPCL are reconfigurable here. |
+| Top-level `Cancel` | `>Calendar, Schedule, coMmander, Notification, Bbmd, coVtable, Event, Quit?` | Cancel branch is misleadingly named — it's actually the BACnet-object editor (Calendar, Schedule, COV table, BBMD entries). |
+
+**HMI hotkeys (any context):**
+- `CTRL+B` — Autodial Bye (forces hang-up of an active dial-out HMI session)
+- `CTRL+X` — Autodial Extend 20 min (renews the dial-out timeout)
+- `CTRL+P` — Define string (saves a snippet for paste)
+- `CTRL+I` — Insert defined string
+- `CTRL+S` — Pause display output
+- `CTRL+A` — Hold alarms for 30 seconds
+
+**Why this matters for a passive listener.** A panel with TCP/23 Telnet enabled may have an active operator session, and the Telnet stream is cleartext: it carries the HMI menu prompts and full report text described above. Capturing a Field Panel Name Report from Telnet is the most direct cleartext leak of the IdentifyBlock TLV values short of a P2 handshake — and the chord is short enough that a passive operator-shoulder-surf can recover it. The chord-driven design has zero defensive value once the Telnet port is reachable; it's a UX convention, not a security boundary.
+
+**ALN time synchronization (BACnet ALN Manual lines 1971-2003):** The lowest-numbered panel on the ALN initiates a time-sync broadcast at midnight + a per-node offset. Only firmware ≥ V3.0 initiates; older firmware accepts the sync but cannot originate. This is a panel-to-panel mechanism, separate from any supervisor-driven time pushes.
+
+**Autorestore / coldstart (BACnet ALN Manual lines 2583-2606):** Panels autorestore their database from internal flash when the supervisor (Insight or Desigo CC) isn't reachable for 3 minutes; accumulated trend data is discarded on coldstart but not on warmstart. Practical implication: if a panel's TCP/5033 listener resets and starts answering with default state, it most likely just coldstarted. The 3-minute autorestore window is itself a fingerprint (no production BAS protocol of the era waits exactly 3 minutes for orphan recovery).
 
 ### ALN type is mutually exclusive (BACnet OR P2, not both)
 
@@ -2880,6 +2989,17 @@ PXC.A modernization docs (A6V13998441) clarify a common misconception:
 **`.P2` is the on-disk file extension for an exported panel database**, used as input to commissioning / migration tools. It is *not* a wire-format trace. The wire-format protocol in this document is the over-the-wire P2 protocol; the `.P2` file is the engineered database serialization. A `.P2` file contains points, alarms, PPCL programs, trends, schedules, FLN device tables, state-text tables, DST tables, and user accounts — i.e. the panel's engineered configuration. It does not contain message-level wire captures.
 
 The Desigo CC project workflow is: *Backup panel → `.DAT` (live wire pull) → P2 Export utility → `.P2` (offline project file) → Commissioning Tool import → re-engineering for BACnet PXC*.
+
+**Full backup-file-extension taxonomy** (per A6V13998441 lines 203-216, 272):
+
+| Extension | Created by | Contains | Used by |
+|-----------|------------|----------|---------|
+| **`.DAT`** | Desigo CC backup operation against a live P2/IP panel | Live binary panel state | P2 Export Utility (converts to `.P2`) |
+| **`.P2`** | P2 Export Utility (offline) | Panel database, ready for migration to a different platform | Commissioning Tool / Design Tool+ (re-engineering) |
+| **`.DB`** | Desigo CC against a BACnet PXCM panel | Alternative serialization for BACnet-mode panels | Same downstream tools |
+| **`.ffc`** | Fast Forward Conversion tool | Conversion-rules / mapping input for FFC | Fast Forward Conversion (MBC/MEC → PXCM step) |
+
+The full migration path for a Siemens-stack site is a **two-step conversion**: **MBC/MEC → PXCM (Fast Forward Conversion)** then **PXCM → PXC.A (Design Tool+)**. Tools involved: Commissioning Tool (CT), Design Tool+ (DT+), HMIXfer (MMI Database Transfer), Desigo CC, Datamate Advanced (DMA+), Fast Forward Conversion (FFC), ABT Site. **User accounts and access groups are not migrated automatically** (A6V13998441 line 416) — they are re-entered manually in ABT Site after migration. Practical implication for an audit: a recently migrated site's user-account configuration may not match the source panel's HMI-defined accounts; cross-reference with the legacy panel's `Users Report` before assuming continuity.
 
 ### PXC.A successor — confirmed BACnet-only
 
@@ -2986,6 +3106,26 @@ The mapping is hypothesis (not vendor-stated explicitly), but it's the cleanest 
 
 PPCL programs are stored on the panel, edited via Insight/Desigo CC, and execute in the panel's runtime. A scanner that walks `0x0985` EnumeratePrograms can dump program source, and the 4 editor opcodes are the write-back path.
 
+**Statements not yet mapped to a wire opcode.** The PPCL User Guide enumerates a substantially larger statement set than the 4 wire opcodes the corpus surfaces. Statements seen in the vendor manual but with no wire-opcode mapping yet:
+
+| PPCL statement | Function | PXC.A support? | Possible wire-opcode surface |
+|----------------|----------|-----------------|------------------------------|
+| `SAMPLE` | Sample a statement at a fixed interval | yes | candidate for trend / sample opcodes (`0x0982` family?) |
+| `LOOP` | PID-style closed-loop control block | yes | likely embedded in setpoint-write workflow; not a separate opcode |
+| `HLIMIT` / `LLIMIT` | Set high / low alarm limit on a point | **deprecated — use SETVAL** | candidate for property-write opcodes (`0x4222` family); deprecation note explicit |
+| `ENALM` | Enable alarm on a point | **deprecated — use SETVAL** | as above |
+| `ADAPTM` | Adaptive control, multiple | **NOT supported on PXC.A** | CyboSoft MFA library (per OSS readme) — wire-opcode surface unknown |
+| `DPHONE` | Disable phone (dialup modem) | **NOT supported on PXC.A** | dialup-era op; unlikely to surface in modern captures |
+| `OIP` | Operator interface program (PRMMI menu trees) | **NOT supported on PXC.A** | HMI / Telnet-side; not a TCP/5033 op |
+| `TABLE` | Lookup-table evaluation | yes | per-point data, not a wire op |
+| `WAIT` / `TOD` | Time-based execution gating | yes | per-point data |
+| `ALARM` / `NORMAL` | Mark a point in / out of alarm | yes | wire surface unknown — possibly `0x0273`-family for state-clear |
+| `ALMCNT` / `ALMCT2` | Alarm count accumulators (panel-internal counters) | yes | not opcodes; readable as named points via `0x0220`/`0x0271` |
+
+A scanner that wants to surface PPCL-statement-driven panel state would parse the source text returned by `0x0985` and decode statements directly. Most of these don't appear on the wire as opcodes — they execute inside the panel's PPCL interpreter using the same point read/write primitives a supervisor would.
+
+**SETVAL — the catch-all property-write statement.** The PPCL manual replaces the deprecated `ENALM`/`HLIMIT`/`LLIMIT` statements with `SETVAL` ("Write property values"). `SETVAL` from inside PPCL writes any writable property on any reachable point. The wire-side equivalent of an operator-issued `SETVAL` is most plausibly the same `0x4222` BulkPropertyWrite documented in *Property writes*, since both target SYST-tagged properties with type+value bodies. A scanner that observes `0x4222` on TCP/5033 cannot tell whether the write originated from an operator click in Desigo or from a `SETVAL` statement inside a running PPCL program.
+
 ### APOGEE point types — vendor-documented BACnet equivalence table
 
 The BACnet ALN Field Panel User's Manual at §"Object Identification" publishes the APOGEE→BACnet point-type cross-reference. This is the authoritative mapping for what a P2 point's underlying logical type corresponds to in BACnet object terms:
@@ -3010,6 +3150,44 @@ The BACnet ALN Field Panel User's Manual at §"Object Identification" publishes 
 
 The "BACnet code" column is the numeric ASHRAE 135 object_type enumeration. **P2's internal point-type encoding is not the same numeric scheme** (P2 uses its own type bytes in the response metadata block — see *Data-type codes* earlier). The vendor confirms that the *logical* types are the same set across BACnet and P2 personalities — LAI/LAO/LDI/LDO/LPACI/LFSSL/LFSSP/LOOAL/LOOAP/LENUM is the canonical APOGEE point-type taxonomy.
 
+**Point-type acronym expansions** (BACnet ALN Manual lines 6620-6665, 7553-7596):
+
+| Acronym | Expansion | BACnet class |
+|---------|-----------|--------------|
+| **LAI** | Logical Analog Input | AI |
+| **LAO** | Logical Analog Output | AO |
+| **LDI** | Logical Digital Input | BI |
+| **LDO** | Logical Digital Output | BO |
+| **LPACI** (alt. LAPCI) | Logical Pulsed Accumulator Input | AO / AI hybrid |
+| **L2SL** | Logical 2-State Latched | BO |
+| **L2SP** | Logical 2-State Pulsed | BO |
+| **LFSSL** | Logical Fast/Slow/Stop Latched | MO |
+| **LFSSP** | Logical Fast/Slow/Stop Pulsed | MO |
+| **LOOAL** | Logical On/Off/Auto Latched | MO |
+| **LOOAP** | Logical On/Off/Auto Pulsed | MO |
+| **LENUM** | Logical Enumerated (1–32767 range; default 6-state text table) | MV |
+
+Knowing the acronym expansions makes BACnet ALN Manual HMI report text from a captured Telnet session decodable without cross-referencing — and matches `0x0220`/`0x0271` response data-type codes to a vendor-named logical type for display.
+
+### ATEC application numbers — vendor-documented per ATEC Owner's Manual
+
+The ATEC Owner's Manual (125-3209 / A6V10320281) at §"Applications" enumerates the application numbers shipped on Actuating Terminal Equipment Controllers — useful as a sanity check for `APPLICATION` reads against a TEC device:
+
+| Application | Function |
+|-------------|----------|
+| **2473** | Slave Mode (legacy) |
+| **2486** | Slave Mode |
+| **2500 / 2501** | VAV cooling-only |
+| **2520** | VAV cooling |
+| **2521** | VAV cool/heat |
+| **2522** | VAV with electric reheat |
+| **2523** | VAV with hot-water reheat |
+| **2524 / 2526** | Series / parallel fan-powered VAV with electric reheat |
+
+When `APPLICATION` returns one of these values against a TEC, the slot-table for that application can be inferred from the matching table in the ATEC manual. Custom integrator applications use other numeric values not enumerated here.
+
+**Unbundle convention.** Per the ATEC Owner's Manual, *"Point numbers that appear in brackets `{ }` may be unbundled at the field panel"* (repeated ~30× across the manual). "Unbundle" is the vendor term for promoting a TEC-internal slot into the panel's enumerable point namespace — the wire-level effect a `0x0981` walk surfaces when it lists TEC subpoints from a panel. **Not all TEC slots are unbundlable**: in slave-mode (Application 2486), Point 48 (`MTR1 COMD`) appears in `{ 48 }` and can be unbundled to control a motor from the panel, but Points 49 and 50 (`DO 1` / `DO 2`) are internally wired for the same motor function and cannot be promoted. In non-slave applications like 2520 VAV Cooling, Point 48 is `DMPR COMD` (damper command) with different unbundle constraints. The brace convention is application-specific and lives in the per-application slot tables in the ATEC manual.
+
 ### Hard topology caps — vendor-documented
 
 | Limit | Value | Source |
@@ -3031,7 +3209,7 @@ The BACnet ALN Field Panel User's Manual publishes an "Open IP Ports in Firmware
 
 | Port | Service | Notes |
 |------|---------|-------|
-| TCP 21 | FTP | Used for config-file transfer and trend export |
+| TCP 21 | FTP | Used for config-file transfer and trend export. **Also the wire surface for Field Panel GO (FPGO) file management** — per Field Panel GO User's Manual A6V10320406 §"Steps for Using Windows FTP Client" (lines 1842-1900), FPGO clients authenticate to TCP/21 using the panel's ALN/BLN user account credentials to download/upload `headings.xml` translation files, page-template files, and full FPGO backups. The FTP listener accepts the same user database as the HMI Telnet listener — no separate FPGO credential store. Implication for a scanner: a panel with `LSM-FPGO` license loaded exposes FTP, and a successful Telnet HMI auth implies successful FTP auth with identical credentials. |
 | TCP 23 | Telnet | HMI access — disabled by default |
 | **TCP 50** | **"Second Telnet (for Integration Drivers only)"** | **NEW — vendor-documented but never publicly advertised.** Worth probing for banner; likely the channel used by non-Insight third-party engineering products. Disabled by default. |
 | UDP 69 | "Diagnostic" | Disabled by default; "should only be enabled with instructions from Technical Support." Likely TFTP traditionally. |
