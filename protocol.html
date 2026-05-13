@@ -324,7 +324,6 @@
 
 <div class="crt-frame">
 
-    <!-- Header / back-nav -->
     <div class="page-nav">
         <div>
             <span class="prompt-path">C:\CUPPS\DOCS</span><span class="prompt">&gt;</span>
@@ -335,34 +334,31 @@
         </div>
     </div>
 
-    <!-- Loading state -->
     <div id="loading">Loading PROTOCOL.md ...</div>
 
-    <!-- Error state -->
     <div id="error"></div>
 
-    <!-- Table of contents (populated after render) -->
     <div id="toc" style="display:none;">
         <div id="toc-title">&gt; CONTENTS</div>
         <ul id="toc-list"></ul>
     </div>
 
-    <!-- Rendered markdown -->
     <div id="content"></div>
 
 </div>
 
-<!-- Status Bar -->
 <div class="status-bar">
     <span>CUPPS-DOS v6.22</span>
     <span id="status-file">FILE: PROTOCOL.MD</span>
     <span id="status-time"></span>
 </div>
 
-<!-- Scroll-to-top -->
 <button id="scroll-top" aria-label="Scroll to top">^ TOP</button>
 
-<!-- marked.js for markdown rendering -->
+<div style="display: none;" aria-hidden="true">
+  {% include_relative PROTOCOL.md %}
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
 
 <script>
