@@ -1,6 +1,6 @@
 # Apogee P2 Protocol — Open Specification
 
-**Version**: 1.4
+**Version**: 1.5
 **Status**: Draft / Working Specification
 
 ## Abstract
@@ -856,7 +856,15 @@ The BLN name can be learned by:
 - Reading site configuration documents
 - Sniffing existing traffic on the network (BLN name appears in every frame)
 - Inspecting traffic captured at the site
-- The `0x0050` StatusQuery opcode (leaks the supervisor name without authentication)
+- The `0x0050` StatusQuery opcode — see §22.4 for the request body shape that returns the panel's BLN and supervisor name in one round-trip
+
+> **Pitfall — slot 4 is byte-exact.** Slot 4 must be the **literal canonical form including the `|<port>` suffix** — for example `BUILDING1DCC-SVR|5034`, exactly 21 characters. Do NOT:
+>
+> - Split the scanner name on `|` and use only the leading portion (`BUILDING1DCC-SVR`) in slot 4. The configured-peer match compares the full string; the stripped form fails.
+> - Use a different scanner-name form for different msg_types (e.g. full form for `0x33`, stripped form for `0x34`). The `msg_type` does not change the slot 4 matching rule.
+> - Treat the trailing `|5034` as documentation that the scanner is "listening on port 5034" — the suffix is part of the identity string, not a network-layer hint.
+>
+> **However**, when *parsing* response frames, the panel often returns the bare form (`BUILDING1DCC-SVR`, without `|5034`) inside response payload TLVs. A parser that filters its own routing names out of decoded LP-strings should match against both forms — split on `|` for *parsing*, never for *building*. This caused an empirically-observed failure in an independent re-implementation that split slot 4 for handshakes and got partial responses; the same panel accepts the full literal form cleanly.
 
 ### 9.4 Handshake Response
 
@@ -1138,6 +1146,17 @@ A panel speaking the modern dialect will **silently drop** a handshake sent with
 
 The short first timeout is critical: a 30-second wait per modern panel would make discovery painfully slow. Two seconds is enough for legacy panels (which respond in well under a second).
 
+> **Important: only `0x33` (DATA) and `0x34` (HEARTBEAT) are session-level `msg_type` values.**
+>
+> A common implementer mistake is to iterate through every `msg_type` in §5.1 as a "dialect candidate" during handshake detection. **Do not.** `0x2E` (CONNECT) and `0x2F` (ANNOUNCE) are pre-session transport message types — they appear on the wire only in specific contexts (§11.3):
+>
+> - `0x2E` (CONNECT) is the Mode A initial CONNECT frame, sent before any IdentifyBlock has been exchanged. It does not carry an IdentifyBlock body itself.
+> - `0x2F` (ANNOUNCE) is for multicast presence beacons on `233.89.188.1` (§13.1) and never appears on a unicast TCP session after the handshake.
+>
+> A handshake-probing loop that tries `0x33` → `0x34` → `0x2E` → `0x2F` will fail on the `0x2E` and `0x2F` attempts in a way that looks identical to "wrong slot 4" (silent timeout), adding 4–12 seconds of confusion per panel. It also opens four times more TCP sockets than necessary; on a panel with a small peer-session budget (typically 8–16) this can exhaust the slot count and cause subsequent legitimate sessions to RST.
+>
+> **The correct session dialect candidate set is `{0x33, 0x34}` — two values, tried in that order.**
+
 ### 11.3 Additional Dialect Indicators
 
 The four message-type bytes pair with the dialects as follows:
@@ -1154,6 +1173,24 @@ The four message types pair into two dialect groups: legacy = {`0x2E`, `0x33`}, 
 ### 11.4 Caching
 
 A scanner SHOULD cache the discovered dialect per panel IP. Repeated connections to the same panel within one process can then skip the probe. A cached value should be invalidated and re-probed if the cached message type stops eliciting responses (e.g., after a firmware upgrade).
+
+### 11.7 Handshake Debugging Checklist
+
+When a handshake fails — silent timeout, immediate RST, or RST after IdentifyBlock — the four most common causes, in decreasing order of observed frequency across field reports:
+
+| # | Cause | Symptom | Where to fix | Reference |
+|---|---|---|---|---|
+| 1 | **Wrong scanner name in slot 4** (configured-peer-list reject) | TCP ACK to your IdentifyBlock but no application-layer response. Eventual RST or quiet close. | Switch slot 4 to `<SITE>DCC-SVR\|5034`. Do NOT split on `\|`. | §9.3, §9.10 |
+| 2 | **Wrong `msg_type` for the firmware** (`0x33` against modern, or `0x34` against legacy) | Same symptom as #1 — silent drop. The modern dialect drops `0x33` with no response; legacy panels handle `0x34` inconsistently. | Try the other `msg_type` (only `0x33` and `0x34` are session candidates). Once a panel responds, cache the dialect. | §11.2, §30.4 |
+| 3 | **Truncated 16-byte trailer** | Same symptom as #1/#2 — silent drop. Some firmware revisions tolerate truncation; many don't. | Verify trailer is exactly 16 bytes: separator (1) + 3 flag bytes + 5 reserved zeros + 4-byte BE timestamp + 2-byte session id + 1 trailing null. | §9.2 |
+| 4 | **Wrong BLN name** | Immediate TCP RST after the IdentifyBlock is sent (not silent — actively rejected). | Verify the BLN by sniffing existing traffic on the network, or by running §22.4 `0x0050` bootstrap. | §9.3 |
+
+**Rule of thumb:** if you get a TCP RST quickly (under a second), it's a BLN mismatch (#4). If you get silence and an eventual timeout, it's #1 / #2 / #3 — work that list in order. Cases #1 and #2 are far more common than #3 in field reports.
+
+**What this checklist does NOT cover:**
+- Network/firewall issues (port 5033 blocked) — the TCP connect itself fails or times out before the handshake starts.
+- Panel out of peer-session slots (typical 8–16 budget exhausted) — RST is immediate on the *TCP connect*, not after the IdentifyBlock.
+- Wrong site name in the IdentifyBlock body TLV 2 — per §9.10, the site code is present-but-not-validated. A wrong site doesn't cause a handshake failure; it just means metadata you later read may not match what you expect.
 
 ---
 
@@ -1325,6 +1362,61 @@ Two distinct wire shapes depending on which scope the write targets:
 
 The separator byte (`0x00` NONE vs `0x23` SYST) distinguishes the two shapes.
 
+### 12.6.1 Worked Example — Read One Point Byte-by-Byte
+
+A complete request → response pair for reading point `"ROOM TEMP"` from device `"VAV001"` on node `node1`, with site code `BUILDING1` and BLN `MYBLN`. Scanner name follows the canonical form (`BUILDING1DCC-SVR|5034`). The panel speaks the legacy dialect (`msg_type = 0x33`); the modern variant uses `msg_type = 0x34` and opcode `0x0220` instead of `0x0271`, with otherwise identical body shape.
+
+**Request bytes** (76 total — scanner → panel):
+
+```
+Offset  Bytes                                            Meaning
+──────  ────────────────────────────────────────────     ──────────────────────────────────
++0      00 00 00 4C                                      total_length = 0x4C = 76
++4      00 00 00 33                                      msg_type = 0x33 (DATA / legacy)
++8      00 12 34 56                                      sequence = 24-bit random (§5.2)
++12     00                                               leading routing null
++13     "MYBLN\0"                                        slot 0 — BLN name
++19     "node1\0"                                        slot 1 — destination node (lowercase)
++25     "MYBLN\0"                                        slot 2 — BLN name (repeat)
++31     "BUILDING1DCC-SVR|5034\0"                        slot 3 — scanner name (canonical)
++53     02 71                                            opcode 0x0271 (legacy ReadProperty)
++55     00 00                                            2-byte sub-header (always 00 00)
++57     01 00 06 "VAV001"                                TLV: device name (u16 BE length = 6)
++66     01 00 09 "ROOM TEMP"                             TLV: point name (u16 BE length = 9)
++78     00 FF                                            request trailer (sentinel)
+```
+
+**Modern-dialect equivalent**: replace `00 00 00 33` with `00 00 00 34` at offset +4, and `02 71` with `02 20` at offset +53. All other bytes are identical.
+
+**Response bytes** (161 — panel → scanner; lengths vary with description / point-name string lengths):
+
+```
+Offset  Bytes                                            Meaning
+──────  ────────────────────────────────────────────     ──────────────────────────────────
++0      00 00 00 A1                                      total_length = 161
++4      00 00 00 33                                      msg_type echoes request
++8      00 12 34 56                                      sequence echoes request
++12     01                                               direction byte = 0x01 SUCCESS (§8.3)
++13     "MYBLN\0"                                        slot 0 — BLN (echo)
++19     "BUILDING1DCC-SVR|5034\0"                        slot 1 — us (was dest), role swap
++41     "MYBLN\0"                                        slot 2 — BLN (echo)
++47     "NODE1\0"                                        slot 3 — panel (was src), role swap
++53     03 00 02 00 00                                   response header
++58     01 00 06 "VAV001"                                TLV: device name (echo)
++67     01 00 09 "ROOM TEMP"                             TLV: point name (echo)
++79     00 01 01 00 10 "Conference Room A"               TLV: device description
++95     01 00 09 "ROOM TEMP"                             TLV: point descriptor
++A5     01 00 00                                         ← value-block marker (start scan here)
++A8     00 00 00 01                                      4-byte sentinel (R2/R3 explicit-flags form)
++AC     00                                               status-group leading byte (always 0x00)
++AD     00                                               ← comm_status (0x00 = online, 0x01 = stale) — §15.2
++AE     06                                               error code byte in status group (0x06 = typical comm err)
++AF     42 94 00 00                                      IEEE 754 BE f32 = 74.0 (the value)
++B3     00 01 00 05 "DEG F"                              units TLV
+```
+
+**Parser implementation note.** The byte at offset `+AD` (`comm_status`) is the **second byte of the trailing 3-byte status group**, not the second byte of the metadata-block-as-a-whole. Earlier drafts of §15.2 said "second byte of the metadata block"; readers interpreted that as offset `+A9` (the second byte of the 4-byte sentinel, which is `0xFF` in R1 frames and useless as a flag). **Use the offsets in this diagram as authoritative**; §15.2 has the matching byte-offset layout for the full value-block scan.
+
 ### 12.7 BulkPropertyWrite `0x4222` (The SYST Write Path)
 
 The canonical opcode for SYST-scoped setpoint writes. Used when `0x0240` against a SYST-scoped point returns error `0x0E15`. The supervisor transparently retries the same write as `0x4222`, which succeeds.
@@ -1439,7 +1531,9 @@ Cursor-based panel-wide point enumeration. Three sub-variants by scope:
 - `0x0971` — subnet scope (FLN-bus walk)
 - `0x0981` — panel-wide (every point on the panel including panel-internal PPCL variables)
 
-Request body:
+Two request body shapes are observed in production traffic. Both are accepted by the panels tested; the choice depends on which client traffic the implementer is mirroring.
+
+**Form A — SYST-scope** (Desigo CC supervisor traffic; documented canonical):
 
 ```
 09 81 00 00 01 00 04 "SYST" 01 00 00 00 00 00 00
@@ -1447,7 +1541,17 @@ Request body:
 opcode subop  scope TLV   cursor TLV   terminator
 ```
 
-Start at cursor `0x0000` for the first request; the response carries a continuation cursor for subsequent requests. Iterate until cursor returns to `0x0000` or to a defined end-of-data sentinel (`0xFFFF` in some firmware).
+**Form B — wildcard-filter** (empirically verified against PXC100-PE96.A panels by the open-source scanner ecosystem):
+
+```
+09 81 00 00 01 00 01 "*" 01 00 01 "*" 00 00 01 00 LL <cursor> 01 00 00
+└─┬─┘ └─┬─┘ └────┬────┘ └────┬────┘ └─┬─┘ └────────┬─────────┘ └──┬──┘
+opcode subop  filter 1     filter 2  sep      cursor TLV       trailer
+```
+
+Form B uses two `*` filter TLVs (one each for class and identifier) in place of the SYST scope marker. Field-tested against PME1252 and PME1300 firmware on PXME and PXCE hardware platforms — both shapes return identical entry sets, but the panel's internal handler differs (Form A goes through the SYST-scope handler; Form B goes through the wildcard-filter handler). Some early firmware revisions are reportedly stricter about Form A; some are stricter about Form B. Implementers SHOULD prefer Form A unless reproducible field evidence shows the target firmware requires Form B.
+
+Start at cursor `0x0000` (empty cursor TLV) for the first request; the response carries the next entry's name as the new cursor. Iterate until the cursor stops advancing (panel returns the same entry on consecutive calls — see §12.12.1) or until a defined end-of-data sentinel.
 
 ### 12.12.1 Cursor Advancement and Compound-Name Entries
 
@@ -1751,6 +1855,26 @@ Replication uses opcodes:
 | Per-supervisor remote (dial-up) BLNs | 300 |
 | Per-supervisor modems | 8 |
 
+### 13.5 Point Catalog Requirement
+
+Sub-points within a TEC device are addressed on the wire by **slot number** (1–99) but identified to humans by **name** (`ROOM TEMP`, `APPLICATION`, `CTL STPT`, etc.). The slot → name mapping is **application-specific** — every TEC device runs one of ~800 distinct *applications* (VAV-cooling, VAV-reheat, fan-coil, boiler, chiller, custom-PPCL, ...), and each application has its own slot layout.
+
+A scanner can interpret slot numbers in three ways, in increasing order of capability:
+
+1. **Read-by-name only** (no catalog needed). Build read requests with literal point names (`"ROOM TEMP"`, `"APPLICATION"`). The panel accepts the name and translates to slot internally. This works for the ~80% of building-automation reads that target a small set of well-known names (`ROOM TEMP`, `APPLICATION`, `CTL TEMP`, `CTL STPT`, `DAY.NGT`). **This is the minimum-viable scanner.**
+
+2. **Enumerate-then-read** (no catalog needed). Use `0x0986` (FLN enumerate, §12.15) and `0x0981` (panel-wide point enumerate, §12.12) to walk the device. Both opcodes return entries with the point **name** included, so the implementer learns the slot layout dynamically. Costs one round-trip per ~10 points but gives a complete picture without prior knowledge.
+
+3. **Slot-based reads with a catalog** (catalog required). To translate `read slot 4 on device VAV001` into `"this is ROOM TEMP, units DEG F, analog read-only"`, the scanner needs the application's point table. The catalog is conventionally shipped as a JSON file keyed by application number, with each entry listing `{slot: (name, description, units, read_only, slope, intercept, ptype)}`. A reference catalog covering ~797 applications is publicly available in the [P2Scanner repository](https://github.com/jamesccupps/P2Scanner) as `tecpoints.json`. Implementers who don't want to vendor that file can derive most of it from `0x0981` enumeration responses (which return slot + name + value + units per point) or from Siemens TEC application reference documents.
+
+**Choice criteria:**
+
+- **Minimum-viable diagnostic scanner**: option 1. No catalog, no enumeration. Reads `ROOM TEMP`, `APPLICATION`, `CTL TEMP` by name; classifies devices as online/offline based on the comm-status flag (§15.2).
+- **Inventory tool / BACnet bridge**: option 2 or 3. Must surface every readable point with units, so either enumerate at startup (option 2) or vendor the catalog (option 3).
+- **High-fidelity scanner that surfaces state-set labels, slope/intercept, point types**: option 3. The catalog carries metadata the wire protocol doesn't transmit.
+
+The wire protocol is identical across all three approaches — the catalog is a client-side artifact only and is never transmitted to the panel.
+
 ---
 
 ## 14. Response Parsing — Point Reads
@@ -1854,14 +1978,26 @@ Without accounting for this, a scanner will confidently report `72°F` for a VAV
 
 ### 15.2 The Live-vs-Stale Indicator
 
-The **second byte of the metadata block** after the `01 00 00` marker is the comm-status flag:
+The value block ends with a trailing 3-byte status group (just before the 4-byte float). The **comm-status flag is the middle byte of that group — offset +8 from the start of the `01 00 00` marker**. Concretely, the full layout is:
 
-| Value | Meaning |
+```
+Offset  Bytes              Meaning
+─────   ─────              ──────────────────────────────────────────────
++0      01 00 00           value-block marker
++3..+6  XX XX XX XX        4-byte quality-flags sentinel
+                           (3F FF FF F[7|F] wildcard, OR 00 00 00 00 explicit)
++7      00                 status-group leading byte (always 0x00)
++8      00 or 01           ← comm-status flag (this byte)
++9      00 or 06           error code (06 = typical comm error)
++10..+13 XX XX XX XX        f32 BE value
+```
+
+| Comm-status byte | Meaning |
 |---|---|
 | `0x00` | Device is online; value is live |
 | `0x01` | Device is comm-faulted; value is stale cached data |
 
-The **third byte** is an error code; `0x06` is the typical comm-error code. Other codes surface for different failure modes.
+> **Implementer note:** earlier drafts described this as "the second byte of the metadata block after the marker," which is ambiguous — readers interpreted "metadata block" as the 4-byte sentinel and landed on byte +4 (which is `0xFF` in normal traffic and never the right comm-status). Production scanners and the bundled Wireshark dissector both read the byte at offset +8. The byte at offset +9 is the error code, of which `0x06` is the typical comm-error code.
 
 Supervisor UIs (Desigo CC, Insight) display comm-faulted points with a `#COM` flag. Scanners SHOULD do the same.
 
@@ -2399,8 +2535,10 @@ A scanner can iterate candidate BLN names against a known panel IP and observe t
 - Site documentation (commissioning records, BAS architecture diagrams)
 - Sniffed traffic on the network (BLN name appears in every frame)
 - Captured traffic from the site
-- The `0x0050` StatusQuery opcode (leaks supervisor name; §23.4)
+- The `0x0050` StatusQuery opcode (leaks supervisor name; §22.6 has the worked-example request body)
 - Routing-table broadcasts from neighbor panels (§12.10)
+
+**Prefer §22.6 over the Cartesian attack when possible.** On permissive sites, a single `0x0050` round-trip returns the panel name in slot 3 and BLN in slot 0 — eliminating the dictionary search entirely.
 
 ### 22.2 Discovery Flow
 
@@ -2449,6 +2587,39 @@ A PXC panel and a Windows-based supervisor can be distinguished without sending 
 **Combined classifier**: a host that listens on TCP/5033, sends packets with IPv4 TTL=64, and uses a constant initial TCP window of 16000 is a PXC panel with high confidence. A scanner can use this fingerprint to skip a wasted handshake attempt against a Windows supervisor that happens to listen on TCP/5033 (which a few site configurations expose).
 
 This fingerprint is purely passive — it requires only that a single TCP segment from the target host be observed. The signal holds across firmware versions because it derives from Nucleus stack defaults, which Siemens has not changed across any P2-era firmware revision.
+
+### 22.6 `0x0050` Status Query — One-Round-Trip Bootstrap
+
+A more efficient cold-discovery primitive than §22.1's Cartesian attack works on panels with permissive peer lists: open a TCP session, send a `0x0050` Status Query with wildcard/empty routing slots, and parse the response. The panel returns its own identity in the response's role-swapped routing slots (BLN in slot 0, panel name in slot 3) plus the supervisor identity it expects in slot 1 — giving the client everything it needs to construct properly-routed sessions in a single round-trip.
+
+This is the bootstrap path the Cartesian attack of §22.1 should fall through *from*, not *to*: try §22.6 first; only fall back to dictionary iteration when the panel rejects the unrouted `0x0050` probe.
+
+**Request body** (66 bytes total, wire-verified against a production PME1252 panel):
+
+```
+Offset  Bytes                                            Meaning
+──────  ────────────────────────────────────────────     ──────────────────────────────────
++0      00 00 00 42                                      total_length = 66
++4      00 00 00 33                                      msg_type = 0x33 (try 0x34 on retry — §11.2)
++8      00 11 22 33                                      sequence = 24-bit random (§5.2)
++12     00                                               leading routing null
++13     "<BLN>\0"                                        slot 0 — known BLN, or empty (`"\0"`) for full unknown
++??     "<panel_or_empty>\0"                             slot 1 — destination panel name, or empty
++??     "<BLN>\0"                                        slot 2 — repeat slot 0
++??     "<scanner_name>\0"                               slot 3 — your scanner identity (canonical form recommended)
++??     00 50                                            opcode 0x0050 (Status Query)
++??     01 00 04 "SYST"                                  scope TLV
++??     23                                               separator (SYST = 0x23)
++??     3F FF FF FF                                      quality wildcard sentinel
+```
+
+**Response** carries the panel's own identity in the role-swapped routing slots: slot 0 = BLN, slot 1 = the supervisor identity the panel expects (often present even when the request's slot 1 was empty), slot 2 = BLN (echo), slot 3 = panel name. A client that sent slot 1 = `""` (empty) can read the canonical supervisor name from the response and use it as the slot 4 source identity for subsequent IdentifyBlock handshakes — this is the most direct way to discover the `<SITE>DCC-SVR|5034` value when starting from just an IP address.
+
+**When this works:** panels that don't enforce a configured-peer list, and panels in early commissioning. Probably most production sites where the firmware is recent enough to support the Status Query in the bare form (PME1252 and later).
+
+**When this fails:** strict-peer-list panels reject `0x0050` from non-configured-peer sources the same way they reject IdentifyBlock — silent TCP close. If `0x0050` returns no response and the TCP session stays up, fall back to §22.1 Cartesian attack.
+
+**Site-safe usage:** rate-limit to ≤1 probe per second per host, blocklist `0x0263` and other potentially-destructive opcodes in the same code path, and don't combine `0x0050` discovery with arbitrary write opcodes in the same session. The Status Query itself is read-only and non-disruptive; the safety guidance is about not letting a discovery tool drift toward broader probing.
 
 ---
 
@@ -2522,6 +2693,26 @@ If you're operating a P2 deployment and want to reduce identity-leak exposure:
 ## 24. Implementation Guide
 
 This section provides practical guidance for implementing a P2 client (scanner, dissector, gateway). It assumes the reader has read §1-§23.
+
+### 24.0 Quickstart — Minimum Viable Scanner (one screen)
+
+Before reading the rest of §24, this is what a first-pass read-only scanner needs to do on the wire. Each step links to the detailed reference section.
+
+1. **Open a TCP socket to the panel on port 5033.** Plain TCP, no TLS, no special options. (§4.2)
+2. **Build a 4-slot routing header**: `\0<BLN>\0<node_name_lowercase>\0<BLN>\0<scanner_name>\0`. (§4.5)
+3. **Build an IdentifyBlock body** with opcode `0x4640` followed by three TLVs (scanner_name, site, BLN) and the **mandatory 16-byte trailer** (separator + 3 flag bytes + 5 reserved zeros + 4-byte BE Unix timestamp + 2-byte session id + 1 trailing null). (§9.2)
+4. **Frame it**: prepend a 12-byte header `[u32 BE total_length][u32 BE msg_type][u32 BE sequence]`. Use **`msg_type = 0x33`** (DATA) on the first attempt. Use a random 24-bit sequence number; do not start at 0, 1, or 10 (§5.2). (§4.4)
+5. **Send it. Wait ~2 seconds.** If you get a response: the panel is on the legacy dialect; record `msg_type = 0x33` and use it for the rest of the session. If you get no response: the panel is on the modern dialect — resend the same body with `msg_type = 0x34` (HEARTBEAT). Do not close and reopen the socket. (§11.2)
+6. **You now have a session.** Read `0x010C` SystemInfo (§12.11) to obtain the firmware build tag (`PME1121` / `PME1252` / `PME1300` / `BME####`). Cache it (§30.4) — every subsequent session against this panel can skip step 5 and go straight to the correct dialect.
+7. **For each device you want to read**, build a point-read request: opcode `0x0271` (legacy dialect) or `0x0220` (modern dialect) with TLVs `[device_name][point_name]` and trailer `00 ff`. Parse the response per §14 / §15.2. The byte-by-byte worked example is in §12.6.1.
+
+> **The single most common silent-failure cause** at deployment time is the slot 4 (scanner name) value in step 2. **Default to `<SITE>DCC-SVR|5034`** — for example `BUILDING1DCC-SVR|5034`, where `<SITE>` is the same site code you put in step 3's site TLV. Generic forms like `MYSCAN|5034` work on permissive panels but get silently dropped on sites with a configured-peer list, with no TCP RST and no error response. If your handshake fails silently after sending the IdentifyBlock, change slot 4 to the canonical form before assuming the panel is unreachable. See §9.3 and §11.7.
+
+**What you do NOT need for a minimum scanner:**
+
+- You don't need a TEC point catalog (`tecpoints.json`) if you only read points by name (`"ROOM TEMP"`, `"APPLICATION"`) and never by slot number. See §13.5 for when a catalog becomes required.
+- You don't need to implement write opcodes (`0x0240`, `0x0274`, `0x4222`) for a read-only tool. They are documented in §12.6–§12.9 but a read-only scanner ignores them.
+- You don't need to implement `msg_type = 0x2E` (CONNECT) or `0x2F` (ANNOUNCE) — those are not session-level dialects. See §11.2.
 
 ### 24.1 Minimum Viable Scanner
 
