@@ -3,17 +3,6 @@
 **Version**: 1.4
 **Status**: Draft / Working Specification
 
-**Changes from v1.3** (all driven by field experience / paired pcap evidence and a spec audit pass):
-
-- **§9.3 / §9.10 / §24.2 / §24.7** — Slot 4 (scanner name) is **enforced on some deployments** (configured-peer list). Recommend `<SITE>DCC-SVR|5034` as the default. The earlier "any string works" claim has been qualified.
-- **§9.2 / §24.1 / §24.7** — Added a prominent **mandatory 16-byte trailer** callout. The trailer is described in v1.3 but easy to miss; truncated trailers cause silent handshake failures with the same symptom as wrong slot 4.
-- **§14.2** — Removed the "R4 negative values" variant row. Negative-valued floats are not a structural variant; R1/R2/R3 cover all metadata layouts.
-- **§11.2 / §24.3** — Forward-reference to the §30.4 build-registry fast path. Dynamic dialect probing is the fallback, not the primary path.
-- **§6.6** — Polymorphism count corrected from 8 to 10 (added `0x4200` and `0x5003` per OPCODES.md cross-check).
-- **§28.6** — "On 0x33 sessions" qualifier on bare-pings reworded pending traffic verification on modern-dialect panels.
-- **§16.1** — Drop-Number range clarified: 0-254 is the field capacity; deployed ranges are narrower (P1 FLN: 0-31; MS/TP: up to 127 master+127 slave; BACnet/IP: panel-cap).
-- **§22.1** — Cold-discovery cartesian attack: added caveat that strict-peer-list panels will silent-drop wrong-BLN probes too, defeating the standard signature.
-
 ## Abstract
 
 This document specifies the **Siemens Apogee P2 protocol** — the building-automation network protocol used between supervisor workstations (Insight, Desigo CC) and field controllers (PXC Modular, PXC Compact, Power MEC, MEC, MBC, and compatible third-party equipment) in the Siemens Apogee Automation System.
