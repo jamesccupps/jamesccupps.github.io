@@ -1,11 +1,11 @@
 # Apogee P2 Protocol — Open Specification
 
-**Version**: 1.2
+**Version**: 1.3
 **Status**: Draft / Working Specification
 
 ## Abstract
 
-This document specifies the **Siemens Apogee P2 protocol** — the building-automation network protocol used between supervisor workstations (Insight, Desigo CC) and field controllers (PXC Compact, PXC Modular, PME1252, PME1300, MBC, MEC, and compatible third-party equipment) in the Siemens Apogee Automation System.
+This document specifies the **Siemens Apogee P2 protocol** — the building-automation network protocol used between supervisor workstations (Insight, Desigo CC) and field controllers (PXC Modular, PXC Compact, Power MEC, MEC, MBC, and compatible third-party equipment) in the Siemens Apogee Automation System.
 
 It covers the wire frame format, transport ports, opcode catalog, point addressing, point class taxonomy, control-language reference, BACnet integration, and security considerations needed for implementation.
 
@@ -24,6 +24,13 @@ This specification does **not** describe authentication, encryption, or message-
 
 - The formal long-form is **Protocol 2**, per the vendor's Wiring Guidelines glossary. Vendor literature also references a sister protocol "P3" alongside P2 in cable-type lists ("P2/P3 RS-485") and in the Siemens-published error text for `0x00AC` ("P2 or P3 command is not supported by the server field panel"). P3 is not described by this specification; treat it as an unmapped sister identifier.
 - The `.P2` file extension refers to an offline panel-database export produced by Desigo CC's "P2 Export utility" and is **unrelated to this wire protocol**. A `.P2` file contains a panel's engineered configuration (points, alarms, PPCL programs, schedules) for migration tooling; it does not contain wire-level traffic.
+- **Hardware vs firmware identifiers** are easily confused on Apogee equipment. This specification distinguishes them as follows:
+  - **Orderable part number** (catalog SKU): e.g. `PXC100-PE96.A` — the model number a user purchases. `PXC100` is the PXC Modular base; `PE` denotes P2 firmware loadout, `BE` denotes BACnet; the trailing `##` is the licensed node count (`24`/`48`/`96`); `.A` is the hardware revision letter.
+  - **Hardware-platform identifier** (in revstring): e.g. `PXME` — internal platform code returned by the panel. `PXME` = PXC Modular Ethernet; `PXCE` = PXC Compact Ethernet (PXC-16/24/36); `PXMR` / `PXCR` = RS-485-only variants. Returned as part of the Hardware Revision string in Desigo CC (e.g. `PXME V2.8.18 APOGEE`).
+  - **Firmware-build identifier** (in revstring): e.g. `PME1300` or `BME1290` — internal firmware build tag. `PME####` = P2 firmware family (2.x branch); `BME####` = BACnet firmware family (3.x branch). Returned as the Firmware Revision in Desigo CC and as the panel-model TLV in `0x010C` SystemInfo responses, despite the "model" label being a misnomer.
+  - **Firmware version string**: e.g. `V2.8.18 APOGEE` or `V3.5.2 BACnet` — the human-readable revision. Note that `V2.x APOGEE` and `V3.x BACnet` are parallel branches of the same firmware codebase running on the same hardware.
+
+  A panel typically reports all three: the revstring `PME1300 0049 - PXME V2.8.18 APOGEE 4.3g` means firmware build `PME1300`, hardware platform `PXME` (PXC Modular Ethernet), firmware version `V2.8.18` on the P2 branch. The underlying orderable hardware is `PXC100-PE##.A`.
 
 ---
 
@@ -58,6 +65,7 @@ This specification does **not** describe authentication, encryption, or message-
 27. Appendix C: Glossary
 28. Appendix D: Complete Opcode Reference Table
 29. Appendix E: Pinned Wire Body Catalog
+30. Appendix F: Firmware Build Registry
 
 ---
 
@@ -483,8 +491,8 @@ The 4-byte `session_msg_type` field at frame offset 4 indicates the role of the 
 
 | Value | Name | Direction | Purpose |
 |---|---|---|---|
-| `0x00000033` | **DATA** | Bidirectional | Operational traffic on legacy-dialect panels (PME1252 and earlier) — point reads, writes, enumerations, COV pushes. Most-common type (>85% of observed frames). |
-| `0x00000034` | **HEARTBEAT** | Bidirectional | Operational traffic on modern-dialect panels (PME1300+) — same role as `0x33` but used by newer firmware. The name "HEARTBEAT" is historical; in practice these frames carry the full opcode set, not just keepalives. See §11 for dialect detection. |
+| `0x00000033` | **DATA** | Bidirectional | Operational traffic on legacy-dialect panels (firmware build `PME1252` and earlier) — point reads, writes, enumerations, COV pushes. Most-common type (>85% of observed frames). |
+| `0x00000034` | **HEARTBEAT** | Bidirectional | Operational traffic on modern-dialect panels (firmware build `PME1300` and later) — same role as `0x33` but used by newer firmware. The name "HEARTBEAT" is historical; in practice these frames carry the full opcode set, not just keepalives. See §11 for dialect detection. |
 | `0x0000002E` | **CONNECT** | Bidirectional | Session-establishment handshake initiator (Mode A) and Mode-C carrier for some workflows. Body carries a `0x4640` IdentifyBlock or, in Mode-C-headless flows, an operational opcode directly. See §9.11. |
 | `0x0000002F` | **ANNOUNCE** | Bidirectional | Reverse-direction handshake initiator (Mode B, typically panel → supervisor). Structurally identical to CONNECT. See §9.12. |
 
@@ -564,7 +572,7 @@ The opcode space partitions into functional regions by high byte:
 | `0x0509` | `0x0F01` | **AlarmAck** (v2) | Newer alarm acknowledgment variant; writes `0x0F01` at `[+0x06]`. Paired with `0x0508` AlarmReport. Polymorphic — see §6.6. |
 | `0x0508` | — | **AlarmReport** | Panel reports an alarm transition to supervisor |
 | `0x0220` | `0x00xx` | **RegisterCOV / read-short** | **Subscribe** to COV updates (modern dialect); also **point read** for modern firmware. Variants `0x0220`-`0x0223`. |
-| `0x0271` | `0x0010` | **ReadExtended** | Point read (legacy-dialect panels, PME1252 and earlier). Returns full value block. |
+| `0x0271` | `0x0010` | **ReadExtended** | Point read (legacy-dialect firmware, build `PME1252` and earlier). Returns full value block. |
 | `0x0272` | `0x0012` | **read variant** | Alternate read variant |
 | `0x0273` | `0x0011` | **WriteNoValue / PointProbe / AlarmAckTrigger** | Point-existence probe (Desigo's dominant use case). Also pre-cursor for `0x0509` alarm ack. |
 | `0x0244` | `0x00xx` | **CancelCOV** family | Unsubscribe from COV; sub-opcodes `0x0244`-`0x024D` are variants |
@@ -578,7 +586,7 @@ The opcode space partitions into functional regions by high byte:
 | `0x0981` | `0x0961`/`0x0971`/`0x0981` | **EnumeratePoints** | Panel-wide point enumeration. Cursor-based (multi-roundtrip). Three variants for FLN/panel/subnet scope. |
 | `0x0985` | — | **EnumeratePrograms** | Enumerate PPCL programs — response carries source text |
 | `0x0986` | — | **EnumerateFLN** | Enumerate FLN devices attached to a panel |
-| `0x0100` | `0x0118` | **SystemInfo (legacy) / Connect-response** | Firmware/model query (legacy panels). Also the CONNECT-response opcode on PME1252 V2.8.10 firmware — those panels echo this in the `0x2E` body instead of `0x4640`. **High-frequency on legacy firmware**; implementers MAY observe traffic shapes beyond firmware/CONNECT-response that this specification does not document. |
+| `0x0100` | `0x0118` | **SystemInfo (legacy) / Connect-response** | Firmware/identity query (legacy-dialect firmware). Also the CONNECT-response opcode on firmware build `PME1252` (V2.8.10) — those builds echo this in the `0x2E` body instead of `0x4640`. **High-frequency on legacy firmware**; implementers MAY observe traffic shapes beyond firmware/CONNECT-response that this specification does not document. |
 | `0x010C` | — | **SystemInfo (compact)** | Firmware/model query (newer panels, 2-byte request) |
 | `0x4106` | `0x0xxx` | **DefinePpcl** | Define/load a PPCL program |
 | `0x4103` | `0x04xx` | **PpclClearTrace** | Clear PPCL trace bits |
@@ -1078,12 +1086,14 @@ Two firmware dialects are deployed across modern controllers; they differ in the
 
 | Dialect | Used by | Operational `session_msg_type` |
 |---|---|---|
-| **Legacy** | PME1252 and earlier hardware; firmware revisions up to ~V2.8.10 | `0x33` (DATA) |
-| **Modern** | PME1300 / AAS platform and later; firmware V2.8.15+ | `0x34` (HEARTBEAT) |
+| **Legacy** | Firmware builds `PME1252` and earlier (firmware revisions up to ~V2.8.10) | `0x33` (DATA) |
+| **Modern** | Firmware builds `PME1300` and later (firmware V2.8.15+) | `0x34` (HEARTBEAT) |
+
+The dialect is determined by the firmware build, not the hardware platform — both legacy and modern firmware run on the same PXC Modular (`PXME`) and PXC Compact (`PXCE`) silicon. A field upgrade from a legacy to a modern firmware build flips the dialect on the same physical controller.
 
 Representative firmware revisions in each dialect:
-- PME1252 panels with firmware `PXME V2.8.10 APOGEE` build Oct 2013 → legacy dialect
-- PME1300 panels with firmware `PXME V2.8.18 APOGEE` build Sep 2019 → modern dialect
+- Firmware `PME1252` on hardware `PXME V2.8.10 APOGEE` (build Oct 2013) → legacy dialect
+- Firmware `PME1300` on hardware `PXME V2.8.18 APOGEE` (build Sep 2019) → modern dialect
 
 Both dialects can coexist on the same BLN. A retrofit site may have mixed legacy and modern panels; the supervisor handles each panel using its appropriate dialect.
 
@@ -1380,8 +1390,14 @@ The smallest request in the protocol. Body is literally two bytes:
 Response (~269 bytes typical) decomposes as:
 
 ```
-TLV: panel model           "PME1252 " or "PME1300 " (note trailing space)
-TLV: firmware string       "PXME V2.8.10 APOGEE" / "PXME V2.8.18 APOGEE"
+TLV: firmware-build tag    "PME1252 " or "PME1300 " (note trailing space).
+                           Returned in a TLV that Siemens labels as panel
+                           model, but the value is the firmware build
+                           identifier (PME#### = P2 firmware family,
+                           build ####), not a hardware model number.
+TLV: hardware revision     "PXME V2.8.10 APOGEE" / "PXME V2.8.18 APOGEE"
+                           (platform code + firmware version + branch).
+                           PXME = PXC Modular Ethernet; PXCE = PXC Compact.
 TLV: build date            "Oct 28 2013 12:31:01" / "Sep 26 2019 12:41:20"
 16 bytes: feature bytes    (bit layout unmapped; byte ~0x68 encodes node number)
 IdentifyBlock              standard TLV identity (node + site + BLN + flags)
@@ -2422,8 +2438,8 @@ A successful handshake response carries the panel's full IdentifyBlock TLVs (sel
 
 The 269-byte `0x010C` response reveals:
 
-- Panel model (PME1252, PME1300, etc.)
-- Firmware version (e.g. `PXME V2.8.18 APOGEE`)
+- Firmware build (e.g. `PME1252`, `PME1300` — labeled "panel model" in the wire TLV but actually a firmware-build identifier)
+- Hardware platform and firmware version (e.g. `PXME V2.8.18 APOGEE`)
 - Build date (e.g. `Sep 26 2019 12:41:20`)
 - Node number (embedded in feature bytes)
 - Site code (in the IdentifyBlock TLV)
@@ -2743,7 +2759,15 @@ A supervisor monitoring a BACnet-TEC fleet MUST poll each commandable point at t
 | **PPCL** | Process Control Language (proprietary panel-resident programming) |
 | **POST** | Panel Operating System Transfer (database file format) |
 | **PTM** | Point Termination Module |
-| **PXC** | Modern field-panel hardware family |
+| **PXC** | Modern field-panel hardware family (PXC Modular and PXC Compact). Successor to the legacy MEC / Power MEC / MBC controllers. |
+| **PXC Modular** | DIN-rail field panel; orderable as `PXC100-PE##.A` (P2 firmware loadout) or `PXC100-BE##.A` (BACnet loadout). Up to 500 points via TX-I/O. |
+| **PXC Compact** | Pre-configured 16/24/36-point field panel; orderable as `PXC16-PE.A`/`PXC24-PE.A`/`PXC36-PE.A` (P2) or `PXC16-BE.A`/`PXC24-BE.A`/`PXC36-BE.A` (BACnet). EU variants are PXC12/PXC22. |
+| **PXME** | Hardware-platform identifier returned in revstrings: PXC Modular Ethernet. Sibling codes: `PXCE` (PXC Compact Ethernet), `PXMR` (PXC Modular RS-485-only), `PXCR` (PXC Compact RS-485-only). |
+| **PME####** | Firmware-build identifier on the P2 firmware family (2.x branch). Known builds include `PME1121` (V2.8.5), `PME1252` (V2.8.10), `PME1300` (V2.8.18). Returned in revstrings and in the `0x010C` SystemInfo response. |
+| **BME####** | Firmware-build identifier on the BACnet firmware family (3.x branch). Sibling of `PME####`. Example: `BME1290` (V3.5.2). |
+| **MEC** | Modular Equipment Controller (legacy 1300-series field panel, RS-485 ALN). Predecessor to PXC Modular. |
+| **Power MEC** | MEC variant with Ethernet ALN (model 1200/1210 series). Same chassis family as MEC, with onboard or external Ethernet support. |
+| **MBC** | Modular Building Controller (legacy field panel). Largely retired; replaced by PXC Modular. |
 | **SSTO** | Start/Stop Time Optimization |
 | **TEC** | Terminal Equipment Controller |
 | **UC** | Unitary Controller |
@@ -3007,7 +3031,7 @@ Response carries the panel name in the routing header (slot 4 after role-swap). 
 
 ### 29.4 `0x098B` — Newer-Firmware Enumerate Probe
 
-**Request body** (constant 8 bytes on PME1252 and PME1300):
+**Request body** (constant 8 bytes on firmware builds `PME1252` and `PME1300`):
 
 ```
 09 8B 00 01 00 FA 00 00
@@ -3162,6 +3186,79 @@ This opcode occurs in two distinct request shapes:
 ```
 
 The cursor form is what Desigo emits in recent firmware against Mode-C streams; panels often do not respond to it. Implementers SHOULD use `0x0976` only when fallback enumeration opcodes (`0x0981`, `0x0986`) are not available, and SHOULD prefer Variant A when SYST-scope is acceptable.
+
+---
+
+## 30. Appendix F: Firmware Build Registry
+
+### 30.1 Purpose
+
+This appendix catalogs known firmware-build identifiers (`PME####` / `BME####`) observed in the field, along with their associated firmware version, hardware platform, and wire-protocol dialect. Implementers MAY use this table as a fast lookup to skip the dialect-detection roundtrip (§11.2) when a `0x010C` SystemInfo response has already been parsed and the build identifier is known.
+
+The registry is **non-exhaustive**. Siemens does not publish a complete build catalog, and OEM-respun builds may carry identifiers not listed here. Clients SHOULD fall back to dynamic dialect detection (§11.2) for any build not present in this table.
+
+### 30.2 Known Build Registry
+
+| Build Tag | Branch | Firmware Version | Approx. Build Date | Dialect | Read Opcode Family | Notes |
+|---|---|---|---|---|---|---|
+| `PME1121` | P2 (2.x) | V2.8.5 | ~2012 | Legacy (`0x33` DATA) | `0x0271` ReadExtended | Older P2 build; predates the dialect break |
+| `PME1252` | P2 (2.x) | V2.8.10 | Oct 2013 | Legacy (`0x33` DATA) | `0x0271` ReadExtended | CONNECT-response uses `0x0100` in `0x2E` body (§9.12); the highest known build before the dialect transition |
+| `PME1300` | P2 (2.x) | V2.8.18 | Sep 2019 | Modern (`0x34` HEARTBEAT) | `0x0220` family (RegisterCOV / read-short) | Final P2 release; adds Adaptive Control (LSM-ADAPT); CONNECT-response uses `0x4640` IdentifyBlock |
+| `BME1290` | BACnet (3.x) | V3.5.2 | ~2019 | N/A (BACnet/IP UDP/47808) | BACnet ReadProperty / ReadPropertyMultiple | BACnet firmware on identical PXC hardware; not addressable via this specification's wire opcodes |
+
+Additional builds are known to exist in the `PME11xx`–`PME12xx` range and the `BME12xx`–`BME13xx` range; specific identifiers and version mappings are not documented here. Implementers encountering an unlisted build SHOULD log the full revstring (firmware build + hardware revision + build date) and treat the panel via dynamic detection.
+
+### 30.3 Build-Number Ranges and the Dialect Boundary
+
+The transition from the legacy `0x33` DATA dialect to the modern `0x34` HEARTBEAT dialect occurred between firmware versions V2.8.10 and V2.8.15. The exact build at which the dialect flipped is not publicly documented, but field observations are consistent with the following heuristic:
+
+```
+if build_tag starts with "PME":
+    build_number = int(build_tag[3:])
+    if build_number <= 1252:
+        dialect = LEGACY      # session_msg_type = 0x33 DATA
+    elif build_number >= 1300:
+        dialect = MODERN      # session_msg_type = 0x34 HEARTBEAT
+    else:
+        dialect = UNKNOWN     # fall back to §11.2 detection
+elif build_tag starts with "BME":
+    dialect = NOT_APPLICABLE  # BACnet firmware; use BACnet/IP transport
+```
+
+The 1252–1300 gap should be treated as ambiguous, not as "interpolate the dialect." A `PME1275` (if such a build exists) could be on either side of the break. Implementers SHOULD NOT extrapolate.
+
+### 30.4 Recommended Lookup Strategy
+
+For a P2 client (scanner, bridge, supervisor implementation) that has already received a `0x010C` SystemInfo response from a panel, the recommended sequence is:
+
+```python
+# Pseudocode — adapt to the implementation's own session structures.
+KNOWN_BUILDS = {
+    "PME1121": {"dialect": "legacy",  "read_family": "0x0271"},
+    "PME1252": {"dialect": "legacy",  "read_family": "0x0271"},
+    "PME1300": {"dialect": "modern",  "read_family": "0x0220"},
+}
+
+def negotiate_dialect(panel_addr, build_tag=None):
+    if build_tag and build_tag in KNOWN_BUILDS:
+        # Fast path — skip the §11.2 dialect probe.
+        entry = KNOWN_BUILDS[build_tag]
+        return entry["dialect"], entry["read_family"]
+    # Slow path — perform dynamic detection per §11.2.
+    return detect_dialect_dynamic(panel_addr)
+```
+
+The fast path saves one TCP roundtrip (typically ~2 seconds of dialect-probe timeout against modern panels that silently drop the legacy probe). On a building with dozens of panels, this is a meaningful start-up cost reduction for bridges and scanners.
+
+### 30.5 Limitations and Caveats
+
+1. **Build numbers are not strictly monotonic across branches.** A `PME1252` (P2 branch) and a `BME1290` (BACnet branch) were both shipped within roughly the same calendar window; the numbers reflect independent build counters on the two branches. Build tag ordering is meaningful only within the same branch prefix.
+
+2. **OEM and field-respun builds may exist.** Siemens occasionally produces customer-specific firmware respins, particularly for UL864 smoke-control applications. These may carry non-standard build tags and SHOULD trigger dynamic detection.
+
+3. **The hardware revision string is the authoritative version source.** When `0x010C` returns both the firmware-build tag (`PME1300`) and the hardware revision string (`PXME V2.8.18 APOGEE`), the version string in the latter is more reliable for feature detection than inferring from the build tag. Use the build tag for fast dialect lookup; use the version string for feature gating (Adaptive Control, SNMP, etc.).
+
+4. **Updates and corrections.** As additional builds are identified in the field, this registry SHOULD be updated. Implementers are encouraged to log unknown build tags with the full revstring context to support future spec revisions.
 
 ---
 
