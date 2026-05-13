@@ -1,7 +1,18 @@
 # Apogee P2 Protocol — Open Specification
 
-**Version**: 1.3
+**Version**: 1.4
 **Status**: Draft / Working Specification
+
+**Changes from v1.3** (all driven by field experience / paired pcap evidence and a spec audit pass):
+
+- **§9.3 / §9.10 / §24.2 / §24.7** — Slot 4 (scanner name) is **enforced on some deployments** (configured-peer list). Recommend `<SITE>DCC-SVR|5034` as the default. The earlier "any string works" claim has been qualified.
+- **§9.2 / §24.1 / §24.7** — Added a prominent **mandatory 16-byte trailer** callout. The trailer is described in v1.3 but easy to miss; truncated trailers cause silent handshake failures with the same symptom as wrong slot 4.
+- **§14.2** — Removed the "R4 negative values" variant row. Negative-valued floats are not a structural variant; R1/R2/R3 cover all metadata layouts.
+- **§11.2 / §24.3** — Forward-reference to the §30.4 build-registry fast path. Dynamic dialect probing is the fallback, not the primary path.
+- **§6.6** — Polymorphism count corrected from 8 to 10 (added `0x4200` and `0x5003` per OPCODES.md cross-check).
+- **§28.6** — "On 0x33 sessions" qualifier on bare-pings reworded pending traffic verification on modern-dialect panels.
+- **§16.1** — Drop-Number range clarified: 0-254 is the field capacity; deployed ranges are narrower (P1 FLN: 0-31; MS/TP: up to 127 master+127 slave; BACnet/IP: panel-cap).
+- **§22.1** — Cold-discovery cartesian attack: added caveat that strict-peer-list panels will silent-drop wrong-BLN probes too, defeating the standard signature.
 
 ## Abstract
 
@@ -625,7 +636,7 @@ Polymorphism arises from two structural causes:
 1. **Multiple operations share one wire opcode.** Several logical operations are encoded with the same opcode value; each operation produces a body shape characteristic of its semantics.
 2. **Transport-layer and application-layer share an opcode.** `0x4640` is the canonical example: it functions as a 10-second transport-layer keepalive in normal operation, while a rare application-layer replication-change operation uses the same wire opcode.
 
-The eight currently-known polymorphic wire opcodes:
+The ten currently-known polymorphic wire opcodes:
 
 | Wire opcode | Use A (dominant) | Use B (rare) | Disambiguator |
 |---|---|---|---|
@@ -637,6 +648,8 @@ The eight currently-known polymorphic wire opcodes:
 | `0x0606` | Lightweight heartbeat / panel-name probe | Holiday-spec read (CPI `0x1342`) | 14-byte constant body → heartbeat; calendar-spec body → holiday read |
 | `0x0961` | Legacy AnalogPointQuery / EnumeratePoints (FLN scope) | Access-group replace (CPI `0x0917`) | Body carries scope TLV + cursor → enumerate; access-group payload → access-group op |
 | `0x0964` | TitleAnalogQuery (value + units + limits) | Trend-definition upload (CPI `0x0705`) | Body carries point-name TLV → TitleAnalogQuery; trend-definition payload → trend upload |
+| `0x4200` | PropertyQuery (read/browse with `FF FF` wildcard) | ModifyController (write path) | Body length and presence of `FF FF` wildcard → PropertyQuery; structured controller-modify body → ModifyController |
+| `0x5003` | ScheduleObjectInfo read (name + state-set ref) | ModifyEqsZone (write path) | Body shape: name-only TLV → ScheduleObjectInfo; structured modify body → ModifyEqsZone |
 
 A parser that receives any of these opcodes MUST inspect the body to determine which use is in play. A dissector or IDS that labels frames by opcode alone will mislabel the polymorphic cases.
 
@@ -823,17 +836,32 @@ trailing_null                      1     0x00
 
 The **trailer is exactly 16 bytes** (separator + 3 flag bytes + 5 reserved + 4 timestamp + 2 session-id + 1 null).
 
+> ### ⚠ MANDATORY: the 16-byte trailer is required
+>
+> After the three TLVs in the IdentifyBlock body, the trailer **MUST** be exactly 16 bytes:
+>
+> | Bytes | Field | Notes |
+> |---|---|---|
+> | 0 | Separator `0x00` | always zero |
+> | 1-3 | Flag triplet `01 01 XX` | XX = role flag (§9.7); `0x00` for supervisor-style |
+> | 4-8 | Reserved `00 00 00 00 00` | five zero bytes |
+> | 9-12 | Timestamp | u32 BE, `int(time.time())` Unix epoch — panel may validate |
+> | 13-14 | Session ID | `00 00` is accepted (panel-style); supervisors use a non-zero session-stable value |
+> | 15 | Trailing null `0x00` | always zero |
+>
+> A handshake with a **truncated or missing trailer is silently dropped** by the panel — same symptom as a wrong-slot-4 handshake (TCP ACK, no application-layer response, RST after the scanner FINs). This is a frequent mistake for re-implementers because the trailer has no length-prefix or sentinel that distinguishes it from "end of frame." Field evidence: a scanner emitting only the first 3 bytes (`01 00 00`) of the trailer fails silently against the same panel that accepts the same scanner with a full 16-byte trailer.
+
 The IdentifyBlock body starts the first TLV immediately after the 2-byte wire opcode `46 40`. There is no separate sub-opcode field for `0x4640` (see §4.2). The 3 TLVs (scanner self-name, site code, BLN name) are followed by the 16-byte trailer.
 
 A note on the inner length encoding: the TLV format is `[tag 0x01][u16 BE length][value]` — a 3-byte header before each string value. Names are nearly always under 256 characters, so the high byte of the length field is zero in practice (a 7-byte name "SITEBLN" encodes as `01 00 07 53 49 54 45 42 4C 4E`). Implementers MUST emit the length as a u16 BE, not as a single byte; a 1-byte length will produce frames that don't parse against any real Siemens stack.
 
 ### 9.3 Three Identifiers Required
 
-To establish a session, a client MUST know three identifiers:
+To establish a session, a client MUST present three identifiers. They are **NOT equally strict**; the bouncer enforces them differently:
 
-1. **BLN name** (network name) — the unique BLN name configured on the panel. Panels REJECT messages whose BLN name doesn't match their configuration. This is a soft authentication / addressing check.
-2. **Site name** — the site identifier. Often shared across all BLNs at a physical location.
-3. **Scanner name** — the client's self-identifier in `<HOSTNAME>|<PORT>` format. Some sites expect a specific format (e.g. `<SITE>DCC-SVR|5034`); if handshakes fail, try this variant.
+1. **BLN name** (network name) — **strictly enforced.** Panels REJECT messages (TCP RST) whose BLN name doesn't match their configured value. Case-sensitive.
+2. **Scanner name** (slot 4 source identifier) — **enforcement varies by deployment.** Reference-site captures show no validation, but field reports — confirmed by paired pcap evidence — indicate that **some panels restrict slot 4 to known supervisor formats via a configured-peer list** (see §9.7 role-flag mechanism). **Default to `<SITE>DCC-SVR|5034`** (e.g. `BUILDING1DCC-SVR|5034`) — this is the canonical Desigo CC supervisor identity and the most widely-accepted slot 4 format across observed deployments. Generic forms like `MYSCAN|5034` work on permissive sites but **silently fail** on stricter ones (TCP ACK, no application-layer response, eventual RST after the scanner FINs).
+3. **Site name** — **present-but-not-validated.** Required as TLV 2 of the IdentifyBlock per §9.6, but the panel does not check it against a configured value. Any non-empty ASCII string is accepted; the TLV value is typically used by the panel for log labeling rather than authentication.
 
 The BLN name can be learned by:
 - Reading site configuration documents
@@ -916,13 +944,15 @@ The panel validates incoming handshake fields with two distinct failure signatur
 | **BLN name** | TCP RST | BLN is both security AND routing. Wrong BLN means the panel has no valid route for the packet. Case-sensitive. |
 | **Slot 2 (destination panel name)** | Silent drop | TCP connection stays up; the frame is silently discarded by the routing layer. Slot 2 must case-fold-match a name in the panel's known peer list. |
 
-**Other fields are NOT validated:**
+**Other fields exhibit context-dependent validation:**
 
-- The **source identity in slot 4** can be any string — a scanner does not need to impersonate a real supervisor name.
-- The **IdentifyBlock body fields** (self-name TLV, site code TLV, BLN TLV) are not validated beyond internal consistency with the routing slots.
-- The **trailer bytes** (timestamp, session ID, role flag) are not validated as authentication, though the panel may log them.
+- The **source identity in slot 4** is observed to be unvalidated in the reference-site captures, but **field reports indicate some deployments restrict accepted slot 4 values to a configured-peer list** (paired pcaps confirm this: identical handshake against identical panel, slot 4 = `MYSCAN|5034` is silent-dropped while slot 4 = `<SITE>DCC-SVR|5034` succeeds in ~200 ms). If a handshake fails with no TCP RST and no error response (just silence or a connection close after the IdentifyBlock is sent), retry with `<SITE>DCC-SVR|5034` before concluding the panel is unreachable.
+- The **site-code TLV** in the IdentifyBlock body is required to be present (any non-empty ASCII string) but is not validated against a configured value.
+- The **BLN-name TLV** in the IdentifyBlock body must match the routing slots (internal consistency check), but no separate panel-side configuration check is documented.
+- The **self-name TLV** (TLV 1) MUST match slot 4. Inconsistency between TLV 1 and slot 4 is itself enough to trip the bouncer's silent-drop path even on otherwise-permissive panels.
+- The **trailer bytes** (timestamp, session ID, role flag) are not validated as authentication, though the panel may log them. However, the **trailer length is strict** — see §9.2's mandatory-16-byte callout.
 
-This means a read-only scanner only needs to know two things to establish a session: the **BLN name** (exact case-sensitive match) and **at least one panel name** (case-insensitive). Everything else is decorative.
+A read-only scanner on a permissive site needs only **BLN name** (exact case-sensitive match) and **at least one panel name** (case-insensitive). On stricter sites, it also needs a slot 4 in canonical `<SITE>DCC-SVR|5034` form.
 
 The distinct BLN-RST vs slot-2-silent behavior is what makes cold-site BLN discovery tractable: a scanner can enumerate BLN candidates in parallel by observing TCP RST vs silent drop, without sending actual reads. See §22 (Cold-Site Discovery) for the full algorithm.
 
@@ -1100,6 +1130,8 @@ Both dialects can coexist on the same BLN. A retrofit site may have mixed legacy
 A panel speaking the modern dialect will **silently drop** a handshake sent with `session_msg_type = 0x33` — no RST, no error response, just no reply. A panel speaking the legacy dialect responds normally to `0x33` and ignores `0x34`.
 
 ### 11.2 Recommended Detection Algorithm
+
+**Fast path:** if the panel's firmware build tag is known (from a prior `0x010C` SystemInfo response, a cached `site.json`, or any other source), prefer the §30.4 build-registry lookup over the dynamic probe described in this section. The fast path resolves dialect with zero round trips. Fall through to the algorithm below only when the build tag is unknown.
 
 ```
 1. Open the TCP connection.
@@ -1749,14 +1781,15 @@ The IEEE 754 single-precision float **always sits at offset +10** from the `01 0
 
 ### 14.2 Response Variants
 
-Four response variants are observed. Labels R1-R4 are used here to distinguish them from the SHAPE A/B labels used for `0x0981` enumerate responses (§12.13).
+Three response variants are observed, distinguished by their 7 metadata bytes. Labels R1-R3 are used here to distinguish them from the SHAPE A/B/C labels used for `0x0981` enumerate responses (§12.13).
 
 | Variant | Opcode | 7 metadata bytes | Condition |
 |---|---|---|---|
 | **R1** | `0x0271` | `3F FF FF X? 00 00 00` | Quality-flags partial (see §14.3) |
 | **R2** | `0x0271` | `00 00 00 00 00 00 00` | Quality-flags explicit, all clear |
 | **R3** | `0x0220` | `00 00 00 00 00 00 XX` | XX = data-type code (see §14.4) |
-| **R4** | any | (R2/R3 pattern but float starts `0xBF`) | Negative values |
+
+Float values may be positive or negative; the IEEE-754 leading byte differs accordingly (`0x00`-`0x48` for positive in-range, `0xBF`-`0xC5` for the common negative range). **Float sign is not a variant discriminator** — the 7 metadata bytes are. A scanner that accepts negative floats by adding a leading-byte plausibility check is implementing a parser heuristic, not a separate spec-level variant.
 
 ### 14.3 The `3F FF FF` Prefix Trap
 
@@ -1890,6 +1923,14 @@ FLN.Drop.PointNumber
 | Point Number | 0-65534 | 16-bit point identifier within the drop |
 
 A panel-resident point has FLN=0; a TEC point has FLN=1..N and a Drop=0..31.
+
+The 0-254 Drop Number range above is the **address-field capacity**. Actual deployed ranges are narrower:
+
+- **P1 FLN devices** (legacy serial FLN, the dominant TEC topology): Drop 0-31 (per-FLN device limit of 32, from §2.3).
+- **MS/TP FLN devices** (BACnet RS-485): up to 127 master + 127 slave addresses per §2.3.
+- **BACnet/IP FLN** (modern): bound by the panel-wide 96-device cap, not the address field.
+
+A scanner that walks 0-254 will issue many `0x0003 not_found` requests for non-existent drops; preferring `0x0986` EnumerateFLN (§12.15) over a brute-force walk is the right approach.
 
 ### 16.2 Legacy Format — FLN Devices (Pre-Ethernet Firmware, Insight Versions ≤ 12.41)
 
@@ -2362,6 +2403,8 @@ A scanner can iterate candidate BLN names against a known panel IP and observe t
 5. Once BLN is found, enumerate slot 2 candidates against the same BLN
 ```
 
+**Caveat for strict-peer-list panels:** the failure-signature dichotomy above (wrong BLN → RST; wrong slot 2 → silent drop) depends on the panel accepting an arbitrary slot 4 source identifier. Panels that **validate slot 4 against a configured-peer list** (see §9.10 and the field-verified slot-4 enforcement note in §9.3) will silent-drop both wrong-BLN and wrong-slot-2 probes — collapsing the signal that makes the cartesian attack work. Workaround: run probes with slot 4 set to `<CANDIDATE-SITE>DCC-SVR|5034`, using the candidate BLN's likely site prefix as `<CANDIDATE-SITE>`. This maximizes the chance of matching a configured peer if one exists with that site code, and lets the panel's wrong-BLN-RST signature fire normally. On strict sites, cold discovery is harder and may require multiple BLN-candidate × site-prefix combinations per attempt.
+
 **Candidate sources** for BLN names:
 
 - Site documentation (commissioning records, BAS architecture diagrams)
@@ -2498,6 +2541,8 @@ The simplest read-only scanner needs to:
 1. Acquire three identifiers: target IP, BLN name, and a scanner name.
 2. Open a TCP connection to the target's listening port (typically 5033).
 3. Perform a dialect-detecting handshake (§9 + §11).
+   - ⚠ **The handshake body MUST include the full 16-byte trailer** described in §9.2 (separator + flags + reserved + 4-byte BE Unix timestamp + 2-byte session-id + trailing null). A truncated trailer is one of the two most common reasons for a silent handshake failure; the other is a generic slot 4 on a strict-peer-list site (§9.3).
+   - ⚠ **Slot 4 (source identity) should default to `<SITE>DCC-SVR|5034`** — the canonical Desigo CC supervisor form. Generic identifiers (`MYSCAN|5034`) work on permissive sites but are silently dropped on strict ones (§9.10).
 4. Issue a read or enumerate operation.
 5. Parse the response, handling both success (`0x01`) and error (`0x05`) directions.
 6. Close the connection.
@@ -2528,7 +2573,7 @@ A scanner needs the following configuration:
 | Field | Purpose | How to obtain |
 |---|---|---|
 | **BLN name** (network name) | Soft authentication. Panels reject messages with the wrong name. | Site documentation, sniff existing traffic, or use `0x0050` StatusQuery |
-| **Scanner name** | Self-identifier in `<HOSTNAME>\|<PORT>` form | Choose freely (e.g. `P2SCAN\|5034`) unless the site requires a specific format |
+| **Scanner name** | Self-identifier in slot 4. On strict-peer-list panels this MUST match a known supervisor format. | Default to `<SITE>DCC-SVR\|5034` (canonical Desigo CC form, most widely accepted). Generic identifiers (`MYSCAN\|5034`) work on permissive sites but silently fail on stricter ones. See §9.3, §9.10, and §24.7. |
 | **Site name** | Required for handshake identity block | Site documentation |
 | **Target IP** | Panel address | Discovery via multicast beacon (§3.2.2) or range scan |
 | **Node name** | Optional self-identifier; can be `"node"` for read-only scanners | — |
@@ -2540,10 +2585,16 @@ A scanner needs the following configuration:
 ```
 [per panel:]
 1. tcp_connect(panel_ip, port=5033, connect_timeout=5s)
-2. handshake() with dialect auto-detect:
-     a. Send 0x33 identity with short probe timeout (≤2s)
-     b. On no response: send 0x34 identity with full timeout
-     c. Cache the discovered dialect per IP
+2. handshake() with dialect resolution:
+     a. If a build tag is cached for this host (from a prior session,
+        persisted in site.json's known_builds, or just-read via 0x010C),
+        look it up in the §30 registry. If found, use the dialect directly
+        without probing.
+     b. Otherwise probe per §11.2: send 0x33 identity with short probe
+        timeout (≤2s); on no response, send 0x34 identity with full timeout.
+     c. Cache the resolved dialect per IP for subsequent connects in this
+        process; persist the build tag (from any subsequent 0x010C read)
+        to site.json for cross-process reuse.
 3. Issue operational requests; one outstanding request at a time per session
 4. Re-send 0x4640 identity refresh every 10 s during idle periods (match Desigo CC's observed cadence; see §9.5)
 5. close() on done OR on protocol error
@@ -2589,6 +2640,8 @@ A TCP stream may contain multiple P2 frames, or it may split a single frame acro
 | Treating `0x0274` direction as fixed | Misinterpret virtual writes as COV notifications | Check TCP port: 5033 = write, 5034 = COV |
 | Not handling error responses (`direction = 0x05`) | Treat error as success | Check direction byte; parse error code if `0x05` |
 | Cold scanning a production system without rate-limiting | Floods panels, may trip alarms | Insert ≥1-second delay between probes |
+| Generic scanner name (`MYSCAN\|5034`) on a strict-peer-list panel | Handshake stalls silently — no TCP RST, no error response, connection eventually times out or closes (matches the symptom for a wrong-BLN-name on tested-permissive panels) | Switch slot 4 to the canonical Desigo CC form: `<SITE>DCC-SVR\|5034`. This is the most widely-accepted scanner-name format across observed deployments and matches the configured peer list on strict sites. See §9.3 and §9.10. |
+| Truncated IdentifyBlock trailer (sending fewer than 16 bytes after the last TLV) | Handshake stalls silently — TCP ACK, no application reply, RST after scanner FIN. Identical symptom to wrong slot 4, but the root cause is different. | Emit the full 16-byte trailer per §9.2 including a current Unix-epoch timestamp at offset 9-12. The trailer has no length-prefix or sentinel and is easy to miss when re-implementing from the wire format alone. |
 
 ### 24.8 Multicast Beacon Listener
 
@@ -2875,9 +2928,9 @@ The 0x09xx family covers point enumeration, schedule queries, FLN device listing
 | `0x09BF` | `0x0803` | Network-status read | 5033 | Sets `[+0x06] = 0x0803` |
 | `0x09C1`, `0x09C2`, `0x09C3` | — | Newer-firmware enumerate variants | 5033 | Often `0x00AC` on legacy firmware |
 
-### 28.6 Session Keepalive (Bare 2-byte pings on 0x33 sessions)
+### 28.6 Session Keepalive (bare 2-byte panel→supervisor pings)
 
-These opcodes appear as 2-byte bare-opcode keepalive frames panel → supervisor inside an established Mode A session. They have no body.
+These opcodes appear as 2-byte bare-opcode keepalive frames panel → supervisor inside an established Mode A session. They have no body. The frames inherit the dialect-msg_type of the session that carries them — observed on `0x33` (legacy dialect) sessions; behavior on `0x34` (modern dialect) sessions is not yet documented and may differ. Dissectors and IDS signatures SHOULD recognize these opcode values on either dialect; clients SHOULD NOT generate them outbound.
 
 | Opcode | Notes |
 |---|---|
