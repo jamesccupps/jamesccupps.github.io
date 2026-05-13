@@ -1,5 +1,8 @@
 # Apogee P2 Protocol — Open Specification
 
+**Version**: 1.2
+**Status**: Draft / Working Specification
+
 ## Abstract
 
 This document specifies the **Siemens Apogee P2 protocol** — the building-automation network protocol used between supervisor workstations (Insight, Desigo CC) and field controllers (PXC Compact, PXC Modular, PME1252, PME1300, MBC, MEC, and compatible third-party equipment) in the Siemens Apogee Automation System.
@@ -15,7 +18,12 @@ The specification is suitable for implementers of:
 - Defensive monitoring systems
 - Custom client applications (read, write, command, schedule, alarm acknowledgment)
 
-This specification does **not** describe authentication, encryption, or message-integrity mechanisms because the P2 protocol on the wire provides none. Implementers should not rely on the protocol itself for security; see §19.
+This specification does **not** describe authentication, encryption, or message-integrity mechanisms because the P2 protocol on the wire provides none. Implementers should not rely on the protocol itself for security; see §21.
+
+**Naming notes**:
+
+- The formal long-form is **Protocol 2**, per the vendor's Wiring Guidelines glossary. Vendor literature also references a sister protocol "P3" alongside P2 in cable-type lists ("P2/P3 RS-485") and in the Siemens-published error text for `0x00AC` ("P2 or P3 command is not supported by the server field panel"). P3 is not described by this specification; treat it as an unmapped sister identifier.
+- The `.P2` file extension refers to an offline panel-database export produced by Desigo CC's "P2 Export utility" and is **unrelated to this wire protocol**. A `.P2` file contains a panel's engineered configuration (points, alarms, PPCL programs, schedules) for migration tooling; it does not contain wire-level traffic.
 
 ---
 
@@ -49,8 +57,7 @@ This specification does **not** describe authentication, encryption, or message-
 26. Appendix B: BACnet Integration Reference
 27. Appendix C: Glossary
 28. Appendix D: Complete Opcode Reference Table
-
----
+29. Appendix E: Pinned Wire Body Catalog
 
 ---
 
@@ -89,6 +96,21 @@ This specification does **not** describe authentication, encryption, or message-
 ### 1.3 Requirement Keywords
 
 The keywords MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY in this document are to be interpreted as in RFC 2119.
+
+### 1.4 About This Specification
+
+This specification documents the AP2 protocol as it appears on the wire between Siemens Apogee supervisors and field panels. It is written for engineers and software authors building tools that read, generate, or analyze AP2 traffic — Wireshark dissectors, intrusion-detection signatures, BACnet bridges, diagnostic scanners, and replacement supervisor stacks.
+
+The protocol itself is proprietary and has no published specification from the vendor. The wire formats, opcode meanings, error semantics, and timing behaviors documented here are derived from observation of real AP2 traffic between commercially-deployed Siemens supervisors (Insight and Desigo CC) and field panels (PXC Compact, PXC Modular, PME1252, PME1300). Where details could not be determined from observation alone — for example, the exact derivation of a session-id nonce, or the boundary between firmware revisions for a particular opcode — the specification says so explicitly.
+
+This document describes the protocol; it does not describe how to attack it, and it does not endorse use of the protocol in environments where confidentiality or integrity matter. P2 provides no transport security (see §21), and any deployment of P2 on a network reachable by untrusted parties is structurally insecure regardless of which implementation produced the traffic.
+
+Two scope boundaries apply throughout:
+
+- **Wire format is authoritative; labels are informational.** When a particular opcode is described as "ValuePush" or "RegisterCOV", that label captures the operation's observable behavior, not a vendor-blessed name. A parser MUST dispatch on the wire bytes (opcode, sub-opcode, body shape), not on the textual label.
+- **Where an operation's behavior is uncertain, the document says so.** Sections that describe write semantics, polymorphic opcodes, or rare error codes flag inferences explicitly. Implementers should treat hedged statements as guidance to verify against their own equipment before relying on the behavior.
+
+Corrections, additions, and counter-examples are welcome through the issue tracker accompanying this document.
 
 ---
 
@@ -129,7 +151,7 @@ The Building Level Network (BLN) — the supervisor↔panel layer — supports m
 
 | BLN Type | Physical Layer | Notes |
 |---|---|---|
-| **P2 (PII)** | RS-485 via trunk-interface card | Legacy serial BLN; up to 4 trunks per supervisor |
+| **P2 (RS-485)** | RS-485 via Trunk Interface card | The original (pre-Ethernet) serial BLN. Sometimes labeled "PII" in vendor literature, referring to the second-generation Apogee panels that introduced this trunk. Up to 4 trunks per supervisor. |
 | **IP (Ethernet)** | TCP/IP over Ethernet | Primary transport for modern installations |
 | **Remote** | Modem over PSTN | Dial-up BLN; one supervisor can host up to 8 modems × 300 remote BLNs |
 | **AEM-bridged** | TCP/IP via Lantronix-based serial-to-Ethernet bridge | Bridges legacy RS-485 BLNs onto an IP network |
@@ -147,7 +169,7 @@ This specification focuses on the **IP (Ethernet) and AEM-bridged variants**, wh
 | **MS/TP Routed FLN** | BACnet MS/TP behind a BACnet router | Indirect access via a BACnet/IP↔MS/TP router |
 | **BACnet/IP FLN** | TCP/IP | Modern BACnet/IP-native FLN devices (e.g. DXR2.E controllers) |
 
-Per panel limits (firmware 3.4+):
+Per panel limits (BACnet firmware revision 3.4 or later — corresponding to the modern PXC Compact / Modular hardware generation):
 - Up to **3 FLNs** per legacy panel (numbered 1, 2, 3)
 - Up to **96 FLN devices** per modern BACnet field panel (across all FLNs combined)
 - Up to **32 FLN devices** per legacy FLN
@@ -177,6 +199,21 @@ The supervisor identifies itself in every frame as:
 ```
 
 Where `LISTENING_PORT` is the TCP port on which the supervisor accepts inbound connections from panels (see §3.2).
+
+### 2.6 Supervisor Stack Architecture (Informative)
+
+The supervisor implements P2 as multiple parallel protocol adaptors, each responsible for a different family of operations. Implementers of dissectors, interoperability tooling, or intrusion-detection signatures may encounter traffic patterns that only make sense in light of this internal split:
+
+| Adaptor role | Behavior on the wire |
+|---|---|
+| **Modern P2 / BACnet bridge** | Handles HVAC point operations and BACnet-bridge translation. Emits the bulk of supervisor-originated AP2 frames. |
+| **IP transport** | IP-transport-specific variants of operational opcodes, plus a set of IP-only operations (alarm acknowledgment, COV registration/cancellation, BACnet network ops). The dominant source of `0x4640` transport keepalives. |
+| **Legacy serial** | Legacy ALS3 protocol and ECP (Electronic Card Protocol — security/access control) over RS-485. **Does not produce AP2 frames on TCP.** |
+| **Fire-alarm integration** | Fire-alarm panel integration (Siemens XLS series) via XNET / FSI sub-protocol. **Does not produce AP2 frames on TCP.** |
+
+Only the first two adaptors produce traffic on TCP/5033 and TCP/5034. The latter two are listed so that an observer who sees references to ALS3 / ECP / FSI / XNET classes in vendor documentation does not assume they are P2-related.
+
+The same operation may appear in both the modern P2 and IP-transport adaptors with slightly different wire shapes; the IP-transport variant is what travels on TCP. This is one structural reason why some opcodes appear polymorphic on the wire (see §6.6).
 
 ---
 
@@ -221,7 +258,7 @@ Field panels emit a periodic presence beacon out-of-band from the TCP traffic. T
 
 The beacon is **dual-emitted**: each beacon is sent twice in immediate succession (typically <1 ms apart) — once to the multicast group, once to the directed broadcast. The redundancy ensures presence detection works regardless of whether intermediate switches have IGMP snooping enabled.
 
-**Note on documentation discrepancy**: some legacy literature references "UDP port 8" for the multicast beacon. The empirically-verified port is UDP/10001 across thousands of captured packets. Implementers MUST use UDP/10001. The multicast group address (`233.89.188.1`) and UDP port are configurable per site; a robust scanner SHOULD accept both as parameters.
+**Note on documentation discrepancy**: some legacy literature references "UDP port 8" for the multicast beacon. The value used in all deployments documented in this specification is UDP/10001. Implementers MUST use UDP/10001. The multicast group address (`233.89.188.1`) and UDP port are configurable per site; a defensive scanner SHOULD accept both as parameters.
 
 #### 3.2.3 Soft Controller Ports
 
@@ -247,7 +284,7 @@ Some installations use a Lantronix-based bridge to expose a remote serial BLN ov
 
 Implementers SHOULD treat TCP/3001 as functionally equivalent to TCP/5033 at the AP2 frame level — the AP2 frame structure is identical; only the transport differs.
 
-#### 3.2.4 BACnet Integration
+#### 3.2.5 BACnet Integration
 
 When BACnet is used:
 
@@ -260,29 +297,39 @@ A BACnet MAC address on Ethernet is **6 bytes**: 4-byte IPv4 + 2-byte UDP port. 
 
 BBMD entries MUST use subnet mask `255.255.255.255` (i.e., `/32`).
 
-#### 3.2.5 Supervisor-Side Service Ports
+#### 3.2.6 Supervisor-Side Service Ports
 
 For a complete enumeration of supervisor-listening ports (relevant to IDS/scanner implementations):
 
 | Port | Protocol | Service |
 |---|---|---|
-| TCP/100 | TCP | Field panel diagnostic service |
-| TCP/135 | TCP | RPC endpoint mapper |
-| TCP/161/162 | UDP | SNMP |
-| TCP/5093 | UDP | License authentication |
-| TCP/5099 | TCP/UDP | License authentication |
-| TCP/5441 | TCP | Panel-traffic sniffer service |
-| TCP/5442 | TCP | Asynchronous panel-event channel |
-| TCP/6779/6780 | TCP | Object-database service (newer supervisors) |
-| TCP/6775/6778 | TCP | Object-database service (legacy supervisors) |
+| TCP/7 | TCP | Server-to-client ICMP-equivalent comm check (Insight) |
+| TCP/100 | TCP | Field-panel diagnostic service |
+| TCP/135 | TCP | Microsoft RPC endpoint mapper |
+| 161 / 162 | UDP | SNMP (poll / trap) |
+| TCP/502 | TCP/UDP | Modbus (when Modbus driver loaded) |
+| 5093 | UDP | License authentication (Rainbow / SafeNet) |
+| 5099 | TCP + UDP | License authentication (database server) |
+| TCP/5441 | TCP | Panel-traffic sniffer service ("Sniffer") |
+| TCP/5442 | TCP | Asynchronous panel-event channel ("IPSNIFF" / Insight Async) |
+| TCP/6779, TCP/6780 | TCP | Object-database service (newer supervisors) |
+| TCP/6775, TCP/6778 | TCP | Object-database service (legacy supervisors) |
+| TCP/12001 – TCP/12005 | TCP | Dialogic voice-board ports (RENO option) |
+| TCP/30400 | TCP/UDP | Utility Cost Manager (when UCM option is installed) |
 
 Field-panel-side ancillary ports:
 
 | Port | Protocol | Service |
 |---|---|---|
-| TCP/21 | FTP | Configuration file transfer |
-| TCP/23 | Telnet | Field-panel HMI (disabled by default) |
-| TCP/69 | TCP | Program-list retrieval |
+| TCP/21 | TCP | FTP — configuration file transfer (used by Field Panel GO; LSM-FPGO license-gated) |
+| TCP/23 | TCP | Telnet HMI (disabled by default) |
+| TCP/50 | TCP | Second Telnet for integration drivers (disabled by default) |
+| TCP/69 | TCP | Program-list retrieval service (Siemens-proprietary; not standard TFTP) |
+| TCP/80 | TCP | Field Panel Web Server (HTTP UI; CVE-2022-45937 — see §21.3) |
+| TCP/999 | TCP | AEM200 configuration (when an AEM200 bridge is in use) |
+| UDP/5033 | UDP | SNMP listener (when `LSM-SNMP` license is enabled on PXC Modular only) — distinct from the multicast beacon on UDP/10001 |
+
+The TCP/69 panel-side service is **not standard TFTP** despite sharing the well-known TFTP port number. It is a Siemens-proprietary program-list retrieval service that runs over TCP. The Lantronix bridge in §3.2.4 uses TCP/69 for a separate TFTP-compatible firmware-download service.
 
 ### 3.3 TCP Keepalive
 
@@ -300,7 +347,7 @@ This section defines the byte layout of a single AP2 message carried over TCP (p
    0                   1                   2                   3
    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-  |                       payload_length                          |  (4 bytes, BE)
+  |                       total_length                            |  (4 bytes, BE)
   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
   |                       session_msg_type                        |  (4 bytes, BE)
   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -323,58 +370,63 @@ This section defines the byte layout of a single AP2 message carried over TCP (p
   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 ```
 
+The first 12 bytes form a fixed session header (length + msg_type + sequence). The remainder is the AP2 payload.
+
 ### 4.2 Field Definitions
 
 | Field | Type | Description |
 |---|---|---|
-| `payload_length` | u32 BE | Total length of the message body following these 4 bytes, not including the length field itself. Used by the framer to demarcate messages within a TCP stream. |
+| `total_length` | u32 BE | Total message length on the wire, including these 4 bytes. A 76-byte frame encodes `0x0000004C` here. Used by the framer to demarcate messages within a TCP stream. |
 | `session_msg_type` | u32 BE | Session-layer message class. See §5 for values. |
-| `sequence_number` | u32 BE | Monotonically increasing per-pair sequence number. Wrap-around behavior is implementation-defined. |
+| `sequence_number` | u32 BE | Monotonically increasing per-side sequence number. Wrap-around at 2^32 is rare in practice (about 13.6 years at 10 req/s); implementers SHOULD tolerate wrap by treating the field as modular. See §8.4. |
 | `direction` | u8 | `0x00` = request (or client→server initial message); `0x01` = success response; `0x05` = error response (followed by u16 BE error code). See §8.3 and §10. |
-| `slot 1 (BLN name)` | NUL-terminated ASCII | BLN name; appears twice in the frame (slots 1 and 3 are identical). Used as routing prefix. Required. |
-| `slot 2 (destination)` | NUL-terminated ASCII | **Destination node name** — the recipient of this frame. In responses, the slots swap content: this becomes the destination of the response (which equals the source of the request). Required. |
-| `slot 3 (BLN name)` | NUL-terminated ASCII | BLN name; identical to slot 1. Required. |
-| `slot 4 (source)` | NUL-terminated ASCII | **Source node name** — the sender of this frame. For a supervisor or scanner, typically in `<HOSTNAME>\|<PORT>` format (e.g. `DCC-SVR\|5034`); for a panel, the panel's node name. Required. |
+| `slot 1` (BLN name) | NUL-terminated ASCII | BLN name; appears twice in the frame (slots 1 and 3 are identical). Routing prefix. Required. |
+| `slot 2` (destination) | NUL-terminated ASCII | **Destination node name** — the recipient of this frame. In responses the slots swap content: slot 2 then holds the destination of the response (the original source). Required. |
+| `slot 3` (BLN name) | NUL-terminated ASCII | BLN name; identical to slot 1. Required. |
+| `slot 4` (source) | NUL-terminated ASCII | **Source node name** — the sender of this frame. Supervisors and scanners typically use `<HOSTNAME>\|<PORT>` format (e.g. `DCC-SVR\|5034`); a panel uses its bare node name. Required. |
 | `AP2 wire opcode` | u16 BE | The AP2 operation code. See §6 for the catalog. |
-| `sub-opcode / flags` | u16 BE | Operation variant or modifier. See §7 for the CPI namespace. |
+| `sub-opcode / flags` | u16 BE | A 2-byte field that follows the wire opcode for most operations. Its interpretation is **opcode-specific**: many operations use these bytes as a sub-opcode or flags value (commonly `0x0000`, sometimes a CPI-derived value such as `0x0001` for `0x0274` ValuePush); a few operations — notably `0x4640` IdentifyBlock — have no separate sub-opcode field and place TLV data directly after the wire opcode. See §6 per-opcode entries and §7 for the CPI namespace. |
 | `payload` | variable | Operation-specific data. See per-opcode sections. |
 
-**Critical**: slot 2 holds the **destination** of the current frame and slot 4 holds the **source**. This ordering applies to all session message types (`0x33`, `0x34`, `0x2E`, `0x2F`) and to both requests and responses. See §4.6 for examples.
+Slot 2 holds the destination of the current frame and slot 4 holds the source. This ordering applies to all session message types (`0x33`, `0x34`, `0x2E`, `0x2F`) and to both requests and responses. See §4.6 for examples.
 
 ### 4.3 Byte-Order Note
 
-All multi-byte integer fields in the wire frame are **big-endian (network byte order)**, including the AP2 wire opcode and the sub-opcode. Implementers parsing pcap data should read these as big-endian; implementers generating frames must byte-swap from native order before transmission.
+All multi-byte integer fields in the wire frame are **big-endian (network byte order)**, including the AP2 wire opcode and any sub-opcode bytes that follow it. Implementations parsing captured traffic read these as big-endian; implementations generating frames byte-swap from native order before transmission.
 
 ### 4.4 Maximum Frame Size
 
-The `payload_length` field is 32 bits, so the theoretical maximum frame size is 4 GB. Practical limits:
+The `total_length` field is 32 bits, so the theoretical maximum frame size is 4 GB. Practical limits:
 
-- TCP MSS = 1460 bytes; frames larger than ~1400 bytes will fragment across TCP segments
-- The framer MUST handle messages that span multiple TCP segments by buffering until `payload_length` bytes have arrived
-- The typical observed frame size is **60-150 bytes**; the largest commonly seen is on the order of a few kilobytes (e.g. PPCL program upload)
+- TCP MSS is 1460 bytes; frames larger than about 1400 bytes fragment across TCP segments.
+- The framer MUST handle messages that span multiple TCP segments by buffering until `total_length` bytes have arrived.
+- Typical frame size is 60-150 bytes; the largest commonly seen frames (a few kilobytes) occur during PPCL program upload.
+- Receivers SHOULD reject frames with `total_length > 65536` as framing corruption and close the connection.
 
-### 4.5 Example: ValuePush (COV emission)
+### 4.5 Example: ValuePush (Supervisor → Panel BLN-Virtual Write)
 
-A field panel notifies the supervisor that point `OASTMP1.BN` now reads `48.706`:
+A supervisor pushes a BLN-sourced virtual-point value into a panel's model: point `OASTMP1.BN` is set to `48.706` (an outdoor-air-temperature value mirrored from another panel that reads it physically).
 
 ```
-00 00 00 57                   payload_length = 87
-00 00 00 33                   session_msg_type = 0x33
-00 0C 7B C6                   sequence_number = 0x000C7BC6
-00                            direction = request
-53 49 54 45 42 4C 4E 00       "SITEBLN\0"          (BLN name, slot 1)
-6E 6F 64 65 36 00             "node6\0"            (destination node, slot 2)
-53 49 54 45 42 4C 4E 00       "SITEBLN\0"          (BLN name, slot 3)
-44 43 43 2D 53 56 52 7C 35 30 33 34 00 "DCC-SVR|5034\0" (source identifier, slot 4)
-02 74                         AP2 opcode = 0x0274 (ValuePush)
-00 01                         sub-opcode = 0x0001
-00 00                         field marker
-0A                            name length = 10
-4F 41 53 54 4D 50 31 2E 42 4E "OASTMP1.BN"        (point name)
-01 00                         value marker
-00 42 42 D3 D0                value = float32 BE 0x4242D3D0 = 48.706 °F
-... padding ...
+00 00 00 4C                            total_length = 76 bytes
+00 00 00 33                            session_msg_type = 0x33 (legacy dialect)
+00 0C 7B C6                            sequence_number = 0x000C7BC6
+00                                     direction = request
+53 49 54 45 42 4C 4E 00                "SITEBLN\0"          (slot 1: BLN name)
+4E 4F 44 45 36 00                      "NODE6\0"            (slot 2: destination panel)
+53 49 54 45 42 4C 4E 00                "SITEBLN\0"          (slot 3: BLN name repeated)
+44 43 43 2D 53 56 52 7C 35 30 33 34 00 "DCC-SVR|5034\0"     (slot 4: source = supervisor)
+02 74                                  AP2 wire opcode = 0x0274 (ValuePush)
+00 01                                  CPI sub-opcode = 0x0001
+00 00                                  field marker
+01 00 0A                               TLV header: tag=0x01, length=10 (u16 BE)
+4F 41 53 54 4D 50 31 2E 42 4E          point name "OASTMP1.BN" (10 bytes)
+01 00 00 00                            value-block marker (TLV tag + zero-length empty TLV)
+42 42 D3 D0                            f32 BE = 0x4242D3D0 = 48.706
+00                                     trailer
 ```
+
+Slot 2 holds the destination (panel `NODE6`); slot 4 holds the source (supervisor `DCC-SVR|5034`). The device field is implicit — BLN-virtual points carry no device TLV in this direction. The inverse direction (panel → supervisor COV) is documented in §12.5 and carries an explicit device TLV.
 
 ### 4.6 Routing Header — Name Slot Ordering
 
@@ -428,12 +480,12 @@ The 4-byte `session_msg_type` field at frame offset 4 indicates the role of the 
 
 | Value | Name | Direction | Purpose |
 |---|---|---|---|
-| `0x00000033` | Standard | Client → Server or Server → Client | Carries an AP2 RPC request or response |
-| `0x00000034` | Push | Server → Client | Asynchronous notification or event push |
-| `0x0000002E` | Control-A | Either | Less common; control/management |
-| `0x0000002F` | Control-B | Either | Less common; control/management |
+| `0x00000033` | **DATA** | Bidirectional | Operational traffic on legacy-dialect panels (PME1252 and earlier) — point reads, writes, enumerations, COV pushes. Most-common type (>85% of observed frames). |
+| `0x00000034` | **HEARTBEAT** | Bidirectional | Operational traffic on modern-dialect panels (PME1300+) — same role as `0x33` but used by newer firmware. The name "HEARTBEAT" is historical; in practice these frames carry the full opcode set, not just keepalives. See §11 for dialect detection. |
+| `0x0000002E` | **CONNECT** | Bidirectional | Session-establishment handshake initiator (Mode A) and Mode-C carrier for some workflows. Body carries a `0x4640` IdentifyBlock or, in Mode-C-headless flows, an operational opcode directly. See §9.11. |
+| `0x0000002F` | **ANNOUNCE** | Bidirectional | Reverse-direction handshake initiator (Mode B, typically panel → supervisor). Structurally identical to CONNECT. See §9.12. |
 
-A receiver MUST be prepared to handle all four types. The most common is `0x33` (over 85% of observed traffic).
+A receiver MUST be prepared to handle all four types. Legacy-dialect panels speak `0x33` for operational traffic; modern-dialect panels speak `0x34`. CONNECT (`0x2E`) and ANNOUNCE (`0x2F`) frame session establishment regardless of dialect.
 
 ### 5.2 Sequence Numbers
 
@@ -441,18 +493,26 @@ Each side maintains a monotonically increasing sequence counter per connection. 
 
 The receiver echoes the sequence number in the response so that the requester can correlate. Async pushes (`session_msg_type = 0x34`) use the server's own sequence counter, independent of any client request.
 
+**Pipelining lag — pair with tolerance, not strict equality.** In normal operation the panel's response sequence equals the request sequence in the great majority of pairs. A small fraction of pairs (around 10% in busy sessions) show panel-side pipelining lag: the response sequence runs **1 to 17 behind** the request sequence (never ahead). This is normal in busy sessions and is not a desync. Parsers MUST pair requests and responses with a sliding-window tolerance of at least 20 frames rather than requiring strict sequence equality. A parser that requires exact echo will appear to lose roughly 10% of responses.
+
 ### 5.3 Direction Byte
 
-The single-byte `direction` field at offset 12:
+The single-byte `direction` field at offset 12 takes one of three values:
 
-- `0x00` = request, initial message, or push
-- `0x01` = response or acknowledgment
+- `0x00` = request, initial message, or asynchronous push
+- `0x01` = success response or acknowledgment
+- `0x05` = error response (followed by 2-byte BE error code; see §10)
 
-The direction byte allows a stateless decoder to tell which way the frame travels without inspecting TCP-stream state.
+These are the only three values observed. The direction byte allows a stateless decoder to tell which way the frame travels without inspecting TCP-stream state.
 
 ### 5.4 Connection Establishment
 
-A standard TCP three-way handshake establishes the connection. The first application-layer frame after handshake completion is typically a session-initialization message with `session_msg_type = 0x33` containing the initiating party's BLN/node identifiers.
+A standard TCP three-way handshake establishes the connection. The first application-layer frame after handshake completion is typically a session-initialization message carrying a `0x4640` IdentifyBlock:
+
+- Against **legacy-dialect** panels, the first frame uses `session_msg_type = 0x33` (DATA) or `0x2E` (CONNECT).
+- Against **modern-dialect** panels, the first frame uses `session_msg_type = 0x34` (HEARTBEAT) or `0x2F` (ANNOUNCE).
+
+A client that does not know the dialect in advance SHOULD use the detection algorithm in §11.2.
 
 ### 5.5 Connection Teardown
 
@@ -462,7 +522,7 @@ Either side may close the TCP connection (FIN). No application-layer goodbye mes
 
 ## 6. AP2 Wire Opcode Catalog
 
-The AP2 wire opcode (2 BE bytes at frame offset just after the addressing strings) identifies the operation. **418 distinct opcodes** are defined; this section lists the most-commonly observed ones grouped by function. Appendix B gives the complete enumeration.
+The AP2 wire opcode (2 BE bytes at frame offset just after the addressing strings) identifies the operation. **418 distinct opcodes** are defined; this section lists the most-commonly observed ones grouped by function. Appendix D gives the complete enumeration.
 
 ### 6.1 Opcode Categories (high-byte clustering)
 
@@ -470,19 +530,20 @@ The opcode space partitions into functional regions by high byte:
 
 | Range | Function | Examples |
 |---|---|---|
-| `0x00xx`-`0x01xx` | Point definition, modification, COV registration | `0x0220` RegisterCOV, `0x0240` WriteWithQuality, `0x0244` CancelCOV |
-| `0x02xx` | Point I/O ops, reads | `0x0273` WriteNoValue, `0x0274` ValuePush, `0x02E2` ReadProcessData |
-| `0x03xx`-`0x05xx` | BLN management, alarming | `0x0500` AlarmAck, `0x0508` AlarmReport, `0x0509` AlarmAckV2 |
-| `0x06xx` | Modify/maintenance ops | — |
-| `0x09xx` | Enumeration, scheduler | `0x0981` EnumeratePoints |
-| `0x38xx` | Trend ops | — |
-| `0x40xx` | BACnet integration | `0x4000`-`0x401F` |
-| `0x41xx` | PPCL programming | `0x4103` PpclClearTrace, `0x4106` DefinePpcl, `0x4107`, `0x4108` |
-| `0x42xx` | Bulk property operations | `0x4221` BulkPropertyRead |
-| `0x46xx` | Discovery, replication | `0x4633` ReplNotify-init, `0x4634` ReplNotify, `0x4636` ReplChanges, `0x4640` EPing |
-| `0x48xx`-`0x4Bxx` | BLN management, node ops | — |
-| `0x50xx` | Scheduler transport | `0x5001`-`0x5054` Schedule add/del/mod/read |
-| `0xF0xx` | Vendor-extended | — |
+| `0x00xx`-`0x01xx` | Point definition, modification, COV registration | `0x0050` StatusQuery, `0x0100` SystemInfo (legacy), `0x010C` SystemInfo (compact) |
+| `0x02xx` | Point I/O ops, reads, writes | `0x0220` ReadShort, `0x0240` WriteWithQuality, `0x0271` ReadExtended, `0x0273` WriteNoValue, `0x0274` ValuePush, `0x02E2` ReadProcessData |
+| `0x03xx`-`0x05xx` | BLN management, alarming | `0x0500` AlarmAck (legacy), `0x0508` AlarmReport, `0x0509` AlarmAck (v2) |
+| `0x06xx` | Modify / maintenance ops | `0x0606` lightweight probe |
+| `0x09xx` | Enumeration, scheduler | `0x0981` EnumeratePoints, `0x0985` EnumeratePrograms, `0x0986` EnumerateFLN |
+| `0x38xx` | Trend ops | `0x3807`, `0x3809`, `0x3817` (trend definitions) |
+| `0x40xx` | BACnet integration | `0x4000`-`0x401F`, `0x400F` UploadReportDescriptor |
+| `0x41xx` | PPCL programming | `0x4100` PpclLineUpdate, `0x4103` PpclClearTrace, `0x4106` DefinePpcl |
+| `0x42xx` | Bulk property operations | `0x4200` PropertyQuery, `0x4221` BulkPropertyRead, `0x4222` BulkPropertyWrite |
+| `0x46xx` | Discovery, replication | `0x4633` ReplNotify-init, `0x4634` RoutingTable, `0x4636` ReplChanges, `0x4640` IdentifyBlock / EPing |
+| `0x48xx`-`0x4Bxx` | BLN management, node ops | `0x4824`–`0x4B03` cluster |
+| `0x50xx` | Scheduler transport | `0x5001`–`0x5054` Schedule add/del/mod/read; `0x5020` EntryWrite, `0x5022` SlotInit |
+| `0x53xx` | Status probes | `0x5354` (constant-body probe, always errors) |
+| `0xF0xx` | Vendor-extended | `0xF038` BLN management (vendor-extended range) |
 
 ### 6.2 Most-Common Opcodes (by observed frequency)
 
@@ -494,8 +555,8 @@ The opcode space partitions into functional regions by high byte:
 | `0x4222` | — | **BulkPropertyWrite** | Canonical opcode for SYST-scoped setpoint writes. The supervisor retries this after a `0x0240` returns `0x0E15`. |
 | `0x4636` | `0x1604` | **ReplChanges** | Replication update push between panels |
 | `0x4634` | — | **ReplNotify / RoutingTable** | BLN routing-table announce/push (port-agnostic — observed on both 5033 and 5034) |
-| `0x0500` | `0x0F01` | **AckAlarm** | Alarm acknowledgment |
-| `0x0509` | — | **AckAlarm v2** | Newer alarm acknowledgment variant (paired with `0x0508` AlarmReport) |
+| `0x0500` | `0x0F01` | **AlarmAck** (legacy) | Alarm acknowledgment (legacy form) |
+| `0x0509` | — | **AlarmAck** (v2) | Newer alarm acknowledgment variant (paired with `0x0508` AlarmReport). Polymorphic — see §6.6. |
 | `0x0508` | — | **AlarmReport** | Panel reports an alarm transition to supervisor |
 | `0x0220` | `0x00xx` | **RegisterCOV / read-short** | **Subscribe** to COV updates (modern dialect); also **point read** for modern firmware. Variants `0x0220`-`0x0223`. |
 | `0x0271` | `0x0010` | **ReadExtended** | Point read (legacy-dialect panels, PME1252 and earlier). Returns full value block. |
@@ -512,7 +573,7 @@ The opcode space partitions into functional regions by high byte:
 | `0x0981` | `0x0961`/`0x0971`/`0x0981` | **EnumeratePoints** | Panel-wide point enumeration. Cursor-based (multi-roundtrip). Three variants for FLN/panel/subnet scope. |
 | `0x0985` | — | **EnumeratePrograms** | Enumerate PPCL programs — response carries source text |
 | `0x0986` | — | **EnumerateFLN** | Enumerate FLN devices attached to a panel |
-| `0x0100` | `0x0118` | **SystemInfo (legacy) / Connect-response** | Firmware/model query (legacy panels). Also the CONNECT-response opcode on PME1252 V2.8.10 firmware — those panels echo this in the `0x2E` body instead of `0x4640`. |
+| `0x0100` | `0x0118` | **SystemInfo (legacy) / Connect-response** | Firmware/model query (legacy panels). Also the CONNECT-response opcode on PME1252 V2.8.10 firmware — those panels echo this in the `0x2E` body instead of `0x4640`. **High-frequency on legacy firmware**; implementers MAY observe traffic shapes beyond firmware/CONNECT-response that this specification does not document. |
 | `0x010C` | — | **SystemInfo (compact)** | Firmware/model query (newer panels, 2-byte request) |
 | `0x4106` | `0x0xxx` | **DefinePpcl** | Define/load a PPCL program |
 | `0x4103` | `0x04xx` | **PpclClearTrace** | Clear PPCL trace bits |
@@ -540,17 +601,51 @@ Variant selection is encoded by the specific opcode value, not by a sub-opcode b
 
 ### 6.5 Complete Opcode Reference
 
-See Appendix B for the complete (opcode → sub-opcode → name) table.
+See Appendix D for the complete (opcode → sub-opcode → name) table. §6.6 documents wire opcodes that are polymorphic (multiple distinct operations sharing one opcode value).
+
+### 6.6 Polymorphic Wire Opcodes
+
+**Several AP2 wire opcodes are polymorphic** — the same opcode value is used by multiple distinct operations that share only the wire-opcode byte. The operations are distinguished by **body shape**, not by the opcode alone. A parser that pattern-matches on opcode alone will misroute these.
+
+Polymorphism arises from two structural causes:
+
+1. **Multiple supervisor code paths emit the same wire opcode.** The supervisor stack defines more distinct operations than there are wire opcode values, so several operations map to the same wire value. Each caller produces a body shape characteristic of its operation.
+2. **Transport-layer and application-layer share an opcode.** `0x4640` is the canonical example: the supervisor's transport layer emits it as a 10-second keepalive, but the application layer also has a rare replication-change operation at the same wire opcode.
+
+The eight currently-known polymorphic wire opcodes:
+
+| Wire opcode | Use A (dominant) | Use B (rare) | Disambiguator |
+|---|---|---|---|
+| `0x4640` | Transport-layer 10 s heartbeat / IdentifyBlock | Replication-change push (CPI `0x1604`) | Body carries `0x4640` TLV identity payload → heartbeat; body carries replication-change list → ReplChanges |
+| `0x4100` | PPCL line write (carries program-name + line-content + SYST footer) | Equipment-schedule member-log report (CPI `0x0675`) | Body bytes after opcode: PPCL text → line write; EQS member-log structure → log report |
+| `0x010C` | SysInfo / firmware fetch (2-byte request, ~269 B response) | Buffer-alarm-state read (CPI `0x0132`) | Request body length 2 bytes → SysInfo; longer body → alarm-state read |
+| `0x0509` | AlarmAck (compact, class header + point name) | BACnet MS/TP controller-value report (CPI `0x1137`) | Routing: DCC → PXC short body → AlarmAck; longer body with MSTP-controller TLVs → MS/TP value report |
+| `0x0291` | SYST property write (value-bearing body) | Trend delete (CPI `0x0701`) | Body carries `01 00 c8 [type] [f32]` value marker → property write; trend-id payload → trend delete |
+| `0x0606` | Lightweight heartbeat / panel-name probe | Holiday-spec read (CPI `0x1342`) | 14-byte constant body → heartbeat; calendar-spec body → holiday read |
+| `0x0961` | Legacy AnalogPointQuery / EnumeratePoints (FLN scope) | Access-group replace (CPI `0x0917`) | Body carries scope TLV + cursor → enumerate; access-group payload → access-group op |
+| `0x0964` | TitleAnalogQuery (value + units + limits) | Trend-definition upload (CPI `0x0705`) | Body carries point-name TLV → TitleAnalogQuery; trend-definition payload → trend upload |
+
+A parser that receives any of these opcodes MUST inspect the body to determine which use is in play. A dissector or IDS that labels frames by opcode alone will mislabel the polymorphic cases.
+
+In normal BLN traffic, Use A is by far the dominant case. Field-tested clients (scanners, dissectors) typically only need to handle Use A. Use B is documented for completeness because supervisor-side tooling and some newer-firmware behaviors do exercise it occasionally.
 
 ---
 
 ## 7. CPI Sub-Opcode Namespace
 
-The 2-byte `sub-opcode / flags` field at frame offset 4 within the AP2Cmd portion is the **CPI function code** — the supervisor's internal dispatch identifier. Each AP2 wire opcode maps to one CPI code; multiple wire opcodes may share the same CPI namespace (operation family + variant byte).
+The **CPI function code** (Common Protocol Interface) is the supervisor's internal dispatch identifier for each AP2 operation. It is a 2-byte value held in the in-memory `AP2Cmd` structure at offset `+0x06`, immediately after the wire opcode at `+0x04`.
+
+The relationship between CPI codes and wire bytes is **not one-to-one**:
+
+- For many operations (e.g. `0x0274` ValuePush with CPI `0x0001`), the CPI code is emitted onto the wire as the 2 bytes immediately following the wire opcode. In these cases the CPI code is observable directly.
+- For some operations, the wire bytes following the opcode are `0x0000` regardless of the in-memory CPI code (e.g. `0x0271` reads as observed in operation use `00 00` after the wire opcode even when the supervisor's internal CPI code differs).
+- For `0x4640` IdentifyBlock, there is no separate CPI byte pair on the wire — TLV data starts immediately after the wire opcode.
+
+A wire-level parser should treat the bytes immediately after the wire opcode as opcode-specific and consult the per-opcode definitions in §6 and §12. The CPI namespace clustering below is most useful for understanding which operations belong to which supervisor-side family.
 
 ### 7.1 CPI Namespace Map (high-byte clustering)
 
-| Sub-op high byte | CPI namespace | Wire opcode family |
+| CPI high byte | Namespace | Wire opcode family |
 |---|---|---|
 | `0x00xx` | COV / value primitives | `0x0240`, `0x0241`, `0x0271`-`0x0273` |
 | `0x01xx` | Point definition / modification | `0x005B`, `0x0100`-`0x0140`, `0x0303`-`0x0327`, `0x5332`-`0x5355` |
@@ -570,7 +665,7 @@ The 2-byte `sub-opcode / flags` field at frame offset 4 within the AP2Cmd portio
 | `0x12xx` | Sensitivity / diagnostic | `0x4245` |
 | `0x13xx` | Modify / maintenance | `0x0600`-`0x0615` |
 | `0x15xx` | Network maintenance | `0x4300`, `0x4332` |
-| `0x16xx` | **Replication / Discovery** | `0x4633` (sub=`0x1601`), `0x4635` (`0x1603`), `0x4636` (`0x1604`), `0x4640` (`0x1600`) |
+| `0x16xx` | **Replication / Discovery** | `0x4633` (CPI `0x1601`), `0x4635` (`0x1603`), `0x4636` (`0x1604`), `0x4640` (`0x1600`) |
 | `0x20xx` | BLN management | `0x4824`-`0x4B03` cluster, `0xF038` |
 | `0xE3xx` | Vendor-extended | `0x0031`, `0x0032`, `0x0033` |
 
@@ -582,7 +677,8 @@ Not every AP2Cmd subclass explicitly writes the sub-opcode field. About one-thir
 
 | AP2 opcode | CPI sub-opcode | Role |
 |---|---|---|
-| `0x4640` | `0x1600` | Discovery EPing (intra-site heartbeat base) |
+| `0x4640` | `0x1600` | Discovery EPing (intra-site heartbeat base) — transport-layer dominant use |
+| `0x4640` | `0x1604` | Replication-change push — application-layer use, rare. See §6.6 for the polymorphism. |
 | `0x4633` | `0x1601` | Replication notification — init |
 | `0x4635` | `0x1603` | Replication notification — event |
 | `0x4636` | `0x1604` | Replication changes (the actual update push) |
@@ -590,7 +686,7 @@ Not every AP2Cmd subclass explicitly writes the sub-opcode field. About one-thir
 | `0x4103` | (PPCL family) | PpclClearTrace |
 | `0x0274` | `0x0001` | ValuePush (COV) |
 | `0x0240` | `0x0004` | WriteWithQuality |
-| `0x0500` | `0x0F01` | AckAlarm |
+| `0x0500` | `0x0F01` | AlarmAck (legacy) |
 
 ---
 
@@ -629,14 +725,14 @@ When serializing an AP2Cmd to the wire:
 
 When deserializing:
 
-1. Read 4 bytes for `payload_length`. Buffer at least that many bytes.
+1. Read 4 bytes for `total_length` (u32 BE). The full frame is exactly `total_length` bytes on the wire; buffer until `total_length` bytes are available before continuing.
 2. Read 4 bytes for `session_msg_type`.
 3. Read 4 bytes for `sequence_number`.
-4. Read 1 byte for `direction` (see §8.3 for `direction` values including error responses).
-5. Read four NUL-terminated strings.
+4. Read 1 byte for `direction` (see §8.3 for direction values, including error responses).
+5. Read four NUL-terminated strings (slots 1 through 4).
 6. Read 2 bytes for `wire_opcode` (big-endian).
 7. Read 2 bytes for `cpi_sub_opcode` (big-endian).
-8. The remaining bytes are operation-specific payload; consult the per-opcode definition.
+8. The remaining bytes (up to `total_length` from the start of the frame) are the operation-specific payload; consult the per-opcode definition.
 
 ### 8.3 Direction Byte Values
 
@@ -651,10 +747,10 @@ The single-byte `direction` field at offset 12 takes one of three values:
 An error response (`direction = 0x05`) has body layout:
 
 ```
-0x05 <error_code_u16_BE> [optional context bytes]
+0x05 <error_code_u16_BE>
 ```
 
-The error code identifies the failure reason; see §10 for the catalog of common error codes.
+The error response body is exactly 3 bytes; no trailing context follows the error code (see §10.3). The error code identifies the failure reason; see §10 for the catalog of common error codes.
 
 ### 8.4 Sequence Number Convention
 
@@ -684,7 +780,7 @@ The identity message uses wire opcode `0x4640` (the same opcode used for in-sess
 ```
 Field                              Size  Value/Description
 -----                              ----  -----------------
-payload_length                     4     Total length of body following (BE)
+total_length                       4     Total wire length of this frame, BE (includes these 4 bytes; see §4.2)
 session_msg_type                   4     0x00000033 (legacy) or 0x00000034 (modern); see §11
 sequence_number                    4     Random 24-bit initial value, BE
 ─── ROUTING BLOCK ───
@@ -714,7 +810,9 @@ trailing_null                      1     0x00
 
 The **trailer is exactly 16 bytes** (separator + 3 flag bytes + 5 reserved + 4 timestamp + 2 session-id + 1 null).
 
-**On the length encoding**: the inner TLV format is `[tag 0x01][u16 BE length][value]` — a 3-byte header before each string value. In practice, names are <256 characters, so the high byte of the length field is always zero (e.g., a 7-byte name "SITEBLN" encodes as `01 00 07 53 49 54 45 42 4C 4E`). Implementers MUST emit the length as u16 BE, not a single byte.
+The IdentifyBlock body starts the first TLV immediately after the 2-byte wire opcode `46 40`. There is no separate sub-opcode field for `0x4640` (see §4.2). The 3 TLVs (scanner self-name, site code, BLN name) are followed by the 16-byte trailer.
+
+A note on the inner length encoding: the TLV format is `[tag 0x01][u16 BE length][value]` — a 3-byte header before each string value. Names are nearly always under 256 characters, so the high byte of the length field is zero in practice (a 7-byte name "SITEBLN" encodes as `01 00 07 53 49 54 45 42 4C 4E`). Implementers MUST emit the length as a u16 BE, not as a single byte; a 1-byte length will produce frames that don't parse against any real Siemens stack.
 
 ### 9.3 Three Identifiers Required
 
@@ -727,7 +825,7 @@ To establish a session, a client MUST know three identifiers:
 The BLN name can be learned by:
 - Reading site configuration documents
 - Sniffing existing traffic on the network (BLN name appears in every frame)
-- Parsing a pcap from the site
+- Inspecting traffic captured at the site
 - The `0x0050` StatusQuery opcode (leaks the supervisor name without authentication)
 
 ### 9.4 Handshake Response
@@ -743,7 +841,9 @@ A panel that receives a handshake with a mismatched BLN name will typically clos
 
 ### 9.5 Identity Refresh
 
-The `0x4640` opcode is also used **mid-session** as a periodic identity refresh / EPing. The body format is identical to the initial handshake. Clients SHOULD send a refresh every 60 seconds or so to keep the session alive; some panels close idle connections without it.
+The `0x4640` opcode is also used **mid-session** as a periodic identity refresh / EPing. The body format is identical to the initial handshake.
+
+The cadence used by Desigo CC is **exactly 10.0 seconds** per established TCP connection, measured across multiple long-running sessions with zero variance. This matches the vendor-default "Intra-site EPing Period" of 10 s (see §13.2.1). Clients SHOULD match this cadence to be indistinguishable from a real supervisor; the protocol also tolerates longer intervals on most firmware. A client that allows >60 s of idle time MAY have its connection closed by the panel.
 
 ### 9.6 Inner TLV Format
 
@@ -786,7 +886,7 @@ Bytes at trailer offsets 13-14 (2 bytes) are a session identifier with distinct 
 
 Since panels successfully establish sessions with `0x00 0x00`, the panel-side bouncer accepts this value. A scanner that uses `0x00 0x00` matches what real panels send.
 
-The exact derivation of the supervisor's non-zero value is not pinned down — it may be a hash of session parameters, a counter, or a random nonce per session. A scanner that wants to mimic Desigo CC could copy a value from a real capture, but doing so risks colliding with an active session.
+The exact derivation of the supervisor's non-zero value is implementation-specific — it may be a hash of session parameters, a counter, or a random nonce per session. A scanner that wants to mimic Desigo CC could copy a value from observed traffic, but doing so risks colliding with an active session.
 
 ### 9.9 The Embedded Timestamp
 
@@ -815,7 +915,7 @@ The distinct BLN-RST vs slot-2-silent behavior is what makes cold-site BLN disco
 
 ### 9.11 The Three Connection Modes
 
-Captures reveal three distinct connection patterns. **Scanner authors must recognize all three or they will mis-frame traffic.**
+In operation, three distinct connection patterns occur. **Scanner authors must recognize all three or they will mis-frame traffic.**
 
 | Mode | First-frame type | Subsequent frames | Identity exchange? | Where seen |
 |---|---|---|---|---|
@@ -834,7 +934,7 @@ Within Mode C there are **two sub-variants**:
 
 Mode C is **not** uniquely supervisor-initiated. Both directions exist: supervisor→panel (schedule ops) and panel→supervisor (reads, alarm reports).
 
-**Implementation requirement**: a dispatcher that only handles `0x33`/`0x34` will silently drop every byte of a Mode C-headless session. A robust dispatcher must accept opcode payloads inside `0x2E` and `0x2F` whenever the first two bytes after the routing header are not `0x46 0x40`. The marker selector is:
+A dispatcher that only handles `0x33`/`0x34` will silently drop every byte of a Mode-C-headless session. A correct dispatcher accepts opcode payloads inside `0x2E` and `0x2F` whenever the first two bytes after the routing header are not `0x46 0x40`. The marker selector is:
 
 - First 2 bytes after routing header == `0x46 0x40` → IdentifyBlock (Mode A/B initial frame, Mode-C-with-handshake initial frame, or mid-session identity refresh)
 - Otherwise → operational opcode (treat the 2 bytes as a wire opcode)
@@ -865,15 +965,14 @@ These are distinct from Mode C frames:
 
 ### 9.14 Frame-Length Calculation
 
-The `payload_length` field at offset 0 is the **total length of the body after the length field itself**. That is:
+The `total_length` field at offset 0 is the **total length of the entire frame on the wire**, including the 4 bytes occupied by the length field itself. The 12-byte session header (length + msg_type + sequence) and the payload that follows are both counted:
 
 ```
-payload_length = (4-byte msg_type) + (4-byte seq) + body
+total_length = 4 (length field) + 4 (msg_type) + 4 (sequence) + payload
+             = 12 + payload
 ```
 
-The complete frame size on the wire is `payload_length + 4` (the 4 bytes for the length field itself).
-
-A receiver computing buffer sizes should treat `total_frame_size = read_u32_BE() + 4`. Receivers SHOULD reject frames with `payload_length > 65536` as framing corruption.
+A receiver that has read the first 4 bytes needs to read `total_length − 4` additional bytes to complete the frame. Receivers SHOULD reject frames with `total_length > 65536` as framing corruption and close the connection.
 
 ---
 
@@ -884,14 +983,14 @@ A receiver computing buffer sizes should treat `total_frame_size = read_u32_BE()
 A panel signals an operation failure with `direction = 0x05`, followed by a 2-byte big-endian error code:
 
 ```
-0x05 <error_code_BE_u16> [optional context bytes]
+0x05 <error_code_BE_u16>
 ```
 
-The remainder of the body MAY contain operation-specific context (e.g., the address that caused the error). Clients SHOULD log the full body for diagnostics but rely on the error code as the canonical failure indication.
+The error response body is **exactly 3 bytes** (direction + 2-byte code) with no trailing payload — see §10.3. Earlier vendor documentation described an optional context-bytes tail; that has not been observed in normal traffic. Clients SHOULD rely on the error code as the canonical failure indication and SHOULD log the routing header (slot 4) to identify the responding panel.
 
 ### 10.2 Error Code Catalog
 
-Error codes use the Siemens E-code naming convention (`E<decimal>` form). The table below covers both empirically-observed codes (in 1471+ corpus error frames) and vendor-documented codes from Appendix C of the BACnet ALN Field Panel Manual.
+Error codes use the Siemens E-code naming convention (`E<decimal>` form). The table below covers both codes commonly seen in normal production traffic and vendor-documented codes from Appendix C of the BACnet ALN Field Panel Manual.
 
 **Commonly observed in production traffic:**
 
@@ -947,9 +1046,9 @@ Error codes use the Siemens E-code naming convention (`E<decimal>` form). The ta
 
 ### 10.3 Error Response Body Size
 
-**Error response payload is exactly 2 bytes.** The body after the routing header is always exactly: 1-byte direction `0x05` + 2-byte error code, with zero trailing bytes. No opcode/error-code combination has been observed with additional payload after the error code.
+**Error response payload is exactly 3 bytes**: 1-byte direction `0x05` + 2-byte error code. No opcode is echoed; no trailing context bytes have been observed in any error response in normal traffic.
 
-Parser implication: when the direction byte is `0x05`, read exactly 2 bytes for the error code and stop. Do not scan for a value block, and do not expect the request opcode to be echoed.
+Parser implication: when the direction byte is `0x05`, read exactly 2 more bytes for the error code and stop. Do not scan for a value block, and do not expect the request opcode to be echoed.
 
 ### 10.4 Status Byte Check Is Mandatory
 
@@ -977,7 +1076,7 @@ Two firmware dialects are deployed across modern controllers; they differ in the
 | **Legacy** | PME1252 and earlier hardware; firmware revisions up to ~V2.8.10 | `0x33` (DATA) |
 | **Modern** | PME1300 / AAS platform and later; firmware V2.8.15+ | `0x34` (HEARTBEAT) |
 
-Concrete examples observed in the field:
+Representative firmware revisions in each dialect:
 - PME1252 panels with firmware `PXME V2.8.10 APOGEE` build Oct 2013 → legacy dialect
 - PME1300 panels with firmware `PXME V2.8.18 APOGEE` build Sep 2019 → modern dialect
 
@@ -1005,12 +1104,16 @@ The short first timeout is critical: a 30-second wait per modern panel would mak
 
 ### 11.3 Additional Dialect Indicators
 
-| Indicator | Implies |
+The four message-type bytes pair with the dialects as follows:
+
+| Observed signal | Implies |
 |---|---|
-| Panel responds with `session_msg_type = 0x33` | Legacy dialect; use `0x33` for all subsequent operations |
-| Panel responds with `session_msg_type = 0x34` | Modern dialect; use `0x34` for all subsequent operations |
-| Panel initiates with `session_msg_type = 0x2F` (ANNOUNCE) | Modern dialect; the panel is announcing itself to the supervisor |
-| Panel sends `session_msg_type = 0x2E` (CONNECT) | Connection-management message; may carry `0x4640` or `0x0100` in body depending on panel firmware |
+| Panel responds with `session_msg_type = 0x33` (DATA) | Legacy dialect; use `0x33` for all subsequent operational messages |
+| Panel responds with `session_msg_type = 0x34` (HEARTBEAT) | Modern dialect; use `0x34` for all subsequent operational messages |
+| Frame uses `session_msg_type = 0x2E` (CONNECT) | Legacy-dialect session-management frame (typically supervisor → panel, Mode A) |
+| Frame uses `session_msg_type = 0x2F` (ANNOUNCE) | Modern-dialect session-management frame (typically panel → supervisor, Mode B) |
+
+The four message types pair into two dialect groups: legacy = {`0x2E`, `0x33`}, modern = {`0x2F`, `0x34`}. Both dialects can coexist on the same BLN — different panels speak different dialects depending on their firmware vintage.
 
 ### 11.4 Caching
 
@@ -1104,12 +1207,12 @@ A supervisor session typically uses all four reads mixed together. They are NOT 
 |---|---|
 | `0x0220` | Compact read, preferred for high-volume polling; errors with `0x05 00 03` if point doesn't exist |
 | `0x0271` | Canonical legacy read; returns full value block |
-| `0x0272` | Property descriptor lookup (no value fetched); 35/37 corpus samples return `0x0003 not_found` |
+| `0x0272` | Property descriptor lookup (no value fetched); typically returns `0x0003 not_found` in normal traffic |
 | `0x0273` | Same wire shape as `0x0271` but trailer `00 00`. ACK-only response. Used as a point-existence probe AND as an AlarmAckTrigger pre-cursor for `0x0509` |
 
 ### 12.5 ValuePush `0x0274` — Bidirectional Semantic
 
-`0x0274` is the most commonly misunderstood opcode. Its semantic depends on which TCP port the frame travels on:
+The `0x0274` opcode has two distinct semantics, selected by which TCP port the frame travels on. This catches many parsers off guard because the opcode and sub-opcode are identical in both directions; only the body shape and the destination port differ.
 
 **Supervisor → Panel on TCP/5033** (push-write of a BLN virtual into the panel's model):
 
@@ -1137,6 +1240,19 @@ The device field is implicit (BLN-sourced). Used by the supervisor to mirror val
 Two TLVs (device + point) plus the f32 value. This is the genuine unsolicited COV that operators see when a panel reports a value change exceeding its COV threshold.
 
 Implementers MUST branch on the listening port (or equivalent: direction of the TCP connection) to parse `0x0274` correctly.
+
+### 12.5.1 The Four `(dst_port, msg_type)` Quadrants for `0x0274`
+
+In real BLN traffic, `0x0274` frames split across four quadrants of `(destination TCP port, session_msg_type)`. The dominant signal for direction is `dst_port`; the `msg_type` byte tracks panel firmware dialect (§11):
+
+| `(dst_port, msg_type)` | Relative frequency | Meaning |
+|---|---|---|
+| `(5034, 0x33)` | Dominant | PXC → DCC COV push, legacy dialect |
+| `(5033, 0x33)` | Common | DCC → PXC virtual-write, legacy dialect |
+| `(5033, 0x34)` | Less common | DCC → PXC virtual-write, modern dialect |
+| `(5034, 0x34)` | Rare | PXC → DCC COV push, modern dialect |
+
+A dissector or IDS classifying `0x0274` traffic SHOULD use the full `(dst_port, msg_type)` tuple rather than relying on opcode alone. The `msg_type` distribution also serves as a per-panel dialect probe: a panel that emits `0x0274` only with `msg_type = 0x34` is on modern firmware regardless of any handshake observation.
 
 ### 12.6 WriteWithQuality `0x0240` Wire Format
 
@@ -1240,11 +1356,11 @@ Each entry is a TLV name (tag=0x01, u16 BE length, raw bytes) followed by a u32 
 
 **Special entries** that appear in every routing table:
 
-- `$paneldefault` (cost always 12) — internal fallback / default-route placeholder
+- `$paneldefault` (cost always 12) — internal fallback / default-route placeholder. **This entry MUST appear as the first TLV in every `0x4634` body** without exception. A `0x4634` body whose first TLV is not `$paneldefault` is malformed; parsers SHOULD reject the frame rather than attempt to continue.
 - A numeric-named entry (e.g. `101000`, cost ~1467) — possibly a legacy MS/TP gateway registration or site-code identifier
 - The supervisor's BLN-registered name (e.g. `SITE-BMS`, cost ~5400)
 
-**For a scanner, `0x4634` is reconnaissance gold**: passively observing one `0x4634` from a real supervisor reveals the complete BLN topology in a single message. No brute-force enumeration needed.
+Observing a single `0x4634` frame from a real supervisor reveals the complete BLN topology — every peer name, every cost metric, in one message. No brute-force enumeration is required to learn what nodes exist on the BLN.
 
 ### 12.11 System Info `0x010C` Wire Format
 
@@ -1289,6 +1405,24 @@ opcode subop  scope TLV   cursor TLV   terminator
 
 Start at cursor `0x0000` for the first request; the response carries a continuation cursor for subsequent requests. Iterate until cursor returns to `0x0000` or to a defined end-of-data sentinel (`0xFFFF` in some firmware).
 
+### 12.12.1 Cursor Advancement and Compound-Name Entries
+
+When a panel returns a compound-name entry (§12.13 SHAPE C — two name TLVs at the top), a single-name cursor cannot advance past it: the panel returns the same compound record indefinitely. The walker must mutate the cursor to force advancement.
+
+**Cursor-mutation order — least- to most-disruptive.** A naïve byte-increment (`VAR1` → `VAR2`) is too aggressive — it skips adjacent entries with the same prefix (`VAR10.STPT`, `VAR10.TEMP`, `VAR1T`). The correct ordered strategy:
+
+1. **Append `\x01`** — the smallest string strictly greater than the current cursor. Returns the very next adjacent entry. This is the safe first try and handles most compound-name stalls.
+2. **Append a single character in ascending order**: `' '` (0x20), `'0'` (0x30), `'A'` (0x41), `'a'` (0x61), `'~'` (0x7E). Covers longer-prefix entries that `\x01` doesn't catch.
+3. **Byte-increment the last character of the cursor.** Skips all same-prefix entries. Use only as last resort when the above strategies fail.
+
+A walker advances by trying each strategy in order, accepting the response from the first strategy that returns a different entry than the stalled cursor's response.
+
+### 12.12.2 TLV Framing Trap in Cursor Requests
+
+The inner TLV format in `0x0981` (and `0x0985`, `0x0986`) cursor requests is `[tag: 1 byte = 0x01][length: u16 BE][value]` — **3 bytes of header** before each string value. An easy bug when writing the framer is to treat the header as `[\x01\x00][u16 length][value]`, which silently adds an extra zero byte of header and shifts every downstream length by one. This will parse fine in isolation because TLVs are length-delimited, but it corrupts fixed-position trailers.
+
+**Symptom**: the panel returns the first matching entry and refuses to advance the cursor on continuation calls. The malformed framing causes the panel to interpret the cursor as a different value than the client intended.
+
 ### 12.13 EnumeratePoints `0x0981` — Three Response Shapes
 
 The `0x0981` response carries a list of point entries. **Three distinct response shapes** are observed across firmware revisions:
@@ -1326,6 +1460,15 @@ Implementers SHOULD detect the shape by inspecting the bytes after the first nam
 - `3F FF FF F?` prefix → SHAPE A
 - `00 00 00 00 00 00 XX` pattern → SHAPE B
 - Second `01 00 ...` immediately → SHAPE C
+
+### 12.13.1 The Units-TLV Trap
+
+A tempting shortcut when parsing SHAPE A or SHAPE B responses is "the trailing string TLV is the engineering-units label." This is **wrong** in two ways:
+
+- **Binary points have no units TLV but do have values.** Examples like `PUMP1.RUN`, `PUMP1.ENB`, `PUMP1.ALM` return `3F 80 00 00` (= 1.0 for ON) or `00 00 00 00` (= 0.0 for OFF) with no trailing units string. A parser that requires a units TLV to extract a value will silently miss every binary point.
+- **Descriptions can be short.** "VAV INLET" is 9 characters, "BLR 2 ALM" is 9 characters — well within the typical length range for units strings like "DEG F" or "IN H20". A naive length-based "short trailing TLV = units" heuristic will eat descriptions.
+
+The reliable disambiguator is a whitelist of unit patterns: classify a trailing TLV as units only when its content matches alphanumerics + `%` + known space-bearing patterns like `DEG F`, `DEG C`, `IN H20`, `IN.WC`, `CFM`, `PSI`, `kW`, `kWH`, `RPM`. A trailing TLV that doesn't match the whitelist is a description string, not a units string.
 
 ### 12.14 Bare-Opcode `0x0220` as Alternative Walker
 
@@ -1466,7 +1609,18 @@ Byte 6: second (0-59)
 Byte 7: hundredths of a second (0-99)
 ```
 
-**Cross-port duplication**: alarm reports are typically emitted on **both** TCP/5033 and TCP/5034 (a robust parser should de-duplicate by sequence-number or by (device, point, timestamp) tuple).
+**Two BACnet-style date encodings exist in the protocol.** The 8-byte form above is used for alarm timestamps (`0x0508`, `0x0509`). A separate **4-byte BACnet date** encoding is used inside weekly schedule entries (`0x098D`):
+
+```
+Byte 0: year offset from 1900
+Byte 1: month (1-12; 0xFF = any/unspecified)
+Byte 2: day of month (1-31; 0xFF = any)
+Byte 3: day of week (1=Monday, 7=Sunday; 0xFF = any)
+```
+
+The 4-byte form omits time-of-day because schedule entries carry the time-of-day in a separate field (typically a 4-byte minutes-since-midnight value). Implementers MUST select the encoding based on the carrying opcode, not assume one date format is universal.
+
+**Cross-port duplication**: alarm reports are typically emitted on **both** TCP/5033 and TCP/5034. Parsers should de-duplicate by sequence number, or by `(device, point, timestamp)` tuple if a parser handles both ports.
 
 ### 12.22 The `0x0273` AlarmAckTrigger Pre-Cursor
 
@@ -1500,7 +1654,7 @@ Two distinct discovery mechanisms operate at different protocol layers:
 
 These two mechanisms serve different purposes. The UDP/10001 beacon announces existence; the TCP EPing maintains an active session.
 
-**Note on documented multicast defaults**: vendor configuration tools reference `234.5.6.7` as the multicast group address and UDP `8` as the multicast port. Empirical captures consistently show `233.89.188.1` on UDP `10001`. The likely explanation is that the documented "UDP port 8" is a transcription artifact in vendor literature. Implementers SHOULD treat both addresses (`234.5.6.7` and `233.89.188.1`) and both ports (`8` and `10001`) as candidates, and accept them as configurable per site. **`233.89.188.1`:`10001` is the value verified against thousands of captured packets in production deployments.**
+**Note on documented multicast defaults**: vendor configuration tools reference `234.5.6.7` as the multicast group address and UDP `8` as the multicast port. The values consistently seen in operation are `233.89.188.1` on UDP `10001`. The likely explanation is that the documented "UDP port 8" is a transcription artifact in vendor literature. Implementers SHOULD treat both addresses (`234.5.6.7` and `233.89.188.1`) and both ports (`8` and `10001`) as candidates, and accept them as configurable per site. **`233.89.188.1`:`10001` is the value used by all deployments documented in this specification.**
 
 ### 13.2 EPing Protocol (TCP Heartbeat)
 
@@ -1583,11 +1737,11 @@ Four response variants are observed. Labels R1-R4 are used here to distinguish t
 
 ### 14.3 The `3F FF FF` Prefix Trap
 
-**Critical**: when matching R1 responses, lock only the **3-byte prefix `3F FF FF`**, NOT the full 4-byte `3F FF FF FF`. The fourth byte varies on the wire:
+When matching R1 responses, lock only the **3-byte prefix `3F FF FF`** — not the full 4-byte `3F FF FF FF`. The fourth byte varies on the wire:
 
-- `3F FF FF FF` (~25% of responses)
-- `3F FF FF F7` (~75% of responses)
-- `3F FF FF F0` (occasional)
+- `3F FF FF FF` — about 25% of responses
+- `3F FF FF F7` — about 75% of responses
+- `3F FF FF F0` — occasional
 
 The low-nibble variation is not stable across reads of the *same point* in the same session, so it isn't quality-flag information the user can interpret reliably; treat it as opaque.
 
@@ -1605,7 +1759,7 @@ The 7th metadata byte in R3 / SHAPE B responses encodes the point's data type:
 | `0x03` | Analog (the dominant type) | Floats 0.01 to ~2500, integer-valued majority |
 | `0x06` | "Analog32" / extended numeric | Mixed |
 
-Codes `0x04` and `0x05` are observed in dispatcher heuristics but have not appeared in captured traffic. Treat them as theoretical until a capture surfaces them.
+Codes `0x04` and `0x05` are reserved by the dispatcher but have not been encountered in normal operation. Treat them as theoretical until production traffic surfaces them.
 
 ### 14.5 Scan-Loop Bounds for the Value Block
 
@@ -1617,7 +1771,7 @@ A scanner implementing marker-based scan must bound the loop so the float at off
 
 A naive parser that scans for `01 00 00` byte patterns will false-positive on the response's **trailing configuration block** — the panel appends min/max/resolution metadata with a near-identical structure.
 
-**Reliable disambiguator**: the byte *immediately before* the real value block's `01 00 00` marker must be a printable ASCII character (the last byte of a TLV point-name string).
+The reliable disambiguator is the byte *immediately before* the real value block's `01 00 00` marker: it must be a printable ASCII character — the last byte of the TLV-encoded point name.
 
 The trailing config block's preceding byte is part of the float value itself (non-ASCII bytes).
 
@@ -1645,7 +1799,7 @@ The `slope` and `intercept` are properties of the point definition stored in the
 
 ## 15. Comm Status — Stale-Cache Behavior
 
-This section documents the most operationally important detail in the protocol: how the panel reports stale-cached data for offline downstream devices.
+This section covers how the panel reports stale-cached data for downstream devices that have gone offline. The behavior is operationally significant: a scanner that ignores the comm-status byte will report cached values for devices that have been dead for weeks.
 
 ### 15.1 The Stale-Cache Mechanism
 
@@ -1675,9 +1829,9 @@ Not all properties on a device behave the same way under FLN comm-fault:
 - **Live FLN-sourced points** (ROOM TEMP, RM STPT DIAL, AUX TEMP, anything read from the device's I/O at request time) carry the comm-status flag described above. When the TEC is faulted, these come back with `comm_status=0x01` and a stale cached value.
 - **Panel-cached configuration metadata** (APPLICATION number, descriptor strings, slot-table info — anything the panel knows because it commissioned the device, not because the device just told it) **keeps reading successfully even when the TEC is fully faulted**. APPLICATION reads on a #COM device return the configured app number with varying `comm_status` (`0x00` or `0x01` depending on firmware) — it's unreliable as a liveness signal.
 
-**The trap**: a scanner that uses APPLICATION-read-success as "device exists / is registered" and treats that as "online" will silently mark every #COM-faulted device online.
+The trap here is that a scanner using APPLICATION-read-success as a proxy for "device exists / is registered" — and treating that as "device online" — will silently mark every #COM-faulted device online.
 
-**Correct policy for a verifier**:
+Recommended verification policy:
 
 1. Read ROOM TEMP (or any other genuinely live-sourced point on the device).
 2. If `comm_status=0x00` → online.
@@ -1698,7 +1852,9 @@ Scanners SHOULD flag when multiple points on one device report the same implausi
 
 A point address identifies a specific data location within the system. Multiple formats exist depending on the firmware generation of the field panel.
 
-### 16.1 Modern Format (Firmware 2.5+)
+### 16.1 Modern Format (P2 Firmware Revision 2.5 and Later)
+
+This is the canonical address format on all firmware in current deployment (V2.8.x P2 panels and V3.x BACnet panels).
 
 ```
 FLN.Drop.PointNumber
@@ -1712,7 +1868,9 @@ FLN.Drop.PointNumber
 
 A panel-resident point has FLN=0; a TEC point has FLN=1..N and a Drop=0..31.
 
-### 16.2 Legacy Format — FLN Devices (Firmware 12.41 and earlier)
+### 16.2 Legacy Format — FLN Devices (Pre-Ethernet Firmware, Insight Versions ≤ 12.41)
+
+Used by pre-2003 panels and the original serial-only Apogee architecture. Modern P2-over-Ethernet panels do not emit this format; it is documented here for archival compatibility.
 
 ```
 Trunk.PanelNumber.FLN.Drop.PointNumber
@@ -1728,7 +1886,9 @@ Trunk.PanelNumber.FLN.Drop.PointNumber
 
 Theoretical maximum: 3 × 32 × 100 = 9,600 FLN-device points per panel.
 
-### 16.3 Legacy Format — Direct Panel I/O (Firmware 1.41 and earlier)
+### 16.3 Legacy Format — Direct Panel I/O (Insight Versions ≤ 1.41)
+
+Used only by the earliest Apogee panel generation. Not encountered on any P2-Ethernet-capable hardware.
 
 ```
 Trunk.PanelNumber.FLN.Constant.PointNumber
@@ -1766,11 +1926,11 @@ When a frame references an FLN device without a specific subpoint, the device's 
 
 ## 17. Point Classes
 
-This section defines the twelve **logical point classes** that the protocol supports. Each class has well-defined wire-level command semantics.
+This section defines the **thirteen logical point classes** that the protocol supports (twelve standard data-bearing classes plus the special `LCTLR` rollup class). Each class has well-defined wire-level command semantics.
 
 ### 17.1 Analog Classes
 
-| Class | Code | Description | COV |
+| Code | Name | Description | COV |
 |---|---|---|---|
 | **LAI** | Logical Analog Input | Sensor reading (temperature, pressure, etc.) | Yes |
 | **LAO** | Logical Analog Output | Modulating output (damper position, etc.) | Yes |
@@ -1780,18 +1940,18 @@ Analog values are transmitted as IEEE 754 single-precision floats (`f32`) in big
 
 ### 17.2 Binary Classes
 
-Binary points come in two semantic variants:
+Binary points come in several semantic variants distinguished by storage type and override-release behavior:
 
-| Class | Code | Persistence on release | Use case |
+| Code | Name | Persistence on release | Use case |
 |---|---|---|---|
 | **LDI** | Logical Digital Input | n/a (read-only) | Sensor contact closure |
 | **LDO** | Logical Digital Output | reverts to default | Simple ON/OFF output |
-| **L2SL** | Logical 2-State Latched | retains state | Pulsed output with latched memory |
-| **L2SP** | Logical 2-State Pulsed | reverts to default | Pulsed-only output |
-| **LFSSL** | Fail-Safe Latched | retains state; reverts to safe default on comm failure | Output with fail-safe behavior |
-| **LFSSP** | Fail-Safe Pulsed | pulsed; reverts to safe default on comm failure | Pulsed with fail-safe |
+| **L2SL** | Logical 2-State Latched | retains commanded state indefinitely | Output with latched memory (e.g. lighting circuits) |
+| **L2SP** | Logical 2-State Pulsed | reverts to default after pulse duration | Pulsed-only output (e.g. momentary actuators) |
+| **LFSSL** | Logical Fail-Safe Latched | retains state; reverts to safe default on comm failure | Latched output with fail-safe behavior |
+| **LFSSP** | Logical Fail-Safe Pulsed | pulsed; reverts to safe default on comm failure | Pulsed output with fail-safe behavior |
 
-The **Latched/Pulsed distinction** governs how state survives release:
+The **Latched / Pulsed distinction** governs how state survives release:
 
 - **Latched** classes (L2SL, LFSSL): the commanded state persists indefinitely until explicitly changed.
 - **Pulsed** classes (L2SP, LFSSP): the commanded state is a momentary pulse; the point reverts to its default when released.
@@ -1800,7 +1960,7 @@ The **Fail-Safe variants** (LFSSL, LFSSP) add a configurable safe default that t
 
 ### 17.3 Multi-State Classes
 
-| Class | Code | States |
+| Code | Name | States |
 |---|---|---|
 | **LENUM** | Logical Enumeration | Arbitrary multi-state (>2 states) |
 | **LOOAL** | Logical On-Off-Auto Latched | 3-state {ON, OFF, AUTO}, latched |
@@ -1820,7 +1980,7 @@ The default enumeration table for binary and multi-state classes:
 
 ### 17.5 Special Class
 
-| Class | Code | Purpose |
+| Code | Name | Purpose |
 |---|---|---|
 | **LCTLR** | Logical Controller | Bundled rolled-up status indicator for an FLN device as a whole. Always exists at subpoint 0 of every FLN device. Surfaces a single online/offline/alarm state without enumerating subpoints. |
 
@@ -1887,25 +2047,29 @@ Lines have a maximum length (typically 80 characters). Programs may span hundred
 
 ### 19.2 Statement Categories
 
-#### 13.2.1 Control-Flow Statements
+#### 19.2.1 Control-Flow Statements
 
 `GOTO`, `RETURN`, `DEACT`, `DISABL`, `ENABL`, `IF`/`THEN`/`ELSE`
 
-#### 13.2.2 Assignment and Math
+Vendor note: in PPCL, `ACT` and `ENABL` are interchangeable for the same operation. On the newer PXC.A platform (BACnet-only successor) the `ACT`/`DEACT`/`ENABL`/`DISABL` set is deprecated in favor of `GOTO`/`RETURN` flow control.
+
+#### 19.2.2 Assignment and Math
 
 `SET`, `SETVAL` (write BACnet property), arithmetic operators (`+`, `-`, `*`, `/`, `.ROOT.`), functions (`ATN`, `COM`, `COS`, `EXP`, `LOG`, `SQRT`, `SIN`, `TAN`)
 
-#### 13.2.3 Point Operations
+#### 19.2.3 Point Operations
 
 `RELEAS` (release to NONE priority), `DISCOV` (disable COV transmission), `DISALM` (disable alarming), `STATE` (state text command)
 
-#### 13.2.4 Time and Schedule
+#### 19.2.4 Time and Schedule
 
 `DAY` (Day-mode test), `DBSWIT` (dead-band switch), `DC` (duty cycle), `DCR` (duty cycle routine), `SAMPLE`, `SSTO` (start/stop time optimization), `SSTOCO`, `TABLE`
 
-#### 13.2.5 Specialized Functions
+#### 19.2.5 Specialized Functions
 
 `ADAPTM` (adaptive multi-output closed-loop control), `ADAPTS` (single-output), `PDLSET` (peak demand limiting setpoints), `EMAUTO` (emergency auto status), `OIP` (operator-input program), `ONPWRT` (on-power-return handler)
+
+Vendor note: `ADAPTM`, `DPHONE`, `OIP`, `ALARM`, and `NORMAL` are not supported on PXC.A panels.
 
 ### 19.3 Resident Points and Variables
 
@@ -2073,6 +2237,10 @@ Frame contents that are exposed in plaintext:
 
 A passive observer on the network can therefore enumerate the building automation system, identify every device by name, and read every value exchange. An on-path attacker can also inject, modify, or replay frames subject to TCP-layer constraints.
 
+**Cleartext is a structural property of the platform, not a configurable option.** Field-panel firmware does not ship any TLS, SSL, SSH, or SNMPv3 library — the open-source bill of materials for both P2-era (V2.8.10) and BACnet-era (V3.2.5) firmware contains no transport-security stack. The P2 TCP listener is hand-rolled C running directly on Nucleus NET sockets. There is no firmware configuration that enables transport encryption on existing P2-mode panels; the only path to encrypted building-automation traffic on the same hardware is to migrate the panel to BACnet/SC firmware (see PXC.A platform; §1).
+
+Network-level mitigations (VLAN isolation, IPsec tunnels, jump hosts) are the only available controls. Treat any P2 network as if every byte is being read by anyone with access to the segment.
+
 ### 21.2 TCP Initial Sequence Number Predictability
 
 Field panels running affected firmware versions have **predictable TCP Initial Sequence Numbers** (CVE-2020-28388, CVSS 6.5). An on-path attacker can use this to hijack existing TCP sessions or spoof new ones.
@@ -2094,7 +2262,9 @@ Field panels with the integrated web server enabled are subject to **CVE-2022-45
 
 ### 21.4 Nucleus RTOS DNS Stack Vulnerabilities
 
-Field panels in the affected version range have multiple DNS stack vulnerabilities (CVE-2020-15795, CVE-2020-27009, CVE-2020-27736, CVE-2020-27737, CVE-2020-27738, CVE-2021-25677). These can be exploited by an attacker who controls or spoofs DNS responses, leading to remote code execution or denial of service.
+Field-panel firmware runs Mentor Graphics **Nucleus PLUS** real-time operating system on Freescale/Motorola PowerPC MPC852 / MPC860 hardware, with the **Nucleus NET 5.1** TCP/IP stack handling all transport-layer traffic (TCP/5033, TCP/5034, the FTP and Telnet ancillary listeners, the optional integrated web server, and DNS lookups). This shared stack is the source of the predictable-ISN issue (§21.2) and of the DNS-stack CVE cluster below.
+
+Affected version range field panels have multiple DNS stack vulnerabilities (CVE-2020-15795, CVE-2020-27009, CVE-2020-27736, CVE-2020-27737, CVE-2020-27738, CVE-2021-25677). These can be exploited by an attacker who controls or spoofs DNS responses, leading to remote code execution or denial of service.
 
 **Mitigation**:
 
@@ -2173,7 +2343,7 @@ A scanner can iterate candidate BLN names against a known panel IP and observe t
 
 - Site documentation (commissioning records, BAS architecture diagrams)
 - Sniffed traffic on the network (BLN name appears in every frame)
-- Pcap files from the site
+- Captured traffic from the site
 - The `0x0050` StatusQuery opcode (leaks supervisor name; §23.4)
 - Routing-table broadcasts from neighbor panels (§12.10)
 
@@ -2201,13 +2371,29 @@ A scanner can iterate candidate BLN names against a known panel IP and observe t
 
 ### 22.3 Case-Sensitivity Note
 
-BLN name matching is **case-sensitive**. `SITEBLN` and `siteblN` are distinct from the panel's perspective. Cartesian discovery should try the candidate in both observed cases.
+BLN name matching is **case-sensitive** — `SITEBLN` and `siteblN` are distinct from the panel's perspective. A cartesian search should try each candidate in each casing variant observed in real deployments. The most common variants are all-uppercase (`SITEBLN`), all-lowercase (`siteblN`), and PascalCase (`SiteBln`). If a wordlist source provides a single canonical form, generating both upper and lower variants doubles the search cost but is usually worthwhile.
 
-Slot 2 (panel name) matching is **case-insensitive** (the panel does case-correction internally). Once the BLN is known, slot 2 enumeration can use any reasonable casing.
+Slot 2 (panel name) matching is **case-insensitive** — the panel performs internal case folding. Once the BLN is known, slot 2 enumeration can use any reasonable casing.
 
 ### 22.4 BACnet-Side Discovery
 
 If the site supports BACnet/IP (UDP/47808), a BACnet Who-Is broadcast may return device names and identifiers that can be cross-referenced with P2 BLN/node names. The two namespaces are distinct but often related (a panel's BACnet device name often matches or contains its P2 node name).
+
+### 22.5 TCP/IP Layer Fingerprint — Panel vs Supervisor Classification
+
+A PXC panel and a Windows-based supervisor can be distinguished without sending any P2 frames, using only passive TCP/IP-layer observations. The PXC platform runs Mentor Graphics Nucleus PLUS RTOS with the Nucleus NET TCP/IP stack (see §21.4), which has a distinctive fingerprint:
+
+| Signal | PXC panel (Nucleus NET) | Windows supervisor |
+|---|---|---|
+| IPv4 TTL on outbound packets | **64** | **128** |
+| Initial TCP window | **16000** (constant, never grows) | ~64240, varies per session |
+| Zero-window emissions during bursts | Yes (Nucleus backpressure) | Rare |
+| OS-level TCP keepalive packets | None (uses application-layer `0x4640`) | Yes (when configured) |
+| TCP timestamp option | Absent | Present |
+
+**Combined classifier**: a host that listens on TCP/5033, sends packets with IPv4 TTL=64, and uses a constant initial TCP window of 16000 is a PXC panel with high confidence. A scanner can use this fingerprint to skip a wasted handshake attempt against a Windows supervisor that happens to listen on TCP/5033 (which a few site configurations expose).
+
+This fingerprint is purely passive — it requires only that a single TCP segment from the target host be observed. The signal holds across firmware versions because it derives from Nucleus stack defaults, which Siemens has not changed across any P2-era firmware revision.
 
 ---
 
@@ -2323,7 +2509,8 @@ A scanner needs the following configuration:
 | **Site name** | Required for handshake identity block | Site documentation |
 | **Target IP** | Panel address | Discovery via multicast beacon (§3.2.2) or range scan |
 | **Node name** | Optional self-identifier; can be `"node"` for read-only scanners | — |
-| **Listener port** | TCP port the panel is listening on | Default 5033; some sites use alternates |
+| **Target listener port** | TCP port the **panel** is listening on (typically 5033) | Default 5033; some sites use alternates; configurable per panel |
+| **Scanner listener port** | TCP port the **scanner** listens on for inbound pushes (encoded as `\|<port>` in slot 4 identity) | Typically 5034 to mirror Desigo CC; any free port works |
 
 ### 24.3 Recommended Connection Lifecycle
 
@@ -2335,13 +2522,13 @@ A scanner needs the following configuration:
      b. On no response: send 0x34 identity with full timeout
      c. Cache the discovered dialect per IP
 3. Issue operational requests; one outstanding request at a time per session
-4. Re-send 0x4640 identity refresh every ~60s during idle periods
+4. Re-send 0x4640 identity refresh every 10 s during idle periods (match Desigo CC's observed cadence; see §9.5)
 5. close() on done OR on protocol error
 ```
 
 ### 24.4 Connection Limits
 
-A field panel typically accepts **8–16 concurrent peer sessions**. Exceeding this returns a connection refusal or a "max peer sessions reached" error on handshake.
+In practice, field panels accept on the order of **8–16 concurrent peer sessions**; the exact limit is vendor-internal and varies by firmware revision. Exceeding the limit returns a connection refusal or a session-limit error on handshake.
 
 Implementers SHOULD:
 
@@ -2355,15 +2542,16 @@ Implementers SHOULD:
 - Initialize the sequence at a **random 24-bit value** at session start (not 0 or 1).
 - Increment monotonically per request.
 - The panel's response echoes the request sequence; correlate by sequence not by arrival order.
+- **Pair with sliding-window tolerance, not strict equality.** In busy sessions the panel's response sequence runs 1–17 frames behind the request sequence in roughly 10% of pairs (pipelining lag, see §5.2). A parser that requires strict equality will appear to lose ~10% of responses. Use a sliding-window matcher with a tolerance of at least 20 frames.
 
 ### 24.6 Buffering and Framing
 
-A TCP stream may contain multiple P2 frames or split a single frame across segments. Implementers MUST:
+A TCP stream may contain multiple P2 frames, or it may split a single frame across segments. Implementations MUST:
 
-1. Read at least 4 bytes to get `payload_length`.
-2. Read at least `4 + payload_length` total bytes to complete the frame.
-3. Treat anything with `payload_length > 65536` as framing corruption — disconnect.
-4. Buffer trailing bytes after one frame for the next frame.
+1. Read 4 bytes to obtain `total_length`.
+2. Read until exactly `total_length` bytes (counting those first 4) have been received before parsing the frame.
+3. Treat any frame with `total_length > 65536` as framing corruption and close the connection.
+4. Buffer any bytes received past the end of the current frame for the next frame; do not assume frame boundaries align with TCP segment boundaries.
 
 ### 24.7 Common Implementation Pitfalls
 
@@ -2371,8 +2559,8 @@ A TCP stream may contain multiple P2 frames or split a single frame across segme
 |---|---|---|
 | Hardcoded `session_msg_type = 0x33` | Modern panels silently don't respond | Implement dialect auto-detection (§11) |
 | Sequence starting at 0 or 1 | Panel rejects handshake or silently drops | Use random 24-bit initial sequence |
-| No identity refresh | Connection drops after idle timeout | Send `0x4640` every ~60s |
-| Reading exactly `payload_length` bytes from TCP | Short reads on slow networks | Loop reads until `payload_length` accumulated |
+| No identity refresh | Connection drops after idle timeout | Send `0x4640` every 10 s (see §9.5) |
+| Treating the first u32 as body-only length | Short reads, off-by-12 framing errors | First u32 is `total_length` and includes the 12-byte session header; loop reads until that many bytes have accumulated |
 | Mismatched BLN name in identity | Handshake fails silently | Use the same BLN name the panel is configured for |
 | Writing SYST-scoped point with `0x0240` | Returns error `0x0E15` | Retry as `0x4222` BulkPropertyWrite |
 | Treating `0x0274` direction as fixed | Misinterpret virtual writes as COV notifications | Check TCP port: 5033 = write, 5034 = COV |
@@ -2522,6 +2710,7 @@ A supervisor monitoring a BACnet-TEC fleet MUST poll each commandable point at t
 
 | Term | Definition |
 |---|---|
+| **AEM** | Apogee Ethernet Module — Lantronix-based serial-to-Ethernet bridge that exposes a legacy P2 RS-485 BLN over TCP/IP (TCP/3001 for the P2 trunk). Vendor-licensed under SKU `LSM-VAEM` ("Virtual AEM"). See §3.2.4 and §21.5. |
 | **ALN** | Automation Level Network |
 | **AP2** | Apogee Protocol 2 (this specification's wire protocol) |
 | **AP2Cmd** | A unit of work in the protocol (one operation with parameters) |
@@ -2540,7 +2729,9 @@ A supervisor monitoring a BACnet-TEC fleet MUST poll each commandable point at t
 | **MS/TP** | Master-Slave/Token-Passing (BACnet RS-485) |
 | **OIP** | Operator Input Program (PPCL statement and wire operation) |
 | **P1** | The legacy serial FLN protocol |
-| **P2** | The supervisor↔panel protocol described herein |
+| **P2** | The supervisor↔panel protocol described herein. Long-form: "Protocol 2". |
+| **P3** | A sister protocol named alongside P2 in vendor cable-type lists ("P2/P3 RS-485") and in the Siemens-published error text for `0x00AC`. Not encountered on the wire in any deployment documented by this specification. |
+| **`.P2` file** | An offline panel-database export file format produced by Desigo CC's P2 Export utility. Contains engineered panel configuration (points, PPCL, schedules, alarms) for migration tooling. **Unrelated to the P2 wire protocol** despite the shared name. |
 | **PDL** | Peak Demand Limiting |
 | **PPCL** | Process Control Language (proprietary panel-resident programming) |
 | **POST** | Panel Operating System Transfer (database file format) |
@@ -2595,9 +2786,9 @@ The 418-opcode catalog organized by primary function. Items marked with sub-opco
 
 | Opcode | Sub-op | Name | Direction | Notes |
 |---|---|---|---|---|
-| `0x0500` | `0x0F01` | AckAlarm | 5033 | Alarm acknowledgment |
+| `0x0500` | `0x0F01` | AlarmAck (legacy) | 5033 | Alarm acknowledgment |
 | `0x0508` | — | AlarmReport | 5034 | Panel-initiated alarm notification |
-| `0x0509` | — | AckAlarm v2 | 5033 | Newer alarm-ack variant |
+| `0x0509` | — | AlarmAck (v2) | 5033 | Newer alarm-ack variant; polymorphic — see §6.6 |
 | `0x0567` | `0x0F33` | (alarm priority op) | 5033 | — |
 
 ### 28.4 Object Lifecycle (0x02xx)
@@ -2732,6 +2923,210 @@ These opcodes appear as 2-byte bare-opcode keepalive frames panel → supervisor
 The 418 catalogued opcodes are those for which an explicit AP2Cmd subclass exists in supervisor-side dispatch tables. The opcode space includes additional reserved or rarely-used opcodes not in the active dispatch.
 
 Of the 418, **134 explicitly set the `[+0x06]` CPI sub-opcode** in their encoder; the remaining 282 inherit the sub-opcode from a parent class default. The full opcode → sub-opcode mapping table is maintained alongside this specification.
+
+---
+
+## 29. Appendix E: Pinned Wire Body Catalog
+
+This appendix documents the exact wire bodies for opcodes whose formats are stable and well-characterized. These complement the prose descriptions in §12 and are intended for parser and fuzzer authors who need byte-level reference.
+
+Notation: byte sequences are shown as hex pairs separated by spaces; quoted ASCII represents the literal characters; `LL` denotes a u16 BE length field; angle brackets `<…>` denote variable content.
+
+### 29.1 `0x0050` StatusQuery — Constant 14-byte Body
+
+**Request body** (always exactly 14 bytes):
+
+```
+00 50 01 00 04 "SYST" 23 3F FF FF FF
+```
+
+The `0x23` separator marks SYST scope; the `3F FF FF FF` sentinel is the standard SYST-scope wildcard.
+
+**Response body** (~30 bytes, supervisor-name leak):
+
+```
+01 00 04 "SYST" 23 3F FF FF FF 00 02 01 00 LL <SVR-name> 01 00 00
+```
+
+The `<SVR-name>` TLV carries the supervisor's bare-form name (without `|<port>` suffix). This opcode responds **without requiring a valid handshake** — the panel answers based on TCP-layer state alone, making it the lowest-touch cold-discovery primitive.
+
+### 29.2 `0x0606` Lightweight Probe
+
+**Request body** (14 bytes; same shape as `0x0050` with different opcode):
+
+```
+06 06 01 00 04 "SYST" 23 3F FF FF FF
+```
+
+Response carries the panel name in the routing header (slot 4 after role-swap). Body is typically empty or near-empty. Behavior across firmware revisions varies.
+
+### 29.3 `0x5354` — Status Probe (Always Errors)
+
+**Request body** (constant 14 bytes across all observed samples):
+
+```
+53 54 01 00 04 "SYST" 00 3F FF FF FF
+```
+
+**Note the `0x00` separator** (not `0x23`) — this is what structurally distinguishes `0x5354`'s body from `0x0050` and `0x0606`. The opcode always returns error code `0x0003` (not_found) on all observed firmware; the semantic of the operation is unknown. Included here for completeness — parsers and IDS signatures should recognize the constant body but treat the operation as a probe-only artifact.
+
+### 29.4 `0x098B` — Newer-Firmware Enumerate Probe
+
+**Request body** (constant 8 bytes across all observations on PME1252 and PME1300):
+
+```
+09 8B 00 01 00 FA 00 00
+```
+
+The `00 01` and `00 FA` (= 250) bytes are constants — likely a hardcoded feature-ID probe. All observed calls return error `0x0003` (not_found) on current firmware. Implementers MAY ignore this opcode in scanners targeting the current firmware base, but dissectors SHOULD label it correctly.
+
+### 29.5 `0x099F` GetPortConfig — Full Body and Walk Pattern
+
+**Request body** (5 bytes):
+
+```
+09 9F 00 04 XX
+```
+
+Where `XX` is the port index byte.
+
+**Walk pattern**: Desigo CC walks exactly six indices per audit cycle: `0xFF`, `0x00`, `0x01`, `0x02`, `0x03`, `0x04`. Not a full 0–255 walk — a fixed small set. A scanner that walks all 256 indices is doing more work than the supervisor itself.
+
+**Response fields** (parsed from semicolon-delimited config string):
+
+| Field | Meaning |
+|---|---|
+| `;bd=<baud>` | Serial baud rate |
+| `;pa=<parity>` | Serial parity (`N`/`O`/`E`) |
+| `;mk=<mask>` | Serial framing mask |
+| `;mid=<BLN-id>` | BLN node ID assignment for this port |
+| `;ety=<encoding-type>` | Encoding type byte |
+| `;pdl=<pad-length>` | Pad length |
+
+**Index → label observations**:
+
+| Index | Label string |
+|---|---|
+| `0xFF` | "USB Modem" port |
+| `0x00` | "HMI" port |
+| `0x01`–`0x03` | Application-specific (varies by panel hardware) |
+| `0x04` | "undefined" (returned label is literally undefined) |
+
+### 29.6 `0x0241` PropertyEcho / DefaultPropertyResolve
+
+**Two distinct response behaviors** depending on request body:
+
+**Form A — Fully-qualified target** (request carries `(device-TLV, point-TLV)`, e.g. `TEC1 / ROOM TEMP`):
+
+Response echoes both TLVs with `00 00` framing. Acts as a property-existence confirmation, semantically equivalent to a SYST-scoped `0x0273`.
+
+**Form B — Object-only probe** (request carries `(name-TLV, EMPTY-TLV)`, e.g. `EXAMPLE.ZN` with empty second slot):
+
+Response may fill the empty slot with a default property name (e.g. `MODE` for `EXAMPLE.ZN`) — acts as a "what's the canonical property of this object?" resolver. For some single-name targets the response keeps the empty 2nd slot.
+
+Implementers SHOULD recognize both response forms and dispatch based on the body shape.
+
+### 29.7 `0x0263` ObjectLifecycle (Probable Delete)
+
+**Request body**:
+
+```
+02 63 01 00 04 "SYST" 23 3F FF FF FF 00 00
+01 00 LL <object-name>
+01 00 00 00 00 01 00 00 01 00 00
+```
+
+**Response** — fixed empty ACK regardless of object name (8 bytes):
+
+```
+00 00 01 00 00 01 00 00
+```
+
+Delete semantics are inferred from context (targets are test artifacts created by adjacent `0x0204` CreateObject calls) and from the fixed empty-ACK response being consistent with a delete-style operation. Could equally be a property-clear or lifecycle-finalize op. Implementations SHOULD NOT rely on `0x0263` having destructive semantics in production code until follow-up testing confirms.
+
+### 29.8 `0x0291` SYST Property Write (Probable)
+
+**Request body — value-bearing form**:
+
+```
+02 91 01 00 04 "SYST" 23 3F FF FF FF 00 00
+01 00 LL <device>
+01 00 LL <point>
+00 00 01 00 00 01 00 00 01 00 c8 <type-byte> <f32 BE>
+```
+
+**Request body — no-value form**:
+
+```
+02 91 ... [same prefix as above] ...
+01 00 c8 00
+```
+
+**Response** echoes (device, point) with `00 00` framing — no value returned. Succeeds against SYST scope (no `0x0E15` error).
+
+Write semantics are **inferred from body shape** (value bytes present in the request suggest set/write), not proven by before/after read confirmation. This opcode is also polymorphic with a trend-delete operation — see §6.6.
+
+### 29.9 `0x02A8` SYST Property Write (Priority Variant)
+
+Same body shape as §29.8 `0x0291`, with an additional fixed 6-byte trailer after the value (or after `01 00 c8 00` in the no-value form):
+
+```
+00 01 00 00 50 00
+```
+
+The `50 00` bytes are constant across all observed samples; the trailer may encode priority or a sub-property selector. Same write-semantics caveat as §29.8.
+
+### 29.10 `0x4220` BulkProperty Variant
+
+**Request body** (222 bytes total, preallocated):
+
+```
+42 20 01 00 04 "SYST" 23 3F FF FF FF 00 10 FF FF 00 00
+01 00 LL <device>
+01 00 LL <point>
+<trailer + zero-pad to 222 bytes total>
+```
+
+The `00 10 FF FF` bytes after the sentinel sit at the same position where `0x4200` carries the trailing `FF FF` wildcard property-id. Interpreting `00 10` as a property-id selector is plausible but unverified.
+
+**Response** (~129 bytes) carries the same value+units+resolution+max+type-code shape as `0x4221` BulkPropertyRead. Treat `0x4220` as a member-controller read variant; implementers SHOULD prefer the canonical `0x4221` until more samples confirm `0x4220` behavior.
+
+### 29.11 `0x0979` ShortVariant — Response Format
+
+**Response body**:
+
+```
+00 00
+01 00 LL <object-name>
+<u32 BE entry-count>
+01 00 01 01
+<4-byte field>
+<BACnet date+time 8 bytes>
+<priority byte>
+<u32 BE slot index>
+fc 13
+```
+
+The trailing `fc 13` is the state-set reference. The request body for `0x0979` carries a cross-opcode trailing reference `02 71` (the `0x0271` extended-read opcode), signaling that `0x0979` reuses the `0x0271` reading semantics for schedule-entry / point-metadata lookup.
+
+### 29.12 `0x0976` DeviceAllSubpointsRead — Note on Variant Shapes
+
+This opcode occurs in two distinct request shapes:
+
+**Variant A — SYST-tagged form** (older convention, returns full per-device subpoint dump):
+
+```
+09 76 01 00 04 "SYST" 23 3F FF FF FF 00 00
+01 00 LL <device>
+```
+
+**Variant B — cursor-pagination form** (Mode-C / newer convention, frequently goes unanswered by the panel):
+
+```
+09 76 00 00 01 00 01 2A 00 00 01 00 LL <device-name>
+```
+
+The cursor form is what Desigo emits in recent firmware against Mode-C streams; panels often do not respond to it. Implementers SHOULD use `0x0976` only when fallback enumeration opcodes (`0x0981`, `0x0986`) are not available, and SHOULD prefer Variant A when SYST-scope is acceptable.
 
 ---
 
