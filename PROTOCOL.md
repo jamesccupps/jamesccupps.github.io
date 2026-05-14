@@ -1,6 +1,6 @@
 # Apogee P2 Protocol — Open Specification
 
-**Version**: 1.6
+**Version**: 1.7
 **Status**: Draft / Working Specification
 
 ## Abstract
@@ -1362,6 +1362,17 @@ Two distinct wire shapes depending on which scope the write targets:
 
 The separator byte (`0x00` NONE vs `0x23` SYST) distinguishes the two shapes.
 
+**Write workflow by point type (SE-17, wire-verified on PME1252).** The `0x0240` → `0x0E15` → `0x4222` retry pattern is **point-type-dependent**, cleanly bimodal in observed traffic:
+
+| Point category | `0x0240` SYST behavior |
+|---|---|
+| **Digital state** (binary commands like `HEAT.COOL`, `DAY.NGT`, `STPT DIAL`) | `0x0240` with SYST scope succeeds **directly** — no `0x0E15` error |
+| **Analog setpoint** (`DAY CLG STPT`, `RM STPT MIN`, `CLG FLOW MIN/MAX`, `DMPR COMD`, etc.) | `0x0240` with SYST scope **always returns `0x0E15`** (`physical_point_not_commandable`); supervisor MUST retry as `0x4222` (§12.9) |
+
+Verified across 39 writes in reference captures, zero exceptions. For digital writes, plan for a single round-trip on `0x0240`. For analog setpoint writes, expect the `0x0E15` error and have the `0x4222` retry path wired in from the start. There is no observed mechanism to know in advance which path a given point name will take — the supervisor blindly tries `0x0240` first and recovers if needed. Mock implementations and protocol fuzzers should reproduce this bimodal behavior. Verified empirically on PME1252 (V2.8.10); same rule presumably holds on PME1300 but unverified there.
+
+**Post-write read-back (SE-23, wire-verified).** Desigo CC and other compliant supervisors issue a `0x0220` ReadShort with NONE scope against the just-written point **immediately after** any successful write — either `0x0240` digital-write SUCCESS or `0x4222` analog-write SUCCESS. The read-back is part of the supervisor's UI-confirmation loop: it doesn't trust the write response alone, it confirms the new value via a fresh read. The read-back response uses the standard point-read shape per §14. Mock-PXC and panel-emulator implementations must support reads of points immediately after they're written; the supervisor will not tolerate stale or comm-faulted responses on this read-back. The COV push on TCP/5034 (§12.23) happens independently of the read-back and may arrive before or after it.
+
 ### 12.6.1 Worked Example — Read One Point Byte-by-Byte
 
 A complete request → response pair for reading point `"ROOM TEMP"` from device `"VAV001"` on node `node1`, with site code `BUILDING1` and BLN `MYBLN`. Scanner name follows the canonical form (`BUILDING1DCC-SVR|5034`). The panel speaks the legacy dialect (`msg_type = 0x33`); the modern variant uses `msg_type = 0x34` and opcode `0x0220` instead of `0x0271`, with otherwise identical body shape.
@@ -1419,21 +1430,35 @@ Offset  Bytes                                            Meaning
 
 ### 12.7 BulkPropertyWrite `0x4222` (The SYST Write Path)
 
-The canonical opcode for SYST-scoped setpoint writes. Used when `0x0240` against a SYST-scoped point returns error `0x0E15`. The supervisor transparently retries the same write as `0x4222`, which succeeds.
+The canonical opcode for SYST-scoped analog setpoint writes. Used when `0x0240` against a SYST-scoped analog point returns error `0x0E15` (see §12.6 for the digital-vs-analog rule). The supervisor transparently retries the same write as `0x4222`, which succeeds.
 
-Request body is a fixed preallocated structure (~273 bytes total request size including the routing header). Body layout carries:
+Request body carries device + point TLVs, the value, and quality/priority fields. **Observed size on PME1252: typically 80–120 bytes total request including the routing header** (e.g. 107 bytes for a single-property analog setpoint write such as `DAY CLG STPT = 72.0`). An older internal note describes a 273-byte "preallocated" form; that variant may exist for multi-property bulk writes but is unobserved in the reference captures. Implementers should compute size from actual content rather than assuming a fixed structural size.
 
-- Target object addressing (device + point TLVs)
-- The value to write
-- Priority information
-- Quality flags
-- Padding/reserved bytes
+Wire shape of a typical `0x4222` setpoint write (107 bytes total):
+
+```
+42 22                              opcode
+01 00 04 "SYST"                    scope TLV
+23                                 SYST separator (0x23)
+3F FF FF FF                        quality wildcard sentinel
+00 00                              reserved
+01 00 LL <device_name>             device TLV
+01 00 LL <point_name>              point TLV
+00 00                              separator
+01 00 00                           marker A
+01 00 00                           marker B
+FF FF 00 00 00                     extra priority/quality bytes (distinct from 0x0240)
+<4-byte f32 BE>                    value
+```
+
+The `FF FF 00 00 00` block between marker B and the value is `0x4222`'s structural difference from `0x0240` — it adds 5 bytes of priority/quality context not present in the simpler write opcode.
 
 Implementers building a setpoint-write feature SHOULD:
 
-1. First attempt `0x0240` with separator `0x00` (NONE scope) or `0x23` (SYST scope) as appropriate.
-2. On error `0x0E15`, retry as `0x4222` automatically.
-3. Treat both `0x0240` and `0x4222` writes as semantically equivalent from the operator's point of view.
+1. For digital writes (binary state commands), use `0x0240` with the appropriate scope separator. The write succeeds directly.
+2. For analog setpoint writes, attempt `0x0240` with separator `0x23` (SYST scope). Expect `0x0E15` error.
+3. On `0x0E15`, retry as `0x4222` automatically — same device + point + value, with the wider body shape above.
+4. Treat both `0x0240` and `0x4222` writes as semantically equivalent from the operator's point of view.
 
 ### 12.8 PropertyQuery `0x4200` — Two Forms
 
@@ -1677,10 +1702,27 @@ A panel-wide bulk read of all subpoints of a device, returning a long response w
 
 **`5xxx` family** (property-write model):
 
+- `0x5003` — ScheduleObjectInfo (query) / ModifyEqsZone (modify) — **polymorphic, see §6.6 and below**
 - `0x5022` — schedule slot init
 - `0x5020` — schedule entry write
 
 These write new schedule entries and modify existing ones.
+
+**`0x5003` ScheduleObjectInfo** — panel-side schedule-object query, observed wire format on PME1252:
+
+```
+50 03                              opcode
+01 00 04 "SYST"                    scope TLV
+00                                 NONE separator (0x00) — read-style
+3F FF FF FF                        quality wildcard sentinel
+00 00                              reserved
+01 00 LL <schedule_object_path>    TLV: schedule object path (e.g. "<SITE>.FLR03.BAY.CLUB.SCH")
+00 00 01 00 00                     trailer (5 bytes)
+```
+
+The schedule-object path uses dotted hierarchy: typically `<SITE>.<FLOOR/AREA>.<ZONE>.<SCH>` with the `.SCH` suffix marking the object as a schedule. The response carries the schedule's properties — name, type, current state, time-of-day entries — in TLV form.
+
+Per §6.6, `0x5003` is polymorphic: the **ModifyEqsZone** form is also `0x5003` with a different body shape (modification rather than query). That form is unobserved in the reference captures; implementers building schedule editors will need additional reference traffic to nail down its wire shape. The polymorphism is body-shape (request size and content), not port-direction.
 
 ### 12.18 Multi-State Label Catalog `0x040A`
 
@@ -1785,8 +1827,123 @@ Observed traffic mix in a typical 10-minute window across 6 panels:
 | `0x0240` | WriteWithQuality (BLN virtual-point value report) | ~55% | ~84 B |
 | `0x0274` | COV notification (device-point value change) | ~45% | ~82 B |
 | `0x4634` | BLN routing-table announcement | ~2% | ~256 B |
+| `0x0368` | Panel state notification (SE-22, rare event-driven) | ≪1% | 69 B |
 
 There is **no explicit subscribe/unsubscribe handshake** for COV notifications. As long as the panel's outbound TCP connection to supervisor:5034 is alive, the panel pushes COV/value changes. Subscription is implicit from the connection being open.
+
+#### 12.23.1 `0x0368` Panel State Notification
+
+`0x0368` is a rare event-driven push observed during specific panel-state transitions (notably immediately after a device install / commit — see §12.24). Wire format:
+
+```
+03 68                              opcode
+<1-byte state code>                observed values: 0x03, 0x04
+01 00 00                           marker (3 bytes)
+01 00 LL <panel_name>              TLV: panel identifying itself
+00 01 00 11                        trailer (4 bytes — possibly event ID)
+```
+
+**State-code semantics (tentative):**
+
+- `0x03` observed immediately after a `0x4224` device-commit completed — interpretation: "device-config-change committed"
+- `0x04` observed during a panel-wide bulk-read burst — interpretation: "bulk operation active" or "device pool refreshed"
+
+The state-code byte at offset +2 likely encodes a panel-internal event type. The 1-byte size means at most 256 distinct events. The tentative interpretations above are derived from observed timing in a single reference capture; additional captures across more panel-state transitions are needed to nail down the full event taxonomy.
+
+Implementer guidance: consume `0x0368` pushes as informational state-change hints. The push doesn't carry actionable point data — it's metadata. A read-only scanner can safely ignore these frames; a bridge or supervisor emulator might surface them to operators as audit-log events.
+
+### 12.24 Device Install / Commit (`0x4225` and `0x4224`)
+
+Desigo CC uses an opcode pair to initialize, install, or update a physical device on the FLN bus. The two opcodes are always issued together in sequence against the same device name; they appear when an operator adds a new TEC controller, swaps one out, or reconfigures a device's application.
+
+**Safety note:** these opcodes change device configuration. Read-only scanners and audit tools MUST NOT emit them. They're documented here so implementers building inventory / bridge / supervisor-emulation tools can recognize them in pcap traffic, and so mock-PXC implementations can respond correctly when test scaffolding exercises the install path.
+
+#### 12.24.1 `0x4225` — Device Install / Prepare (slow)
+
+Wire format (request):
+
+```
+42 25                              opcode
+01 00 04 "SYST"                    scope TLV
+23                                 SYST separator (0x23, write-style)
+3F FF FF FF                        quality wildcard sentinel
+00 00                              reserved
+01 00 LL <device_name>             device TLV — no point TLV
+00 00 01 00 00                     trailer pattern (5 bytes)
+FF FF                              terminator
+```
+
+Response (62-byte payload):
+
+```
+01                                 direction = SUCCESS
+<role-swapped 4-slot routing>
+00 00                              header
+01 00 LL <device_name>             echo device
+00 00                              trailer
+```
+
+Latency: **~4 seconds** on PME1252 (vs ~70 ms for normal write opcodes). The panel does substantial configuration work behind this opcode — likely a real handshake with the physical TEC device on the FLN bus. During the wait the panel may emit `0x0274` COV pushes for unrelated devices; those are normal background traffic, not part of the response.
+
+#### 12.24.2 `0x4224` — Device Commit / Finalize (fast)
+
+Wire format (request, distinct trailer from `0x4225`):
+
+```
+42 24                              opcode
+01 00 04 "SYST"                    scope TLV
+23                                 SYST separator
+3F FF FF FF                        quality wildcard sentinel
+00 00                              reserved
+01 00 LL <device_name>             device TLV
+00 00 01 00 00 FF FF 01 00         trailer pattern (9 bytes — differs from 0x4225)
+```
+
+Response is the same shape as `0x4225` — echo of device + `00 00` trailer. Latency ~70 ms.
+
+#### 12.24.3 Full Install Sequence
+
+1. Supervisor sends `0x4225 <device>` (SYST scope, separator 0x23, device-only payload).
+2. Panel takes ~4 seconds applying configuration internally; eventually returns SUCCESS.
+3. Supervisor sends `0x4224 <device>` to finalize.
+4. Panel returns SUCCESS within ~70 ms.
+5. Panel emits one `0x0368` panel-state-notification push on TCP/5034 (§12.23.1), state byte `0x03`.
+6. Panel emits a burst of `0x0274` COV notifications on TCP/5034 covering **every point on the device** — `APPLICATION`, `CTL TEMP`, `ROOM TEMP`, `DAY CLG STPT`, `NGT CLG STPT`, `DAY HTG STPT`, etc. — refreshing the supervisor's complete model of the device after the install.
+
+#### 12.24.4 Error Path
+
+If the supervisor sends `0x4225` after the device has already been committed, with a malformed device name, or addressing a slot that doesn't exist on the device's application, the panel may return `0x0E12` (`invalid_point_number`) rather than the expected SUCCESS. This is NOT a retry trigger like `0x0E15` — there's no equivalent `0x4222`-style fallback for `0x4224`/`0x4225`. Operator workflows that iterate through device properties faster than the panel can apply the install will produce these errors as a side effect. Supervisors should treat `0x0E12` from device-install ops as a soft error and back off briefly before retrying.
+
+### 12.25 SYST Property Read by Hierarchical Path (`0x0294`)
+
+Reads a property value from a globally-addressable panel object using dotted-path notation. Distinct from `0x0271` / `0x0220` which address via FLN `device + point`. The hierarchical-path form is what Desigo CC uses when reading panel-internal points, schedule properties, alarm-class properties, and other cross-device entities that don't live on the FLN bus.
+
+Wire format (request):
+
+```
+02 94                              opcode
+01 00 04 "SYST"                    scope TLV
+00                                 NONE separator (0x00, read-style)
+3F FF FF FF                        quality wildcard sentinel
+00 00                              reserved
+01 00 LL <object_path>             TLV: hierarchical object path
+01 00 LL <property_name>           TLV: property name
+00 00 01 00 00 01 00 00            trailer (8 bytes)
+```
+
+Object-path examples observed in reference captures: `<SITE>.AC04.ZN` (Air Conditioner zone object on AC04 unit), where the first dotted component is the site code, then sub-objects. Property names observed: `MODE` (zone occupancy state), among others.
+
+**Response** carries the property value in a value block matching §15.2 — sentinel + 7-byte metadata + IEEE 754 BE f32 value + (optional) units TLV. The dual TLV from the request (object_path + property_name) is echoed at the top of the response body.
+
+**Relationship to other SYST property opcodes:**
+
+| Opcode | Addressing form | Use |
+|---|---|---|
+| `0x0291` | (varies, less specific) | SYST property op — broad/legacy |
+| `0x0294` | object_path + property_name (dotted) | **Read property by hierarchical path** |
+| `0x02A8` | (varies, less specific) | SYST property op — broad/legacy |
+
+Implementer guidance: a scanner / bridge that needs to read panel-internal (non-FLN) points by name should prefer `0x0294` for the cleanest addressing. The object-path form maps directly to Desigo CC's UI tree (site → floor → zone → object → property).
 
 ---
 
