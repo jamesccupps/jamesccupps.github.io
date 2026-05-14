@@ -1,6 +1,6 @@
 # Apogee P2 Protocol — Open Specification
 
-**Version**: 1.5
+**Version**: 1.6
 **Status**: Draft / Working Specification
 
 ## Abstract
@@ -1857,7 +1857,7 @@ Replication uses opcodes:
 
 ### 13.5 Point Catalog Requirement
 
-Sub-points within a TEC device are addressed on the wire by **slot number** (1–99) but identified to humans by **name** (`ROOM TEMP`, `APPLICATION`, `CTL STPT`, etc.). The slot → name mapping is **application-specific** — every TEC device runs one of ~800 distinct *applications* (VAV-cooling, VAV-reheat, fan-coil, boiler, chiller, custom-PPCL, ...), and each application has its own slot layout.
+Sub-points within a TEC device are addressed on the wire by **slot number** (1–99) but identified to humans by **name** (`ROOM TEMP`, `APPLICATION`, `CTL STPT`, etc.). The slot → name mapping is **application-specific** — every TEC device runs one of ~1024 distinct *applications* (VAV-cooling, VAV-reheat, fan-coil, boiler, chiller, lab room controller, fume hood, custom-PPCL, ...), and each application has its own slot layout.
 
 A scanner can interpret slot numbers in three ways, in increasing order of capability:
 
@@ -1865,7 +1865,7 @@ A scanner can interpret slot numbers in three ways, in increasing order of capab
 
 2. **Enumerate-then-read** (no catalog needed). Use `0x0986` (FLN enumerate, §12.15) and `0x0981` (panel-wide point enumerate, §12.12) to walk the device. Both opcodes return entries with the point **name** included, so the implementer learns the slot layout dynamically. Costs one round-trip per ~10 points but gives a complete picture without prior knowledge.
 
-3. **Slot-based reads with a catalog** (catalog required). To translate `read slot 4 on device VAV001` into `"this is ROOM TEMP, units DEG F, analog read-only"`, the scanner needs the application's point table. The catalog is conventionally shipped as a JSON file keyed by application number, with each entry listing `{slot: (name, description, units, read_only, slope, intercept, ptype)}`. A reference catalog covering ~797 applications is publicly available in the [P2Scanner repository](https://github.com/jamesccupps/P2Scanner) as `tecpoints.json`. Implementers who don't want to vendor that file can derive most of it from `0x0981` enumeration responses (which return slot + name + value + units per point) or from Siemens TEC application reference documents.
+3. **Slot-based reads with a catalog** (catalog required). To translate `read slot 4 on device VAV001` into `"this is ROOM TEMP, units DEG F, analog read-only"`, the scanner needs the application's point table. The catalog is conventionally shipped as a JSON file keyed by application number. A reference catalog covering 1024 applications is publicly available in the [P2Scanner repository](https://github.com/jamesccupps/P2Scanner) as `tecpoints.json`. Implementers who don't want to vendor that file can derive most of it from `0x0981` enumeration responses (which return slot + name + value + units per point) or from Siemens TEC application reference documents.
 
 **Choice criteria:**
 
@@ -1874,6 +1874,59 @@ A scanner can interpret slot numbers in three ways, in increasing order of capab
 - **High-fidelity scanner that surfaces state-set labels, slope/intercept, point types**: option 3. The catalog carries metadata the wire protocol doesn't transmit.
 
 The wire protocol is identical across all three approaches — the catalog is a client-side artifact only and is never transmitted to the panel.
+
+### 13.5.1 Catalog Schema
+
+The reference catalog (`tecpoints.json` v2) is a JSON object keyed by application number (string-encoded). Each application carries:
+
+- A `_meta` block with **application-level metadata** (description, hardware classification, transport, firmware revision)
+- Per-slot entries keyed by slot number (string-encoded) with point-level metadata (name, units, point type, slope, intercept, on/off labels)
+
+```json
+{
+  "2020": {
+    "_meta": {
+      "descr":          "VAV Cooling Only",
+      "cab_type":       "TEC",
+      "type":           "ELECTRIC",
+      "rev":            "VV11",
+      "transport":      "p1_fln",
+      "has_point_data": true
+    },
+    "4":  { "name": "ROOM TEMP",   "units": "DEG F", "ptype": 3, ... },
+    "5":  { "name": "APPLICATION", "ptype": 4,                ... },
+    ...
+  },
+  ...
+}
+```
+
+**`_meta` field reference:**
+
+| Field | Type | Observed values | Purpose |
+|---|---|---|---|
+| `descr` | string | "VAV Cooling Only" / "Fan Coil Unit, 4-pipe" / "VAV w/CHW, HW, Econ Cycle, Static Press CTL" | Human-readable application label. Up to ~88 chars; mean ~30. Shows in supervisor UIs as the device's configured app name. |
+| `cab_type` | string | `TEC` (749 apps) / `MSTP` (227) / `LAB` (39) / `FHOOD` (6) | Hardware classification. TEC = classic Terminal Equipment Controller on the P1 FLN bus. MSTP = BACnet MSTP device addressed via the panel's BACnet router. LAB / FHOOD = specialty lab room / fume hood controllers. |
+| `type` | string | `ELECTRIC` (1015 apps) / `PNEUMATIC` (6) | Actuator type. Affects what kinds of points the app exposes (pneumatic apps have pressure-output points instead of dampler-position points). |
+| `rev` | string | `VV11` / `BN30` / `ST14` / 264 distinct values | Application revision. Distinguishes minor variations of the same app type (`VV11` vs `VV12` for VAV-cooling-only). |
+| `transport` | string | `p1_fln` (797 apps) / `bacnet_mstp` (227) | **Wire-level protocol the device speaks.** Determines whether this protocol's opcodes can reach it. See §13.5.2 below. |
+| `has_point_data` | boolean | True (797) / False (227) | Whether the catalog includes per-slot point definitions for this app. False for every `bacnet_mstp` entry — the P2 catalog doesn't carry slot layouts for BACnet-native devices because slot numbers aren't a BACnet concept. |
+
+### 13.5.2 Transport Reachability
+
+The `_meta.transport` field is **load-bearing for any scanner / bridge implementer**, because it determines whether the device can be addressed through this protocol's opcodes:
+
+- **`p1_fln`** (797 apps, all `cab_type` ∈ {TEC, LAB, FHOOD}) — Apogee P1 FLN bus device. Reachable via `0x0986` enumerate + `0x0271`/`0x0220` reads. This is what every example in §12 and §14 of this spec describes.
+- **`bacnet_mstp`** (227 apps, `cab_type=MSTP`) — BACnet MSTP device hanging off the panel's BACnet/IP router. **NOT reachable via this protocol.** Wire opcodes for these devices return `0x0003 not_found` or similar. To read or write these devices, the client must speak BACnet/IP directly against the panel acting as a BACnet router; the P2 opcodes don't address them.
+
+A scanner that doesn't honor this distinction will produce `not_found` errors when scanning MSTP devices and (incorrectly) flag them as offline. Reference scanners SHOULD:
+
+1. Read the device's `APPLICATION` slot first (§14.5).
+2. Look up the application's `_meta.transport` in the catalog.
+3. If `transport == "bacnet_mstp"`, skip the P2 read attempt entirely and surface a "not reachable via P2" diagnostic to the user. A BACnet/IP fallback is the correct address path.
+4. If `transport` is missing (older v1 catalog) or unknown, fall back to "try anyway" — the wire read will fail cleanly via the error catalog (§10.2).
+
+The same logic applies to manifest generators (the P2-to-BACnet bridge in this project, similar tools): a BACnet/MSTP TEC's points should not be entered into a P2 manifest. The bridge SHOULD detect and skip them at manifest-build time rather than producing entries that can never be read.
 
 ---
 
