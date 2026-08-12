@@ -17,7 +17,7 @@
     <!-- SEO -->
     <meta name="description" content="James Cupps — building open-source tools and Android apps for HVAC, network security, machine learning, and home automation. Projects in Python, JavaScript, Kotlin, and Electron.">
     <meta name="author" content="James Cupps">
-    <meta name="keywords" content="James Cupps, AllCalc, HVAC calculator, field calculator, trade tools, BACnet, HVAC, network security, machine learning, Python, Kotlin, Android, Electron, home automation, open source">
+    <meta name="keywords" content="James Cupps, AllCalc, HVAC calculator, field calculator, trade tools, BACnet, HVAC, wet-bulb calculator, psychrometrics, cooling tower, WBGT, network security, machine learning, Python, Kotlin, Android, Electron, home automation, open source">
     <link rel="canonical" href="https://jamesccupps.github.io/">
 
     <!-- Open Graph (Facebook, LinkedIn, Discord, Slack) -->
@@ -41,7 +41,7 @@
 
     <meta name="theme-color" content="#0a0a0a">
 
-    <!-- Structured data: Person + AllCalc MobileApplication -->
+    <!-- Structured data: Person + AllCalc MobileApplication + Wet-Bulb WebApplication -->
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
@@ -75,6 +75,26 @@
             "@type": "Person",
             "name": "James Cupps"
           },
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+          }
+        },
+        {
+          "@type": "WebApplication",
+          "name": "Wet-Bulb Calculator",
+          "url": "https://jamesccupps.github.io/Wetbulb/",
+          "applicationCategory": "UtilitiesApplication",
+          "operatingSystem": "Any (web browser)",
+          "browserRequirements": "Requires JavaScript",
+          "description": "Real-time, pressure-corrected wet-bulb temperature by ZIP, city, or GPS, with a cooling-tower approach reference, a shade-WBGT estimate, a 24-hour trend and next-24h forecast peak, and an offline manual psychrometric calculator.",
+          "keywords": "wet bulb, wet-bulb temperature, psychrometrics, cooling tower, approach, WBGT, dew point, HVAC, heat stress",
+          "author": {
+            "@type": "Person",
+            "name": "James Cupps"
+          },
+          "isBasedOn": "https://github.com/jamesccupps/Wetbulb",
           "offers": {
             "@type": "Offer",
             "price": "0",
@@ -529,6 +549,11 @@
                     <a class="name-link" href="https://jamesccupps.github.io/CoolingTowerSim/" target="_blank" rel="noopener">Cooling Tower Sim</a>
                     <span class="desc">Browser-based condenser-water loop control bench &mdash; <a class="doc-link" href="https://github.com/jamesccupps/CoolingTowerSim" target="_blank" rel="noopener">source</a></span>
                 </div>
+                <div class="project-row multilink">
+                    <span class="tag">[BAS]</span>
+                    <a class="name-link" href="https://jamesccupps.github.io/Wetbulb/" target="_blank" rel="noopener">Wet-Bulb Calc</a>
+                    <span class="desc">Live pressure-corrected wet-bulb + tower approach &mdash; <a class="doc-link" href="https://github.com/jamesccupps/Wetbulb" target="_blank" rel="noopener">source</a></span>
+                </div>
                 <a class="project-row" href="https://github.com/jamesccupps/NoteForge" target="_blank" rel="noopener">
                     <span class="tag">[APP]</span>
                     <span class="name">NoteForge</span>
@@ -560,7 +585,7 @@
                     <span class="desc">Reusable Claude prompt for rigorous code audits</span>
                 </a>
             </div>
-            <div class="dim">       <span id="project-count">9</span> project(s) &mdash;  Type HELP for commands</div>
+            <div class="dim">       <span id="project-count">12</span> project(s) &mdash;  Type HELP for commands</div>
         </div>
 
         <hr class="sep">
