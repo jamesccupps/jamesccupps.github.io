@@ -933,14 +933,18 @@
 <h4 id="212-tcp5034--an-optional-second-supervisor-side-listener-not-a-protocol-standard-port">2.1.2 TCP/5034 — an optional second supervisor-side listener (NOT a protocol-standard port)</h4>
 <p>Some installations run a supervisor that <strong>also</strong> listens on TCP/5034 as a second listener distinct from the canonical 5033. A client MUST NOT assume it exists and MUST default to 5033. [W] Where it appears, only the supervisor host listens on 5034; field panels never do — the listener set on 5033 is the full mesh, while 5034 is a star into one supervisor box. On the wire, 5034 carries the <strong>panel→supervisor push/announce (reverse) channel</strong>: panels open a connection to the supervisor's 5034 listener and push COV/value frames there, while the supervisor reaches panels on their 5033 listeners (§7.3). Whether 5034 is a distinct co-installed supervisor product or simply the same supervisor's second listener for that reverse channel is <strong>not determinable from traffic alone</strong> — either way it is deployment-specific configuration, not a protocol-standard port. [W] The protocol carried on 5034 is identical to that on 5033 — the same frames, opcodes, and semantics — and unsolicited pushes (COV, alarms) are <strong>port-agnostic</strong>: a push rides whichever connection/port the receiving supervisor is listening on, and the port number does not change the meaning of any frame. [W]</p>
 <p>The decisive evidence that 5034 is not a protocol feature: a supervisor's identity string commonly carries a <code>|5034</code> suffix (e.g. <code>DCC-SVR|5034</code>), and that exact suffixed identity appears in thousands of frames captured on a <strong>5033-only</strong> connection, while the literal text <code>5033</code> appears in zero frames anywhere. The supervisor stamps its <code>HOST|PORT</code> identity into the routing slot regardless of which TCP port carries the frame — so the <code>|PORT</code> suffix is part of the <em>identity string</em>, not a live port indicator (§2.1.5, §6.4). [W] A conformant implementation derives all frame semantics from the frame's direction and contents, never from the TCP port that carried it, and defaults to 5033 only (exposing any other port as explicit configuration). [I]</p>
-<p><strong>And the two listeners on a supervisor need not behave alike.</strong> At one observed
-supervisor, panel-initiated sessions succeed on <code>5034</code> — a panel connects, pushes
-COV reports and point commands, and every one is answered — while the same
-supervisor's <code>5033</code> accepts the connection, reads the request and then closes
-with no application reply at all: 984 such connections in 25 minutes, nine
-panels retrying every 14 seconds, zero payload bytes returned (§5.1). A client
-MUST NOT infer from an open port that the peer will serve it, and MUST treat a
-silently closed session as a policy outcome rather than a fault. [W]</p>
+<p><strong>And the two listeners on one host need not be the same service.</strong> At an
+observed supervisor, panel-initiated sessions succeed on <code>5034</code> — a panel
+connects, pushes COV reports and point commands, and every one is answered —
+while <code>5033</code> on that same host accepts the connection, reads the request and
+closes with no application reply: 984 such connections in 25 minutes, nine panels
+retrying every 14 seconds, zero payload bytes returned (§5.1). The reason is a
+deployment one and it generalises: <strong>the canonical port was already taken by
+another product on that machine</strong>, so the supervisor's P2 peer service was
+configured onto a second port. Whoever binds <code>5033</code> there answers the TCP
+handshake and then drops the session. A client MUST NOT infer from an open port
+that the peer speaks P2, and MUST treat a silently closed session as a
+configuration outcome rather than a fault. [W]</p>
 <h4 id="213-the-serial-bln-legacy-datalink-context-only">2.1.3 The serial BLN (legacy datalink, context only)</h4>
 <p>Before Ethernet, the BLN was a <strong>terminated RS-485 multidrop trunk</strong> (8 data bits, no parity, 1 stop bit), with up to a few trunks (trunk numbers 0–3) and a firmware-tiered baud rate (e.g. 38400 baud where all firmware on the trunk is recent enough, otherwise 19200; modem links lower). [D] The serial BLN implements the same peer model and the same data model as the Ethernet BLN, but with the serial-era mechanics (token, CRC, packed addressing) noted in §1.5. It is <strong>not</strong> the subject of this document; an implementer targeting TCP/5033 does not implement it. [I]</p>
 <h4 id="214-the-aem-tunnel-serial-over-tcp-context-only">2.1.4 The AEM tunnel (serial-over-TCP, context only)</h4>
@@ -3596,15 +3600,42 @@ handshake" opcode</strong> — the TCP handshake plus the message-class context 
 |------- TLV &quot;SYST&quot; --| |- selector -|
                         scope_byte=0x23, then wildcard mask 3F FF FF FF
 </code></pre>
-<p>The trailing <code>3F FF FF FF</code> is a wildcard mask, and it is all but invariant:
-<strong>19,066 of the 19,067 scope tags in the corpus carry exactly those four bytes.</strong>
-The exception is a single <code>AP2_TEC_DEFINITION</code> request that carries
-<code>BF FF FF FF</code> — the same mask with the top bit set — so a parser should read the
-four bytes rather than assert them. The scope names seen at this position are
-<code>NONE</code> (13,557), <code>SYST</code> (5,448), <code>CC</code> (59, on alarm print and acknowledge) and
-<code>HIGH</code> (the one <code>BF</code> frame); two further four-character names appear once each in
-the same position on operations that also carry named objects, so whether they
-are scope names or object names is not settled. [W] The leading <code>scope_byte</code> <strong>is the command priority</strong> at which the operation acts — it is not a separate flag. The same byte both sets the priority a write commands the target at, and (through the read-vs-write handler split) selects the body grammar that follows. [W][S]</p>
+<p><strong>This block is a <code>User_profile</code>, and reading it as one explains every field.</strong>
+The structure catalog defines <code>User_profile</code> as <code>user_logon : TEXT_</code>,
+<code>point_priority : Point_priority</code>, <code>access_class : BITSTRING32</code> — a name, a
+priority and a 32-bit rights mask — which is exactly the TLV + byte + four bytes
+seen here. [S][W]</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Observed</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>user_logon</code></td>
+<td><code>NONE</code> (13,557), <code>SYST</code> (5,448), <code>CC</code> (59, on alarm print and acknowledge), and an <strong>operator's login name</strong> where the operation came from an interactive session</td>
+</tr>
+<tr>
+<td><code>point_priority</code></td>
+<td><code>0x00</code> none (17,650), <code>0x23</code> <strong>oper</strong> (35, 1,061), <code>0x01</code> <strong>tec_ovrd</strong> (356) — the §7 command-priority enum</td>
+</tr>
+<tr>
+<td><code>access_class</code></td>
+<td><code>0x3FFFFFFF</code> on 19,066 of 19,067 requests; <code>0xBFFFFFFF</code> on one</td>
+</tr>
+</tbody>
+</table>
+<p>So the "scope names" are <strong>logon identities</strong>: <code>SYST</code> and <code>NONE</code> are what the
+stack presents for system-originated work, and a human login appears in the same
+field when a person drives the operation. The single <code>0xBFFFFFFF</code> came from a
+panel operation issued while an operator was logged into that panel's Telnet CLI
+— same mask as the system contexts plus the top bit, i.e. a different
+access-rights set for a privileged session, not a different mask format. A
+parser should therefore <strong>read all three fields</strong> rather than matching a fixed
+prologue: an unfamiliar name in the first TLV is an operator, not a parse
+failure. [W] The leading <code>scope_byte</code> <strong>is the command priority</strong> at which the operation acts — it is not a separate flag. The same byte both sets the priority a write commands the target at, and (through the read-vs-write handler split) selects the body grammar that follows. [W][S]</p>
 <p>Defined scope-name TLVs observed on the wire: [W]</p>
 <table>
 <thead>
@@ -10955,6 +10986,53 @@ zone enters mode M</em>; the command table says <em>in mode M, command these poi
 these values</em> — typically the day/night point; and a point's <strong>mode point</strong> then
 selects which alarm levels are in force (§10.8, alarm-mode record). Scheduling,
 commanding and alarming are one chain, and the mode point is the joint. [W][D]</p>
+<p><strong><code>AP2_EMS_PRINT</code> (0x0368) — the panel announcing an operator session.</strong> When
+someone logs into a panel's Telnet console, the panel reports it to the
+supervisor, unsolicited, on the second channel. [W]</p>
+<pre><code>u8 event code | 01 00 00 | TLV(node name) | TLV(account) | TLV(account description)
+</code></pre>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">Code</th>
+<th>Meaning</th>
+<th>Account field carries</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;"><code>0x07</code></td>
+<td><strong>logon</strong></td>
+<td>the name <strong>as typed</strong> at the prompt</td>
+</tr>
+<tr>
+<td style="text-align: right;"><code>0x08</code></td>
+<td><strong>logoff</strong></td>
+<td>the account's <strong>canonical</strong> name</td>
+</tr>
+<tr>
+<td style="text-align: right;"><code>0x09</code></td>
+<td>an attempt that resolved to no account</td>
+<td>the name as typed, and no description</td>
+</tr>
+</tbody>
+</table>
+<p>The reading comes from a capture in which an operator logged into one panel
+twice: <code>0x09</code> with a typed name and no description, then <code>0x07</code>/<code>0x08</code> pairs
+bracketing each session — 127 seconds for the first, 301 for the second, with
+that operator's own request (a TEC definition read) falling inside the second
+pair and carrying the same account name in its <code>User_profile</code> prologue (§8.2).
+Two older captures carry codes <code>0x03</code> and <code>0x04</code> with the node name only, so the
+code space is wider than these three. [W]</p>
+<p>Three consequences worth stating plainly. The <strong>account name and the account's
+own description travel in clear</strong> on an ordinary data connection, so anyone who
+can see the traffic learns which named accounts exist on a panel and when they
+are used. A <strong>failed or unresolved login is distinguishable on the wire</strong> from a
+successful one by the event code, which makes login activity observable to a
+passive monitor — useful defensively, and equally useful to an attacker who is
+already on the segment. And because the same account name reappears in the
+<code>User_profile</code> of every request that session issues, <strong>operator actions are
+attributable on the wire</strong> to the account that made them.</p>
 <h3 id="109-the-full-structure-set-is-enumerable">10.9 The full structure set is enumerable</h3>
 <p>The ~30 structures above cover the read/command/COV core, the firmware/identity block, the session block, and one representative of each remaining major family (upload, PPCL, trend, TEC, alarm, node-management). The remaining ~1,110 structures follow the same conventions — ordered typed fields, the shared sub-types of §10.2, counted arrays, and CHOICE unions — and each maps one-to-one to a <code>*_Request</code> / <code>*_Response</code> pair for an opcode in the §9 catalog. For any opcode not detailed here, its body is the like-named ASDU structure (e.g. <code>AP2_&lt;name&gt;_Request</code> / <code>AP2_&lt;name&gt;_Response</code>), readable from the structure library with the §10.1 type mapping. [S]</p>
 <p><strong>[OPEN]</strong> The exact byte offsets of the COV <em>condition/priority</em> block within the <code>All_points</code> per-type value alternatives (i.e. the precise on-wire layout of each <code>lai_</code>/<code>ldo_</code>/<code>lenum_</code> CHOICE arm) are not pinned from the structure metadata alone — the metadata gives field order, not the codec's exact byte packing of each arm. Confirming these requires an alarmed/commanded capture or codec-level evidence. The field <em>order</em> and types are [S]; the per-arm byte offsets are [OPEN].</p>
