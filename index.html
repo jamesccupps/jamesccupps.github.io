@@ -4401,19 +4401,34 @@ behaviour, and should stay that way.</p>
 <li><strong>LANGUAGE</strong> (0x0900–0x0902) — localized string/prompt get and report-data (the multilingual UI string service).</li>
 <li><strong>UPL</strong> (0x0950–0x09C3, 0x4131–0x4133) — the bulk upload engine: <code>DOWNLOAD_ME</code>, and per-object-class <code>UPL_DEL_*</code> / <code>UPL_ADDED_*</code> / <code>UPL_ALL_*</code> triplets for point, alarm-setup, alarm-mode, trend, PPCL, TEC, EQS (zone/cmd-table/mode-sched/override), loop, alarm-message, SSTO (general/start/stop/night), port, partner, UC, TOD point/cmd, LON, command/miscdata report, MSTP-device, and program. This is how a supervisor pulls a panel's whole configured database.</li>
 <li><strong>DBCHANGE</strong> (0x0951–0x09C0, 0x4130, 0x5356) — the panel→supervisor change-notification mirror of the upload classes (point, alarm, trend, PPCL, controller, EQS, SSTO, port, partner, UC, TOD, LON, reports, MSTP-device, program, HOA-map).</li>
-<li><strong>RACS</strong> (0x2824, 0x3800–0x382A) — Remote Access / Communication System partner, port, and system add/copy/delete/disable/display/enable/log/look/modify/statlog (dial-up / WAN inter-site connectivity management).</li>
-<li><strong>TEAM</strong> (0x4000–0x4018) — point-team / application descriptor and member operations: team-desc and member-desc add (analog/digital/enum/LPACI/L2SL), team/member/report log/list, descriptor uploads and db-changes. A "point team" is a logical point whose default member is the logical point value (see §11 point model).</li>
-<li><strong>TEC</strong> (0x4200–0x4225) — Terminal Equipment Controller (FLN device) operations: controller/TEC log/add/copy/modify/remove/look/query/definition, member/report log, and the local/remote init-value log/set/restore/initialize/update family (TEC application init values).</li>
-<li><strong>UC</strong> (0x4241–0x4249) — Unitary Controller add/remove/look/member-log.</li>
-<li><strong>LON</strong> (0x4300–0x4452) — LonWorks integration: device log/add/modify/remove, member/report log, init-value family, diagnostics, send-service-pin, get/set-domain, request-wink, status-clear, agent db export/import, peak-db-clear.</li>
-<li><strong>EBLN</strong> (0x461F–0x464C) — Ethernet-BLN management: field-panel names display, name/IP/TCP-ports/site/BLN/multicast/MAC set/configure, host-table add/remove/display, trunk-settings replace/display, the replication subfamily (notify/pull/pull-more/changes/diag-nodelist), point-location-get, MII configure/display, IP/ports/multicast/MAC display, telnet enable/disable, and <code>EBLN_PING</code> (0x4640) — the session-establish/keepalive opcode (see §9.6 and §10.6).</li>
-<li><strong>WEB</strong> (0x465D, 0x700C) — embedded web-server and ApogeeEdit get-state.</li>
-<li><strong>BACNET</strong> (0x4821–0x4B03) — BACnet-side integration carried over P2: BBMD add/remove/display, object-id log, application-priority and device-name replace/remove/display, COV-table, BACnet trend-log, MSTP-device (BNMSTP) family, and BNEEO. This is the BACnet bridge configuration surface, distinct from the native P2 point model.</li>
-<li><strong>EQS</strong> (0x5000–0x5054) — Equipment Scheduling: zone, command-table, mode-entry, and override add/modify/remove/look/enable/disable; display variants; zone log; and the SSTO (Start-Stop Time Optimization) setup/look/display/reset/enable/disable subfamily.</li>
-<li><strong>IO</strong> (0x5300/0x5303/0x5305) — global and local I/O-module display (incl. MEC expansion bus).</li>
-<li><strong>FLASH</strong> (0x5330–0x5332) — flash-database backup (read), restore (overwrite), clear (erase).</li>
-<li><strong>HOA</strong> (0x5351/0x5354/0x5355) — Hand-Off-Auto map modify/look/add (physical HOA-switch mapping).</li>
 </ul>
+<p><strong>How the <code>0x09xx</code> bank is organised, and why the opcode is not a simple sum.</strong>
+The bank is one object-class list crossed with a small set of transfer
+operations, and a supervisor selects an opcode from a <strong>triple</strong>: the database
+<em>section</em> (point, alarm-setup, alarm-mode, trend, PPCL, TEC, EQS zone / cmd /
+mode / override, SSTO general / start / stop / night, TOD point / cmd, LON,
+program, terminal-def, reports, MSTP-device, BACnet schedule / change, …), the
+transfer <em>direction and scope</em> (download-all, download-changes, upload-all,
+upload-changes), and the record <em>state</em> (added, deleted, modified). The last of
+those maps straight onto the wire families — added ↔ <code>UPL_ADDED_*</code>, deleted ↔
+<code>UPL_DEL_*</code>, modified ↔ <code>DBCHANGE_*</code> — over the section list. [S][D]</p>
+<p>That is worth stating because the obvious shortcut does not work: <strong>the section
+list and the opcode bank are independently ordered</strong>, so an opcode cannot be
+computed as a base plus a section index. The correspondence holds for the first
+few classes and then breaks. Dispatch on the opcode, never on an arithmetic
+relationship to a section number. [S]
+- <strong>RACS</strong> (0x2824, 0x3800–0x382A) — Remote Access / Communication System partner, port, and system add/copy/delete/disable/display/enable/log/look/modify/statlog (dial-up / WAN inter-site connectivity management).
+- <strong>TEAM</strong> (0x4000–0x4018) — point-team / application descriptor and member operations: team-desc and member-desc add (analog/digital/enum/LPACI/L2SL), team/member/report log/list, descriptor uploads and db-changes. A "point team" is a logical point whose default member is the logical point value (see §11 point model).
+- <strong>TEC</strong> (0x4200–0x4225) — Terminal Equipment Controller (FLN device) operations: controller/TEC log/add/copy/modify/remove/look/query/definition, member/report log, and the local/remote init-value log/set/restore/initialize/update family (TEC application init values).
+- <strong>UC</strong> (0x4241–0x4249) — Unitary Controller add/remove/look/member-log.
+- <strong>LON</strong> (0x4300–0x4452) — LonWorks integration: device log/add/modify/remove, member/report log, init-value family, diagnostics, send-service-pin, get/set-domain, request-wink, status-clear, agent db export/import, peak-db-clear.
+- <strong>EBLN</strong> (0x461F–0x464C) — Ethernet-BLN management: field-panel names display, name/IP/TCP-ports/site/BLN/multicast/MAC set/configure, host-table add/remove/display, trunk-settings replace/display, the replication subfamily (notify/pull/pull-more/changes/diag-nodelist), point-location-get, MII configure/display, IP/ports/multicast/MAC display, telnet enable/disable, and <code>EBLN_PING</code> (0x4640) — the session-establish/keepalive opcode (see §9.6 and §10.6).
+- <strong>WEB</strong> (0x465D, 0x700C) — embedded web-server and ApogeeEdit get-state.
+- <strong>BACNET</strong> (0x4821–0x4B03) — BACnet-side integration carried over P2: BBMD add/remove/display, object-id log, application-priority and device-name replace/remove/display, COV-table, BACnet trend-log, MSTP-device (BNMSTP) family, and BNEEO. This is the BACnet bridge configuration surface, distinct from the native P2 point model.
+- <strong>EQS</strong> (0x5000–0x5054) — Equipment Scheduling: zone, command-table, mode-entry, and override add/modify/remove/look/enable/disable; display variants; zone log; and the SSTO (Start-Stop Time Optimization) setup/look/display/reset/enable/disable subfamily.
+- <strong>IO</strong> (0x5300/0x5303/0x5305) — global and local I/O-module display (incl. MEC expansion bus).
+- <strong>FLASH</strong> (0x5330–0x5332) — flash-database backup (read), restore (overwrite), clear (erase).
+- <strong>HOA</strong> (0x5351/0x5354/0x5355) — Hand-Off-Auto map modify/look/add (physical HOA-switch mapping).</p>
 <h3 id="941-which-of-these-does-a-panel-actually-implement">9.4.1 Which of these does a panel actually implement?</h3>
 <p>The catalog that follows joins a supervisor-side enumeration with a wire census.
 Both are one-sided. The enumeration says what a supervisor knows how to <em>ask</em>;
@@ -10984,23 +10999,72 @@ u16 mode index | f32 value | 8 B fixed tail
 value is <code>1.0</code> or <code>0.0</code> and nothing else, so these are digital commands. The
 suffix is overwhelmingly the <strong>day/night</strong> subpoint. One row reads: <em>in mode 0
 drive this point to 1; in mode 1 drive it to 0.</em></p>
-<p><strong><code>AP2_UPL_ALL_EQS_MODE_SCHED</code> (0x0989)</strong> — when a mode starts:</p>
-<pre><code>u16 name space | TLV zone | u32 record index | TLV mode | u32
-4 B effective-from | 4 B effective-until | u8 | u16 | u8 hour | u8 minute | …
+<p><strong><code>AP2_UPL_ALL_EQS_MODE_SCHED</code> (0x0989)</strong> — when a mode starts. Eleven fields,
+and the record consumes its body exactly:</p>
+<pre><code>u16 name_space | TLV zone name              -- Team_response
+u32 entry_ID
+u8  entry_enabled        (0/1)
+u16 mode
+u8  occurrence           0 one_time | 1 weekly | 2 replacement
+u32 scheduled_days       bitmask, bit0 = Sunday .. bit6 = Saturday,
+                         bits 7..13 = Replacement1..Replacement7
+4 B start_date | 4 B end_date               -- y-1900, month, day, ISO weekday
+4 B start_time | 4 B stop_time              -- hour, minute, second, centiseconds
+u8  days_spanned
+u8  exclusive            (0/1)
+u16 state_text_id                           -- see below
 </code></pre>
-<p>The 4-byte date group is <strong><code>year-1900, month, day, weekday</code>, weekday numbered
-ISO-style (Monday = 1 … Sunday = 7)</strong>. That is worth relying on: every valid
-date in the corpus carries a weekday byte matching the real weekday of that
-date, so a decoder can use the agreement as a self-check on its alignment. A
-month/day of zero is the "no date" sentinel. Times decode as <code>hour, minute</code>
-(07:00, 18:00, 20:30 …), and effective-until dates sit far in the future when a
-schedule has no end.</p>
-<p>The <code>u32</code> after the zone name is the record's own index and is the resume key of
-§10.2.3: the request's ten-byte tail is <code>u32 0 | u32 last index | u16 0</code>. Indexes
-are <strong>sparse</strong>, so the walk must echo the key rather than count.</p>
-<p><strong><code>AP2_UPL_ALL_EQS_ZONE</code> (0x0987)</strong> — the zone: a lead <code>u16</code>, the zone name, the
-name again after a two-byte separator, a human-readable descriptor, and a
-19-byte fixed tail.</p>
+<p><strong>The layout is self-checking, and it was checked.</strong> Both <code>DATE_</code> groups carry a
+weekday byte that must equal the weekday their own year/month/day actually falls
+on; both <code>TIME_</code> groups must be a real time of day; the booleans must be 0 or 1;
+<code>occurrence</code> must be in 0–2; and the eleven fields must consume the body with
+nothing left over. <strong>All thirty captured records hold.</strong> A month/day of zero is
+the "no date" sentinel, and effective-until dates sit far in the future when a
+schedule has no end. [W]</p>
+<p>Two fields are worth calling out because a byte pattern alone would not reveal
+them:</p>
+<ul>
+<li><strong><code>scheduled_days</code> is a bitmask, not an ordinal.</strong> The corpus settles it
+  without appeal to anything else: <code>0x3E</code> is Mon+Tue+Wed+Thu+Fri, <code>0x41</code> is
+  Sun+Sat, <code>0x7E</code> is Mon–Sat. A weekday mask and a weekend mask falling out of a
+  bit test is not a coincidence. [W]</li>
+<li><strong><code>occurrence</code> reads <code>weekly</code> on 28 records and <code>replacement</code> on 2</strong> — and the
+  two <code>replacement</code> records are exactly the ones whose <code>scheduled_days</code> lands in
+  the <code>Replacement</code> band and whose start and end dates are the no-date sentinel.
+  Three fields agreeing on the same semantics is the check. [W]</li>
+</ul>
+<p>The <code>u32 entry_ID</code> after the zone name is the record's own index and is the
+resume key of §10.2.3: the request's ten-byte tail is <code>u32 0 | u32 last index |
+u16 0</code>. Indexes are <strong>sparse</strong>, so the walk must echo the key rather than count.
+[W]</p>
+<p><strong><code>AP2_UPL_ALL_EQS_ZONE</code> (0x0987)</strong> — the zone. The lead <code>u16</code> is a <strong>count of
+names</strong>, and what an earlier edition of this document called "the name again
+after a two-byte separator" is not a separator at all: it is the second entry of
+a <code>Team_response[]</code> array, whose own <code>name_space</code> field supplies those two bytes.
+<strong>In all ten captured records the count is 2 and it predicts exactly two
+names.</strong> The pair is not a duplicate: the two entries carry <strong>different name
+spaces</strong> — <code>system</code> (0) then <code>user</code> (1), in that order in every record — so a
+zone is named once in each space. At this site both strings happen to be
+equal, which is what made the second look like a repetition; a decoder must
+read the <code>name_space</code> of each entry rather than assume. [W]</p>
+<pre><code>u16 nrOfnames | { u16 name_space | TLV name } x nrOfnames
+u8  zone_enabled | TLV descriptor
+4 B access_class | u16 min_off_time | u8 recmd_after_warmstart
+u16 warmstart_delay | u16 state_text_table | u16 default_mode
+u8  english_units | u8 optimization_osv | u16 nrOfrecharacterization_values | ...
+</code></pre>
+<p><code>warmstart_delay</code> takes the values 0, 7 and 10 across the corpus — minutes. [W]</p>
+<p><strong>The trailing <code>u16</code> on both records is a state-text-table id.</strong> Earlier editions
+listed it as an unexplained two-valued field, and four readings of it were wrong
+— an object id, the answering panel, a checksum, and a correlation with some
+other decoded field. What settles it is position and behaviour together: in the
+zone record it sits at the offset the type system calls <code>state_text_table</code>, the
+sibling <code>UPL_*_EQS_MODE_SCHED</code> request carries an explicit <code>state_text_ID</code>, and
+<strong>the value is constant per zone and identical across both opcodes</strong> — six zones,
+forty records, <code>0x0987</code> and <code>0x0989</code>, no exceptions, with several zones sharing a
+value. That is a reference to the text group naming the zone's modes. What is
+still unknown is the numbering itself: two distinct values from one site is not a
+range. [W][S]</p>
 <p><strong>How they compose.</strong> A mode schedule says <em>at this time on this weekday, the
 zone enters mode M</em>; the command table says <em>in mode M, command these points to
 these values</em> — typically the day/night point; and a point's <strong>mode point</strong> then
@@ -11239,6 +11303,17 @@ attributable on the wire</strong> to the account that made them.</p>
 <p><strong>A point type's default enumeration is the negation of its type code.</strong> The enum library that supplies state text (§11.5) keys its per-type defaults as <code>-1</code> LDI, <code>-2</code> LDO, <code>-6</code> L2SL, <code>-7</code> LOOAP, <code>-12</code> L2SP, <code>-13</code> LOOAL, <code>-14</code> LFSSL, <code>-15</code> LFSSP, <code>-19</code> LCTLR, <code>-21</code> LENUM — every one the negation of the code above. Nine of the ten negate a code this table already carried; the tenth is why <code>19</code> is listed as LCTLR rather than unused. [S/I] The analog types (LAI, LAO, LPACI) have no default entry, which is consistent: an analog point has no enumerated states. A decoder can therefore derive a point's default state-text set from its type code alone, and only needs an explicit enum reference when the point overrides the default with a named group.</p>
 <blockquote>
 <p>Implementation caution, a second one. The vendor's commissioning-report definition carries a table of the same mnemonics numbered <code>LDO</code>=2, <code>LDI</code>=3, <code>LAO</code>=4, <code>LAI</code>=5, <code>L2SL</code>=6, <code>L2SP</code>=7, <code>LOOAL</code>=8, <code>LOOAP</code>=9, <code>LFSSL</code>=10, <code>LFSSP</code>=11, <code>LPACI</code>=12, <code>LCTLR</code>=13, <code>LENUM</code>=14. Its own comment identifies these as <strong>procedure numbers matching a help file</strong>, not point types — a third numbering of the same taxonomy, alongside the <code>PTYPE</code> field noted above. It is a document index. Do not cross-map it either. [D]</p>
+<p>Implementation caution, a third one, and the most dangerous of the three. A
+current supervisor product carries <strong>two point-type enumerations side by side</strong>
+in the same install. One reproduces the wire codes of §11.2 exactly — sparse,
+with 5, 8, 9, 10 and 16–19 unused. The other renumbers the identical mnemonics
+<strong>densely, 1..16</strong>, so <code>L2SL</code> is 5 rather than 6, <code>L2SP</code> is 8 rather than 12,
+<code>LDAO</code> is 12 rather than 20, <code>LENUM</code> is 13 rather than 21, and <code>LFMSSL</code> /
+<code>LFMSSP</code> are 14 / 15 rather than 22 / 23. Six of the fifteen shared members
+disagree. Unlike the <code>PTYPE</code> field and the commissioning-report index above,
+this one spells its members exactly as the wire does — <code>LDI</code>, <code>LDO</code>, <code>LAI</code>,
+<code>LAO</code>, <code>L2SL</code> … — so a value lifted from it will look correct and decode six
+point types wrongly. <strong>The sparse numbering of §11.2 is the wire one.</strong> [S]</p>
 </blockquote>
 <p>The on/off/auto and fast/slow/stop families (LOOAL, LOOAP, LFSSL, LFSSP, LFMSSL, LFMSSP) are <strong>digital-only</strong>: their commandable outputs are digital outputs, and they are not interchangeable with analog types. [D] The "latched" (<code>...L</code>) variants drive maintained digital outputs; the "pulsed" (<code>...P</code>) variants drive momentary outputs and require one additional subpoint to express the auto/stop state — so a pulsed variant always carries one more physical subpoint than its latched counterpart. [D]</p>
 <h3 id="113-physical-subpoint-composition">11.3 Physical-subpoint composition</h3>
