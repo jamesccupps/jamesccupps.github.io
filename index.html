@@ -3708,28 +3708,52 @@ handshake" opcode</strong> — the TCP handshake plus the message-class context 
 <tbody>
 <tr>
 <td>0</td>
-<td>tag</td>
-<td>2 bytes</td>
-<td>Fixed 2-byte prefix <code>0x01 0x00</code></td>
+<td><code>textType</code></td>
+<td>u8</td>
+<td>Always <code>0x01</code> in the corpus</td>
 <td>[W]</td>
 </tr>
 <tr>
-<td>2</td>
-<td>length</td>
-<td>u8</td>
-<td>Number of content bytes that follow (0–255)</td>
-<td>[W]</td>
+<td>1</td>
+<td><code>textLen</code></td>
+<td><strong>u16 BE</strong></td>
+<td>Number of content bytes that follow</td>
+<td>[S][W]</td>
 </tr>
 <tr>
 <td>3</td>
 <td>content</td>
-<td><code>length</code> bytes</td>
+<td><code>textLen</code> bytes</td>
 <td>Usually ASCII text; occasionally binary</td>
 <td>[W]</td>
 </tr>
 </tbody>
 </table>
-<p>The tag is the literal prefix <code>0x01 0x00</code>. The third byte is a one-byte length, and exactly that many content bytes follow. Worked examples (verbatim wire bytes): [W]</p>
+<p><strong>The length is two bytes, not one.</strong> An earlier edition of this section
+described the primitive as a fixed 2-byte prefix <code>01 00</code> followed by a
+<em>one-byte</em> length. Every observed TLV is consistent with that reading, because
+the protocol's own type system defines the field as</p>
+<pre><code>TEXT_ :  textType : UNSIGNED_8      textLen : UNSIGNED_16      text : Byte[]
+</code></pre>
+<p>so the <code>00</code> that looked like the second half of a constant tag is the <strong>high
+byte of a 16-bit length</strong>. The two readings coincide for every string shorter
+than 256 bytes, and no string in the corpus is longer: <strong>1,223,162 TLVs, every
+one with a zero high byte.</strong> The longest content observed from vendor traffic is
+183 bytes; the only 255-byte TLV in the corpus is a deliberately maximal test
+name of our own.</p>
+<p>An implementer must use the 16-bit reading anyway, because the one-byte reading
+is only accidentally correct here and fails destructively where it is not: the
+codec's own string caps put message text, license strings, point descriptions
+and <strong>PPCL program-line text in a band around 248–257 bytes</strong> (§8.4), straddling
+the boundary. A decoder that reads one byte will take a 256-byte line's length
+as <code>0x00</code>, emit an empty string, and then resynchronise in the middle of the
+text — silently, on the most variable-length field in the protocol.</p>
+<p><strong>[OPEN]</strong> — no observed frame settles it from the wire alone. The falsifying
+test is cheap and safe, and is the same shape as the name-length probes already
+run: present a name TLV of 256 or more bytes and observe whether the panel reads
+the length as 16-bit. Until then this is <code>[S]</code> from the type system with <code>[W]</code>
+consistency, not a wire-proven width.</p>
+<p>Worked examples (verbatim wire bytes): [W]</p>
 <pre><code>01 00 04 53 59 53 54         -&gt;  &quot;SYST&quot;   (length 4)
 01 00 0A &lt;10 content bytes&gt;  -&gt;  a 10-byte name
 01 00 00                     -&gt;  &quot;&quot;       (empty TLV, length 0)
@@ -3737,7 +3761,11 @@ handshake" opcode</strong> — the TCP handshake plus the message-class context 
 <p>Properties an implementer must honor:</p>
 <ul>
 <li><strong>Content is NOT NUL-terminated.</strong> The length byte alone bounds the content. This is the inverse of the four routing slots in the header (see §6), which are NUL-terminated and carry no length prefix. The two MUST NOT be conflated. [W]</li>
-<li><strong>A single TLV caps at 255 content bytes</strong> because the length is one byte. A payload longer than 255 bytes is carried as multiple consecutive TLVs. Standard P2 name fields (point names, node names, BLN names, descriptors) are all well under this cap; only free-text and table dumps approach it. [W]</li>
+<li><strong>A single TLV's content is bounded by <code>textLen</code>, a 16-bit field</strong>, so the
+  structural cap is 65,535 bytes rather than 255. What actually bounds a field
+  is the <em>codec's</em> per-field maximum (§8.4) — 31 bytes for object and point
+  names, ~13 for a short descriptor, ~248–257 for free text — not the length
+  field. Standard P2 name fields are far under either. [S][W]</li>
 <li><strong>The empty TLV <code>01 00 00</code> (length 0) is common</strong> and serves as a positional placeholder inside request bodies — reserving or separating a field that carries no value in a given request (for example a device-name slot left empty to address a BLN-virtual point). [W]</li>
 </ul>
 <p>Notation used throughout §9: <code>S&lt;n&gt;</code> abbreviates a string TLV <code>01 00 &lt;n&gt; &lt;n content bytes&gt;</code>, and <code>S()</code> abbreviates the empty placeholder TLV <code>01 00 00</code>. [I]</p>
@@ -10166,8 +10194,8 @@ field with nothing left over — <code>User_profile</code> + <code>Team_search</
 <tbody>
 <tr>
 <td><code>TEXT_</code></td>
-<td>string TLV <code>01 00 &lt;len&gt; &lt;bytes&gt;</code></td>
-<td>1-byte length, ASCII content, not NUL-terminated inside the TLV; empty = <code>01 00 00</code>. [W]</td>
+<td>string TLV: <code>textType</code> u8 (<code>0x01</code>) + <code>textLen</code> <strong>u16 BE</strong> + content</td>
+<td>See §8.1 — the length is <strong>two</strong> bytes; ASCII content, not NUL-terminated inside the TLV; empty = <code>01 00 00</code>. [S][W]</td>
 </tr>
 <tr>
 <td><code>UNSIGNED8</code> / <code>UNSIGNED_8</code></td>
@@ -10221,11 +10249,73 @@ field with nothing left over — <code>User_profile</code> + <code>Team_search</
 </tr>
 <tr>
 <td><code>&lt;Enum&gt;</code></td>
-<td>1–4 byte integer</td>
-<td>value space per the enum tables (priorities, point types, cov masks, node states, etc.). [S]</td>
+<td>integer, <strong>width per enum</strong> — see below</td>
+<td>value space per the enum tables (priorities, point types, cov masks, node states, etc.). The structure library does <strong>not</strong> state the wire width of any enum; each must be pinned separately. [S]</td>
 </tr>
 </tbody>
 </table>
+<p><strong>Enum field widths are not in the structure library, and they have to be.</strong> The
+library gives an ordered field list for all 1,144 structures, but for an enum
+field it gives only a type name — so <strong>field order is fully specified and field
+width is not</strong>, and a decoder cannot be built from the library alone. Fifty-one
+distinct enum types appear as fields. The widths pinned so far: [W][S]</p>
+<table>
+<thead>
+<tr>
+<th>Enum</th>
+<th style="text-align: right;">Width</th>
+<th>How it is pinned</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Name_space</code></td>
+<td style="text-align: right;">2</td>
+<td>§8.5; <code>0</code>/<code>1</code>/<code>0xFFFF</code> = system/user/any</td>
+</tr>
+<tr>
+<td><code>Point_priority</code></td>
+<td style="text-align: right;">1</td>
+<td>the command-priority ladder, §8.2</td>
+</tr>
+<tr>
+<td><code>Access_class</code></td>
+<td style="text-align: right;">4</td>
+<td><code>BITSTRING32</code> inside <code>User_profile</code></td>
+</tr>
+<tr>
+<td><code>Application_family</code></td>
+<td style="text-align: right;">2</td>
+<td>inside <code>Def_TEC_app</code>; <code>tec_na</code> = 16</td>
+</tr>
+<tr>
+<td><code>Cov_mask</code></td>
+<td style="text-align: right;">2</td>
+<td><code>COV_ENABLE</code> = <code>Name_response</code> + 2 bytes</td>
+</tr>
+<tr>
+<td><code>Control_status</code>, <code>Alarm_state</code>, <code>Alarm_priority</code>, <code>Out_of_service</code>, <code>Failed</code>, <code>Proof_on</code></td>
+<td style="text-align: right;">1 each</td>
+<td>§12.3.3's ten-byte COV status block, one byte per field</td>
+</tr>
+<tr>
+<td><strong><code>Point_value</code></strong></td>
+<td style="text-align: right;"><strong>4</strong></td>
+<td>solved from the wire: 40 of 40 bodies parse with zero remainder at 4 bytes, <strong>0 of 40</strong> at 1 or 2</td>
+</tr>
+</tbody>
+</table>
+<p>The remainder are <strong>[OPEN]</strong>, and the honest scoping matters: a large share of
+them are BACnet-side object types (<code>analog_input_</code>, <code>binary_output_</code>,
+<code>multi_value_</code> and their siblings) belonging to the <code>BAC_*</code> structures, which
+this document places out of scope (§3.2.4) and which cannot appear in P2 traffic
+at all.</p>
+<p><strong>A naming convention separates the two kinds of undefined type.</strong> Types written
+lowercase with a trailing underscore — <code>ldi_</code>, <code>lao_</code>, <code>time_</code>, <code>trend_cov_</code>,
+<code>point_choice_</code> — are <strong>not scalars</strong>: they are the arms of a CHOICE, and 62 of
+their 87 field uses sit inside a structure whose first field is <code>tag_</code>. Asking
+for their "width" is a category error; they are decoded like <code>All_points</code>
+(§10.4.1). Types in ordinary capitalised form are the genuine scalars. [S]</p>
 <p>Two structural conventions recur. <strong>CHOICE / tagged union:</strong> several structures begin with a <code>tag_ : UNSIGNED_8</code> followed by one alternative per possible type (e.g. <code>All_points</code>, <code>Alarm_object</code>, <code>Physical_address_Lenum</code>); the tag selects which one alternative is actually present on the wire. <strong>Counted array:</strong> a <code>nrOf&lt;x&gt; : UNSIGNED_16</code> immediately precedes its <code>&lt;x&gt; : &lt;T&gt;[]</code> array. [S]</p>
 <h3 id="102-shared-sub-types">10.2 Shared sub-types</h3>
 <p>These sub-types appear inside many request/response bodies and are defined once here. Field order is the wire order.</p>
@@ -10951,7 +11041,105 @@ while the wire carries it. The EQS schedule set and trend delete remain
 </tbody>
 </table>
 <p>The point types are the L-type vocabulary: ldi=Digital Input, ldo=Digital Output, lai=Analog Input, lao=Analog Output, l2sl/l2sp=2-State Latched/Pulsed, looal/looap=On/Off/Auto Latched/Pulsed, lfssl/lfssp=Fast-Slow-Speed Latched/Pulsed, lpaci=Pulse-Accumulator/Counter Input, ldao=Dual Analog Output, lenum=Enumerated, lfmssl/lfmssp=Fast-Multi-Speed variants, ppcl_lai=PPCL-resident analog. Analog points carry per-point Slope + Intercept for engineering-unit conversion, applied by the client from the point table — not carried on each value frame. [S][I]</p>
-<h4 id="1041-do-not-read-the-supervisors-point-object-as-the-wire-model">10.4.1 Do not read the supervisor's point object as the wire model</h4>
+<h4 id="1041-all_points--the-point-choice-and-how-to-read-its-tag">10.4.1 <code>All_points</code> — the point CHOICE, and how to read its tag</h4>
+<p>Most point-bearing bodies do not carry a point <em>structure</em> directly; they carry
+<code>All_points</code>, a tagged union whose arms are the eleven logical point types:</p>
+<pre><code>All_points :  tag_ : UNSIGNED_8
+              ldi_  ldo_  lai_  lao_  l2sl_  looap_  lpaci_  l2sp_  looal_  lfssl_  lfssp_
+</code></pre>
+<p><strong><code>tag_</code> selects the arm by 1-based position in that list</strong>, so <code>1 = ldi</code>,
+<code>3 = lai</code>, <code>6 = looap</code>, and so on. That is confirmed by an authority independent
+of the structure definition — the <strong>point descriptors</strong>, free text written by
+whoever commissioned the site. Across all 71 <code>0x0508 ALARM_PRINT</code> request
+bodies: [W]</p>
+<table>
+<thead>
+<tr>
+<th><code>tag_</code></th>
+<th>Arm</th>
+<th style="text-align: right;">Frames</th>
+<th>What the descriptors describe</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0x01</code></td>
+<td><code>ldi</code> — logical digital input</td>
+<td style="text-align: right;">14</td>
+<td>boiler and fire-panel <strong>alarm and status</strong> inputs, without exception</td>
+</tr>
+<tr>
+<td><code>0x03</code></td>
+<td><code>lai</code> — logical analog input</td>
+<td style="text-align: right;">47</td>
+<td>supply, return and zone <strong>temperatures</strong>, without exception</td>
+</tr>
+<tr>
+<td><code>0x06</code></td>
+<td><code>looap</code> — on/off/auto, pulsed</td>
+<td style="text-align: right;">10</td>
+<td>supply and exhaust <strong>fan command</strong> points, without exception</td>
+</tr>
+</tbody>
+</table>
+<p>Alarms and statuses under the digital-input arm, temperatures under the
+analog-input arm, fans under the on/off/auto arm, across all 71 frames. The
+descriptors are free text typed into a panel database by a commissioning
+engineer; they cannot have been fitted to a structure ordering they know nothing
+about, which is what makes them an independent check rather than a restatement.</p>
+<p><strong>Every arm opens with the same prologue</strong>, and it is the same shape as the team
+bodies of §16.3: [W]</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tag_</code></td>
+<td>u8</td>
+<td>arm selector, 1-based</td>
+</tr>
+<tr>
+<td><code>nrOfnames</code></td>
+<td>u16 BE</td>
+<td><strong>2</strong> in all 71 observed bodies</td>
+</tr>
+<tr>
+<td><code>names[0]</code></td>
+<td><code>Name_response</code></td>
+<td><code>name_space = 0</code> (system)</td>
+</tr>
+<tr>
+<td><code>names[1]</code></td>
+<td><code>Name_response</code></td>
+<td><code>name_space = 1</code> (user)</td>
+</tr>
+<tr>
+<td><code>descriptor</code></td>
+<td><code>TEXT_</code></td>
+<td>free text</td>
+</tr>
+<tr>
+<td>…</td>
+<td></td>
+<td>arm-specific fields follow</td>
+</tr>
+</tbody>
+</table>
+<p>The two names are the system and user views of one point. A decoder can
+therefore read the <strong>point type and identity out of any point-bearing body</strong>
+without knowing the arm's type-specific tail.</p>
+<p><strong>What is still open.</strong> The fields <em>after</em> the descriptor differ per arm, and
+the eleven arm types are referenced 75 times in the structure library and
+defined nowhere in it — so the tails are <strong>[OPEN]</strong>. And only three of the
+eleven arms are exercised at this site: the tag values for <code>ldo</code>, <code>lao</code>, <code>l2sl</code>,
+<code>lpaci</code>, <code>l2sp</code>, <code>looal</code>, <code>lfssl</code> and <code>lfssp</code> follow from the declared order by
+the same rule but are <strong>inferred, not measured</strong>. [I]</p>
+<h4 id="1042-do-not-read-the-supervisors-point-object-as-the-wire-model">10.4.2 Do not read the supervisor's point object as the wire model</h4>
 <p>The supervisor keeps its own logical-point class, and it is much larger than
 <code>Point_base</code> — on the order of 200 accessors against the twelve fields above.
 It is tempting to treat that as a fuller description of the protocol's point.
