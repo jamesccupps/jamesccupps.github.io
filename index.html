@@ -10254,6 +10254,41 @@ field with nothing left over — <code>User_profile</code> + <code>Team_search</
 </tr>
 </tbody>
 </table>
+<p><strong>A caution that governs this whole section: a generated lookup fails
+plausibly, not loudly.</strong> Three independent properties of the protocol's type
+system each produce, in a mechanically generated decoder, a <em>valid wrong answer</em>
+rather than an error — which is the hardest kind of defect to notice, because
+the output looks like a successful decode:</p>
+<table>
+<thead>
+<tr>
+<th>Property</th>
+<th>What a generated lookup does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Enum values are sparse</strong> (below) — 18 of 66 have gaps</td>
+<td>an array-index lookup returns a different, valid name past the first gap</td>
+</tr>
+<tr>
+<td><strong>A CHOICE <code>tag_</code> is an enum value, not an ordinal</strong> (§10.4.1)</td>
+<td>positional arm selection is right for the first few values and wrong after</td>
+</tr>
+<tr>
+<td><strong><code>Name_space_enum</code> is defined twice, with incompatible values</strong> — <code>0 system / 1 user / 65535 any</code>, and separately <code>1 LAO_actuator / 2 HOA</code></td>
+<td>whichever definition the generator loads last silently wins for every <code>Name_space</code> field</td>
+</tr>
+</tbody>
+</table>
+<p>The first two have each already produced a wrong claim in an earlier edition of
+this document. The third has not, because §8.5 documents the first definition
+and every observed value (<code>0000</code>, <code>FFFF</code>) belongs to it — but a decoder built by
+scraping the enum dump has a one-in-two chance of the other.</p>
+<p><strong>The defensive rule:</strong> resolve every enum value through a lookup keyed by
+<em>value</em> within a namespace named by the <em>field</em>, never by position and never by
+enum name alone. Where a value is not in the table, fail — do not fall through
+to a neighbour. [I]</p>
 <p><strong>Enum values are sparse. Never index an enum positionally.</strong> Of the 66 value
 enums in the protocol's type system, <strong>18 have gaps</strong> — the value space is not
 <code>0..n-1</code> and a value is not an ordinal. <code>Point_type</code> skips 5 and 8–10 and 16–19;
