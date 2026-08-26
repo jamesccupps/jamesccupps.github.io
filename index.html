@@ -9980,40 +9980,71 @@ field with nothing left over — <code>User_profile</code> + <code>Team_search</
 <code>clear_device_initvals = false</code> in 30 bytes.</p>
 <p>Two cautions an implementer should carry from this:</p>
 <ul>
-<li><strong><code>0x4200</code> carries two distinct request forms, and the discriminator is not
-  length.</strong> The function-code enumeration gives this opcode two names — one of
-  eleven aliased values, and the only one where both are observable. Both forms
-  parse cleanly as <code>User_profile</code> + <code>Team_search</code> + a 2-byte field; what
-  separates them is <em>what is in that field and how the buffer is sized</em>: [W]</li>
+<li><strong><code>0x4200</code> is one operation invoked two ways — not two operations.</strong> The
+  function-code enumeration gives this opcode two names, <code>AP2_TEC_LOG</code> and
+  <code>AP2_CONTROLLER_LOG</code>, and the wire carries two cleanly separated request
+  forms. It is tempting to pair them off. <strong>The responses show that would be
+  wrong.</strong> [W]</li>
 </ul>
 <table>
 <thead>
 <tr>
 <th>Form</th>
 <th style="text-align: right;">Frames</th>
-<th>Length</th>
-<th>2 bytes after the search</th>
+<th>Request</th>
+<th><code>application_number</code></th>
+<th><code>name_pattern</code></th>
+<th>resume key</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>A</td>
+<td><strong>A</strong></td>
 <td style="text-align: right;">70</td>
-<td>variable, 28–38 B, no padding</td>
-<td><code>FFFF</code> — the wildcard, 70 of 70</td>
+<td>variable, 28–38 B</td>
+<td><code>FFFF</code></td>
+<td>27 distinct object names</td>
+<td>always empty</td>
 </tr>
 <tr>
-<td>B</td>
+<td><strong>B</strong></td>
 <td style="text-align: right;">178</td>
-<td><strong>fixed 220 B</strong>, zero-padded</td>
-<td><code>0000</code>, 178 of 178</td>
+<td>fixed 220 B, zero-padded</td>
+<td><code>0000</code></td>
+<td><code>*</code> only</td>
+<td>60 distinct values</td>
 </tr>
 </tbody>
 </table>
-<p>Form A is <code>TEC_LOG</code> as its ASDU defines it. Form B is a different caller
-  supplying an explicit <code>0x0000</code> in place of the wildcard and writing into a
-  fixed-size buffer. Which enum name belongs to which form is <strong>[OPEN]</strong> — the
-  wire distinguishes the forms, not the names.</p>
+<p>Form A is a <strong>named lookup</strong> of one object; form B is a <strong>wildcard enumeration</strong>
+  walking the set with the resume key of §10.2.3. They address the <em>same</em>
+  objects — names that appear as form A targets reappear as form B resume keys —
+  and the <code>application_number</code> split follows from the search, not from the
+  target: naming one object asks for any application on it (<code>0xFFFF</code>), while
+  enumerating supplies no application at all (<code>0x0000</code>).</p>
+<p>Decisively, <strong>every response to both forms is the same structure</strong>:
+  <code>Team_response</code> + <code>TEC_body</code>, with <code>team_family = 0x0010</code> (<code>tec_na</code>).
+  242 of 242 responses parse, and the parse is self-validating — <code>nrOfnames</code>
+  must equal the number of <code>Team_response</code> entries that actually follow before
+  the descriptor, and it does in every one: [W]</p>
+<p><code>Team_response          name_space=0, name="&lt;team name&gt;"
+  Team_description_base  team_family=0x0010 (tec_na)
+                         team_type=0x0AA1, team_revision=0x0000
+  nrOfnames            = 2
+     names[0]            name_space=0 (system), name="&lt;team name&gt;"
+     names[1]            name_space=1 (user),   name="&lt;team name&gt;"
+  descriptor           = "&lt;free text&gt;"
+  … access_class, si_units, lan, drop, duct_available, nightOverride, …</code></p>
+<p>The <code>team_type</code> values overlap between the two forms, so they are not even
+  reaching different classes of TEC. <strong>Both forms are <code>AP2_TEC_LOG</code>, and
+  <code>AP2_CONTROLLER_LOG</code> does not appear anywhere in the corpus.</strong> [W]</p>
+<p>A caution for the eleven aliased opcode values generally: a second wire form is
+  <strong>not</strong> evidence of a second operation. Check the response structure before
+  pairing a form with a name.</p>
+<p><strong>[OPEN]</strong> — what <code>AP2_CONTROLLER_LOG</code> looks like. The prediction, if the names
+  mean what they say, is that a <code>0x4200</code> naming a panel rather than a TEC returns
+  something that is <em>not</em> a <code>TEC_body</code>, or fails. Nothing in this corpus has ever
+  asked.</p>
 <ul>
 <li>
 <p><strong>Some TEC requests use a fixed 220-byte zero-padded buffer.</strong> Form B above and
