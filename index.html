@@ -9980,14 +9980,58 @@ field with nothing left over — <code>User_profile</code> + <code>Team_search</
 <code>clear_device_initvals = false</code> in 30 bytes.</p>
 <p>Two cautions an implementer should carry from this:</p>
 <ul>
-<li><strong><code>0x4200</code> is one opcode with two operations.</strong> The function-code enumeration
-  gives it two names, and the wire shows two distinct request shapes — a ~30-byte
-  form matching the TEC definition, and a 220-byte form whose tail is a long zero
-  run. The second has no ASDU definition and is <strong>[OPEN]</strong>. Eleven opcode values
-  in the enumeration carry two names; this is the one where both are observable.</li>
-<li><strong>Sibling opcodes do not share a search type.</strong> <code>0x4221</code> uses <code>Name_search</code>
-  inside a larger <code>Def_TEC_app</code> wrapper, not <code>Team_search</code>, and a parser that
-  assumes the shorter type mis-frames the remainder of the body (§10.2.3).</li>
+<li><strong><code>0x4200</code> carries two distinct request forms, and the discriminator is not
+  length.</strong> The function-code enumeration gives this opcode two names — one of
+  eleven aliased values, and the only one where both are observable. Both forms
+  parse cleanly as <code>User_profile</code> + <code>Team_search</code> + a 2-byte field; what
+  separates them is <em>what is in that field and how the buffer is sized</em>: [W]</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Form</th>
+<th style="text-align: right;">Frames</th>
+<th>Length</th>
+<th>2 bytes after the search</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A</td>
+<td style="text-align: right;">70</td>
+<td>variable, 28–38 B, no padding</td>
+<td><code>FFFF</code> — the wildcard, 70 of 70</td>
+</tr>
+<tr>
+<td>B</td>
+<td style="text-align: right;">178</td>
+<td><strong>fixed 220 B</strong>, zero-padded</td>
+<td><code>0000</code>, 178 of 178</td>
+</tr>
+</tbody>
+</table>
+<p>Form A is <code>TEC_LOG</code> as its ASDU defines it. Form B is a different caller
+  supplying an explicit <code>0x0000</code> in place of the wildcard and writing into a
+  fixed-size buffer. Which enum name belongs to which form is <strong>[OPEN]</strong> — the
+  wire distinguishes the forms, not the names.</p>
+<ul>
+<li>
+<p><strong>Some TEC requests use a fixed 220-byte zero-padded buffer.</strong> Form B above and
+  every one of <code>0x4221</code>'s 1,173 requests are exactly 220 bytes with the remainder
+  zero-filled — <code>0x4221</code> consumes 44 and pads 176. The padding is not opaque
+  content: the fields end and zeros follow. A parser must therefore <strong>stop at the
+  end of the declared structure and not treat trailing zeros as data</strong>, and must
+  not infer the operation from the frame length. [W]</p>
+</li>
+<li>
+<p><strong>Sibling opcodes do not share a search type.</strong> <code>0x4221</code>'s request is
+  <code>Def_TEC_app</code> = <code>user_profile</code> + <code>application_family</code> + <code>team_type</code> +
+  <strong><code>Name_search</code></strong> + <code>all_init_values</code>, not <code>Team_search</code>. Decoded on the wire:
+  <code>application_family = tec_na</code>, <code>team_type = 0xFFFF</code>, and a <code>Name_search</code> whose
+  <code>suffix_pattern</code> is <code>*</code> and whose <code>last_suffix</code> advances one subpoint per
+  request — the suffix walk of §10.2.3, in use. A parser that assumes the shorter
+  search type mis-frames everything after it. [W][S]</p>
+</li>
 </ul>
 <h3 id="96-the-sessionkeepalive-opcode-0x4640-ebln_ping">9.6 The session/keepalive opcode 0x4640 (EBLN_PING)</h3>
 <p><code>AP2_EBLN_PING</code> (0x4640) is the most cross-cutting opcode in the corpus: it is the only opcode that appears under every message class seen anywhere — 0x29, 0x2A, 0x2E, 0x2F, 0x33 and 0x34 — and it dominates the peer carriers, though it is not alone under them: panel-side captures show class 0x29 also carrying <code>0x4634</code>, <code>0x4633</code>, <code>0x4636</code> and <code>0x0271</code> (see §9.7) — and it serves three roles. As <strong>session establish</strong> it is the IdentifyBlock handshake carrying the peer's identity slots; as <strong>keepalive</strong> it recurs on a ~10-second cadence (the EPing / Ethernet-Ping liveness heartbeat — a configurable interval whose documented minimum is 10 s, not a protocol constant; see §7.1); and its request/response body is the <code>eBLN_Node</code> block (§10.6). It is also the opcode whose malformed slot-walk produces the <code>0x0C44</code>/<code>0x4443</code> phantoms in §9.5. Its length is variable: three leading TLVs (<code>node_name</code>, <code>site_name</code>, <code>bln_name</code>) followed by a fixed 16-byte tail. The <code>35 + node-name length</code> shorthand of earlier editions is this corpus's single site expressed as a constant — see §7.1. Every <em>supervisor-initiated</em> request in the corpus drew a reply; panel-initiated pings into a supervisor's <code>5033</code> are a different matter (§5.1). [W][S]</p>
