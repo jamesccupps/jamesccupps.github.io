@@ -9890,6 +9890,105 @@ the block's age rather than of its non-existence.</p>
 </tr>
 </tbody>
 </table>
+<h4 id="951-four-request-bodies-decoded-against-their-asdu-definitions">9.5.1 Four request bodies, decoded against their ASDU definitions</h4>
+<p>Every opcode in the catalog carries a name; not all of them carried a <em>body</em>.
+Four wire-observed opcodes had no body description anywhere in this document.
+All four are defined in the protocol's ASDU model, and three decode against it
+with nothing left over: [S][W]</p>
+<table>
+<thead>
+<tr>
+<th>Opcode</th>
+<th>Request ASDU</th>
+<th>Observed</th>
+<th>Decode</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0x0606 CAL_DB_GET_OTHER</code></td>
+<td><code>User_profile</code></td>
+<td>12 B</td>
+<td><strong>exact</strong></td>
+</tr>
+<tr>
+<td><code>0x09AB UPL_ALL_UC</code></td>
+<td><code>Team_search</code></td>
+<td>11 B</td>
+<td><strong>exact</strong></td>
+</tr>
+<tr>
+<td><code>0x0954 DBCHANGE_TREND</code></td>
+<td>(no body)</td>
+<td>0 B</td>
+<td><strong>exact</strong> (§16.1.1)</td>
+</tr>
+<tr>
+<td><code>0x4208 TEC_DEFINITION</code></td>
+<td><code>User_profile</code> + <code>Team_search</code></td>
+<td>25 B</td>
+<td>23 consumed, 2 over</td>
+</tr>
+</tbody>
+</table>
+<pre><code>0x0606   01 00 04 &quot;SYST&quot;  23  3F FF FF FF
+         User_profile{ user_logon, point_priority=0x23, access_class=0x3FFFFFFF }
+         response: 00 00  -&gt;  nrOfcalendar_entries = 0, an empty calendar
+
+0x09AB   00 00 | 01 00 01 &quot;*&quot; | 00 00 | 01 00 00
+         Team_search{ system, pattern &quot;*&quot;, system, resume &quot;&quot; }   (§10.2.3)
+         response: 0x0003  -&gt;  no unitary controllers on this panel
+</code></pre>
+<p><strong>The two bytes <code>0x4208</code> leaves over are a field its ASDU definition omits.</strong>
+They read <code>FF FF</code>, and every sibling in the TEC family carries a 2-byte
+<code>application_number</code> in exactly that position. Decoding the family together
+rather than reading one frame: [W]</p>
+<table>
+<thead>
+<tr>
+<th>Opcode</th>
+<th>Tail after <code>User_profile + Team_search</code></th>
+<th>ASDU definition</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0x4225 TEC_UPDATE_LOCAL_INIT_VALUES</code></td>
+<td><code>FF FF</code></td>
+<td><code>application_number : UNSIGNED16</code> ✔</td>
+</tr>
+<tr>
+<td><code>0x4224 TEC_INITIALIZE</code></td>
+<td><code>FF FF 01 00</code></td>
+<td><code>application_number</code> + 2 × <code>BOOLEAN_</code> ✔</td>
+</tr>
+<tr>
+<td><code>0x4200 TEC_LOG</code></td>
+<td><code>FF FF</code></td>
+<td><code>application_number : SHORT_</code> ✔</td>
+</tr>
+<tr>
+<td><code>0x4208 TEC_DEFINITION</code></td>
+<td><code>FF FF</code></td>
+<td><strong>absent from the definition</strong></td>
+</tr>
+</tbody>
+</table>
+<p><code>0xFFFF</code> is the <strong>wildcard application number</strong>. <code>0x4224</code> now decodes field for
+field with nothing left over — <code>User_profile</code> + <code>Team_search</code> +
+<code>application_number = 0xFFFF</code> + <code>clear_panel_initvals = true</code> +
+<code>clear_device_initvals = false</code> in 30 bytes.</p>
+<p>Two cautions an implementer should carry from this:</p>
+<ul>
+<li><strong><code>0x4200</code> is one opcode with two operations.</strong> The function-code enumeration
+  gives it two names, and the wire shows two distinct request shapes — a ~30-byte
+  form matching the TEC definition, and a 220-byte form whose tail is a long zero
+  run. The second has no ASDU definition and is <strong>[OPEN]</strong>. Eleven opcode values
+  in the enumeration carry two names; this is the one where both are observable.</li>
+<li><strong>Sibling opcodes do not share a search type.</strong> <code>0x4221</code> uses <code>Name_search</code>
+  inside a larger <code>Def_TEC_app</code> wrapper, not <code>Team_search</code>, and a parser that
+  assumes the shorter type mis-frames the remainder of the body (§10.2.3).</li>
+</ul>
 <h3 id="96-the-sessionkeepalive-opcode-0x4640-ebln_ping">9.6 The session/keepalive opcode 0x4640 (EBLN_PING)</h3>
 <p><code>AP2_EBLN_PING</code> (0x4640) is the most cross-cutting opcode in the corpus: it is the only opcode that appears under every message class seen anywhere — 0x29, 0x2A, 0x2E, 0x2F, 0x33 and 0x34 — and it dominates the peer carriers, though it is not alone under them: panel-side captures show class 0x29 also carrying <code>0x4634</code>, <code>0x4633</code>, <code>0x4636</code> and <code>0x0271</code> (see §9.7) — and it serves three roles. As <strong>session establish</strong> it is the IdentifyBlock handshake carrying the peer's identity slots; as <strong>keepalive</strong> it recurs on a ~10-second cadence (the EPing / Ethernet-Ping liveness heartbeat — a configurable interval whose documented minimum is 10 s, not a protocol constant; see §7.1); and its request/response body is the <code>eBLN_Node</code> block (§10.6). It is also the opcode whose malformed slot-walk produces the <code>0x0C44</code>/<code>0x4443</code> phantoms in §9.5. Its length is variable: three leading TLVs (<code>node_name</code>, <code>site_name</code>, <code>bln_name</code>) followed by a fixed 16-byte tail. The <code>35 + node-name length</code> shorthand of earlier editions is this corpus's single site expressed as a constant — see §7.1. Every <em>supervisor-initiated</em> request in the corpus drew a reply; panel-initiated pings into a supervisor's <code>5033</code> are a different matter (§5.1). [W][S]</p>
 <h3 id="97-wire-behavior-message-classes-directions-error-tails">9.7 Wire behavior: message classes, directions, error tails</h3>
@@ -10307,33 +10406,97 @@ predictable from what its objects are named by:</p>
 <thead>
 <tr>
 <th>Selector</th>
+<th>ASDU type</th>
 <th>Objects</th>
 <th>Example operations</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><strong>name + suffix</strong> (<code>name_space</code>, name pattern, suffix pattern)</td>
+<td><strong>name + suffix</strong></td>
+<td><strong><code>Name_search</code></strong></td>
 <td>things with a point-style two-part name</td>
 <td>upload point, alarm setup, alarm mode, trend</td>
 </tr>
 <tr>
-<td><strong>name only</strong> (<code>name_space</code>, name pattern)</td>
+<td><strong>name only</strong></td>
+<td><strong><code>Team_search</code></strong></td>
 <td>things with a single name</td>
 <td>upload PPCL, TEC, EQS zone/mode, SSTO, UC, LON, MS/TP device, program</td>
 </tr>
 <tr>
 <td><strong>numeric range</strong> (<code>begin</code>, <code>end</code>)</td>
+<td>—</td>
 <td>things addressed by number</td>
 <td>ports (<code>u8</code>), partners (<code>u16</code>), alarm messages (<code>u16</code>)</td>
 </tr>
 <tr>
 <td><strong>object id</strong> (<code>u32</code>)</td>
+<td>—</td>
 <td>BACnet-side objects</td>
 <td>the BACnet object upload</td>
 </tr>
 </tbody>
 </table>
+<p>The two name selectors are named types in the protocol's own model, and their
+fields make the "selector plus resume key" shape explicit — <strong>the resume key is
+not a separate trailing field, it is the second half of the search struct</strong>: [S][W]</p>
+<table>
+<thead>
+<tr>
+<th><code>Team_search</code></th>
+<th></th>
+<th><code>Name_search</code></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name_space</code></td>
+<td><code>Name_space</code> (§8.5)</td>
+<td><code>name_space</code></td>
+<td><code>Name_space</code></td>
+</tr>
+<tr>
+<td><code>name_pattern</code></td>
+<td><code>TEXT_</code> — the selector</td>
+<td><code>name_pattern</code></td>
+<td><code>TEXT_</code> — the selector</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td><code>suffix_pattern</code></td>
+<td><code>TEXT_</code></td>
+</tr>
+<tr>
+<td><code>last_name_space</code></td>
+<td><code>Name_space</code></td>
+<td><code>last_name_space</code></td>
+<td><code>Name_space</code></td>
+</tr>
+<tr>
+<td><code>last_name</code></td>
+<td><code>TEXT_</code> — <strong>the resume key</strong></td>
+<td><code>last_name</code></td>
+<td><code>TEXT_</code> — <strong>the resume key</strong></td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td><code>last_suffix</code></td>
+<td><code>TEXT_</code></td>
+</tr>
+</tbody>
+</table>
+<p>So "start at the beginning" is <code>last_name</code> = the empty TLV <code>01 00 00</code>, and a walk
+advances by copying the name just returned into <code>last_name</code>. Wire-confirmed: an
+11-byte <code>Team_search</code> reading <code>00 00 | 01 00 01 '*' | 00 00 | 01 00 00</code> — namespace
+<code>system</code>, pattern <code>*</code>, empty resume — draws the first record, and the same
+request with the returned name in <code>last_name</code> draws <code>0x0003</code> (§15.3.2). The two
+types are <strong>not interchangeable</strong>: <code>Name_search</code> is four bytes plus two TLVs
+longer, and a decoder that assumes the shorter one mis-frames everything after
+it. [W]</p>
 <p>The resume key follows the selector and its width tracks the object: nothing at
 all where the search pattern itself carries the resume name, one byte for alarm
 mode, two for PPCL, and the same width as the range for numeric selectors. Two
@@ -10351,9 +10514,12 @@ text — PPCL source travels in clear. [W]</p>
 <p>Measured across the corpus: of the upload requests whose object class uses a
 name selector, <strong>6,998 are exactly the search struct</strong> with no resume tail and
 <strong>2,517 carry the two-byte PPCL line key</strong>; the alarm-mode walk's one-byte key
-appears exactly where the struct table says it should. A handful of families
-(TEC, the EQS schedule set, trend delete) carry additional keys this document
-does not yet describe. [W]</p>
+appears exactly where the struct table says it should. A handful of families carry an
+additional trailing key. The <strong>TEC</strong> family's is now identified: a 2-byte
+<strong><code>application_number</code></strong> after the search struct, with <code>0xFFFF</code> as the wildcard —
+confirmed across four sibling opcodes, one of whose ASDU definitions omits it
+while the wire carries it. The EQS schedule set and trend delete remain
+<strong>[OPEN]</strong>. [W]</p>
 <h3 id="103-read--command--cov-core">10.3 Read / command / COV core</h3>
 <p><strong><code>AP2_POINT_LOG_VALUE</code> request (0x0220)</strong> — present-value read. [S][W]</p>
 <table>
