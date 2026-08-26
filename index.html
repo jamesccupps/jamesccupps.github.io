@@ -13446,12 +13446,13 @@ it repeats across all three tiers</strong> — setup (<code>0x503A</code>–<cod
 (<code>0x095C</code>–<code>0x095F</code>), and upload-added (<code>0x097C</code>–<code>0x097F</code>). This is the operand
 model of §9.1.1 in its clearest form: one operation with a four-valued
 record-type parameter folded into the opcode, three times over. [W]</p>
-<p><strong>2. A <code>DBCHANGE_*</code> notification carries no data.</strong> Every <code>DBCHANGE_*</code> frame
-observed — <strong>20 of 20</strong> — has a <strong>zero-length body</strong>, and <strong>20 of 20</strong> travel
-<strong>panel → supervisor</strong>, each answered by the supervisor with a bare success. The
-panel does not push what changed; it pushes <em>that</em> its <code>&lt;section&gt;</code> changed, and
-the supervisor then reads the content back with the matching
-<code>UPL_ADDED_&lt;section&gt;</code>. This is why the <code>DBCHANGE</code>/<code>UPL_ADDED</code> opcode pairs exist
+<p><strong>2. A <code>DBCHANGE_*</code> notification carries no data.</strong> In this exchange, <strong>20 of
+20</strong> <code>DBCHANGE_*</code> frames have a <strong>zero-length body</strong> and travel <strong>panel →
+supervisor</strong>, each answered with a bare success. The panel does not push what
+changed; it pushes <em>that</em> its <code>&lt;section&gt;</code> changed, and the supervisor then reads
+the content back with the matching <code>UPL_ADDED_&lt;section&gt;</code>. This is not particular
+to equipment scheduling — it holds for <strong>every</strong> <code>DBCHANGE_*</code> opcode in the
+corpus, across ten database sections (§16.1.1). This is why the <code>DBCHANGE</code>/<code>UPL_ADDED</code> opcode pairs exist
 at all, and it means a client that wants change notification must implement a
 <strong>server</strong> role for these opcodes, not merely a reader. [W]</p>
 <p><strong>3. Enumeration terminates with <code>0x0003</code>.</strong> The <code>UPL_*</code> body is the paging idiom
@@ -13488,6 +13489,83 @@ end of every successful enumeration.</strong> [W]</p>
 <p>A panel database is moved across P2 <strong>record-by-record</strong>, not as a single monolithic blob. Each record is its own request that returns either a success (dir <code>0x01</code>) or a 2-byte fault/error code (dir <code>0x05</code>), corroborating the directory-byte/error model of §7. The transfer is organized into sections gated by firmware revision — a section unsupported by a panel's firmware is skipped or rejected per-record rather than aborting the whole transfer. [D/W]</p>
 <p>The transfer surface is the <code>UPL_*</code> / <code>DBCHANGE_*</code> / <code>*_DB_GET</code> / <code>*_DB_REPLACE</code> opcode families: the <code>0x09xx</code> <code>UPL_ALL_*</code>/<code>UPL_ADDED_*</code>/<code>UPL_DEL_*</code> block enumerates each object class (points, PPCL, TEC, trend, EQS, SSTO, TOD), and per-domain <code>*_DB_GET</code>/<code>*_DB_REPLACE</code> pairs move whole sub-databases (e.g. <code>0x0337/0x0338</code> <code>USER_ACCT_DB_GET/REPLACE</code>, <code>0x0357/0x0358</code> <code>ACCESS_GROUPS_DB_*</code>, <code>0x0362/0x0363</code> <code>EMS_DB_*</code>, <code>0x040A/0x040B</code> <code>ENUM_TYPE_DB_GET/REPLACE</code>, the <code>0x06xx</code> <code>CAL_DB_*</code>/<code>DST_DB_*</code> calendar blocks). <code>0x0950 AP2_DOWNLOAD_ME</code> initiates a download <em>to</em> a panel. [S]</p>
 <p>The replication-direction mechanics (notify/pull/changes push) live in the <code>0x46xx</code> EBLN family and are specified in §5.3 (replication). [S]</p>
+<h4 id="1611-dbchange_-is-a-data-less-notification-and-the-reader-pulls">16.1.1 <code>DBCHANGE_*</code> is a data-less notification, and the reader pulls</h4>
+<p>The <code>DBCHANGE_*</code> family is not a change <em>feed</em>. It carries no payload at all.</p>
+<p>Across the corpus, <strong>ten distinct <code>DBCHANGE_*</code> opcodes are wire-observed, 93
+requests in total, and every single one has a zero-length body</strong>. Every one is
+answered with a success. Every one rides the <strong>second channel</strong> (<code>0x2E</code>, and
+<code>0x2F</code> in the modern dialect) — never the data dialect. [W]</p>
+<table>
+<thead>
+<tr>
+<th>Opcode</th>
+<th>Section</th>
+<th style="text-align: right;">Requests</th>
+<th>Body</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0x0951</code></td>
+<td><code>POINT</code></td>
+<td style="text-align: right;">19</td>
+<td>0 B</td>
+</tr>
+<tr>
+<td><code>0x0954</code></td>
+<td><code>TREND</code></td>
+<td style="text-align: right;">14</td>
+<td>0 B</td>
+</tr>
+<tr>
+<td><code>0x0955</code></td>
+<td><code>PPCL</code></td>
+<td style="text-align: right;">13</td>
+<td>0 B</td>
+</tr>
+<tr>
+<td><code>0x0956</code></td>
+<td><code>CONTROLLER</code></td>
+<td style="text-align: right;">11</td>
+<td>0 B</td>
+</tr>
+<tr>
+<td><code>0x0957</code></td>
+<td><code>EQS_ZONE</code></td>
+<td style="text-align: right;">4</td>
+<td>0 B</td>
+</tr>
+<tr>
+<td><code>0x0959</code></td>
+<td><code>EQS_MODE_SCHED</code></td>
+<td style="text-align: right;">16</td>
+<td>0 B</td>
+</tr>
+<tr>
+<td><code>0x095C</code>–<code>0x095F</code></td>
+<td><code>SSTO_{GENERAL,START,STOP,NIGHT}</code></td>
+<td style="text-align: right;">4 each</td>
+<td>0 B</td>
+</tr>
+</tbody>
+</table>
+<p>So the notification's entire content is <strong>its own opcode</strong>: the opcode names
+which database section changed, and there is nothing else to parse. The node
+holding the changed data then waits, and the interested party <strong>pulls</strong> the new
+records with the matching <code>UPL_ADDED_&lt;section&gt;</code> / <code>UPL_DEL_&lt;section&gt;</code> opcode,
+using the selector-and-resume-key paging idiom of §10.2.3.</p>
+<p>Two consequences for an implementer, neither obvious from the opcode names:</p>
+<ul>
+<li><strong>A client that wants change notification must implement a server role.</strong> The
+  <code>DBCHANGE_*</code> frames arrive <em>inbound</em>, as requests, and must be answered with a
+  success. A read-only client that only ever initiates will never see them.</li>
+<li><strong>Do not wait for data in the notification.</strong> There is none, and the pull is a
+  separate exchange against a different opcode. §15.3.2 traces a complete cycle —
+  command, notification, pull, end-of-enumeration — for an equipment-schedule
+  change.</li>
+</ul>
+<p>This is what §6.2 means in calling the second channel the "announce + DB-sync"
+band: the announce carries the fact, the data channel carries the data. [W]</p>
 <h3 id="162-on-disk-p2-panel-database-format">16.2 On-disk (.P2) panel-database format</h3>
 <p>A panel database serialized to disk (file extension <code>.P2</code>, e.g. <code>P2_Archive</code> snapshots) uses <strong>TLV record framing persisted to a file</strong> — broadly the same style of encoding the panel exchanges on the wire, written to disk. This subsection is observed from <strong>panel database exports and controller backups</strong> (not from wire traffic) and is included only to help an operator read their own database exports; treat it as indicative rather than exhaustive. [I]</p>
 <p>Record framing (observed across <strong>36 distinct panel databases</strong> — Insight <code>.P2</code> archives plus Desigo CC device backups, spanning MBC-10 / SCU / PXCC / PXCM platforms and 2018–2025 — <strong>31,823 records</strong>): [W]</p>
