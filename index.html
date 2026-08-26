@@ -11105,37 +11105,78 @@ for every one after. [S][W]</p>
 <table>
 <thead>
 <tr>
-<th><code>tag_</code></th>
-<th>1</th>
-<th>2</th>
-<th>3</th>
-<th>4</th>
-<th>6</th>
-<th>7</th>
-<th>11</th>
-<th>12</th>
-<th>13</th>
-<th>14</th>
-<th>15</th>
+<th style="text-align: right;"><code>tag_</code></th>
+<th>arm</th>
+<th></th>
+<th style="text-align: right;"><code>tag_</code></th>
+<th>arm</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>arm</td>
-<td><code>ldi</code></td>
-<td><code>ldo</code></td>
-<td><code>lai</code></td>
-<td><code>lao</code></td>
-<td><code>l2sl</code></td>
-<td><code>looap</code></td>
-<td><code>lpaci</code></td>
-<td><code>l2sp</code></td>
+<td style="text-align: right;">1</td>
+<td><code>ldi</code> — digital input</td>
+<td></td>
+<td style="text-align: right;">13</td>
 <td><code>looal</code></td>
+</tr>
+<tr>
+<td style="text-align: right;">2</td>
+<td><code>ldo</code> — digital output</td>
+<td></td>
+<td style="text-align: right;">14</td>
 <td><code>lfssl</code></td>
+</tr>
+<tr>
+<td style="text-align: right;">3</td>
+<td><code>lai</code> — analog input</td>
+<td></td>
+<td style="text-align: right;">15</td>
 <td><code>lfssp</code></td>
+</tr>
+<tr>
+<td style="text-align: right;">4</td>
+<td><code>lao</code> — analog output</td>
+<td></td>
+<td style="text-align: right;">20</td>
+<td><code>ldao</code></td>
+</tr>
+<tr>
+<td style="text-align: right;">6</td>
+<td><code>l2sl</code> — two-state latched</td>
+<td></td>
+<td style="text-align: right;">21</td>
+<td><code>lenum</code> — enumerated</td>
+</tr>
+<tr>
+<td style="text-align: right;">7</td>
+<td><code>looap</code> — on/off/auto pulsed</td>
+<td></td>
+<td style="text-align: right;">22</td>
+<td><code>lfmssl</code></td>
+</tr>
+<tr>
+<td style="text-align: right;">11</td>
+<td><code>lpaci</code></td>
+<td></td>
+<td style="text-align: right;">23</td>
+<td><code>lfmssp</code></td>
+</tr>
+<tr>
+<td style="text-align: right;">12</td>
+<td><code>l2sp</code></td>
+<td></td>
+<td style="text-align: right;">24</td>
+<td><code>ppcl_lai</code></td>
 </tr>
 </tbody>
 </table>
+<p>Sixteen arms, not eleven — the enum runs to 24, and the values above 15 are as
+real as the rest: <strong><code>lenum</code> (21) is wire-observed</strong>, in COV responses. The
+<code>All_points</code> arm list and <code>Point_type_enum</code> agree name-for-name at every value,
+with one caveat: the arm list spells arms 22 and 23 <code>lfmsl</code>/<code>lfmsp</code> while the
+enum spells them <code>lfmssl</code>/<code>lfmssp</code>. One of the two dumps has a typo; the values
+are not in doubt. [S]</p>
 <p>A decoder that indexes the declared arm list positionally will read the first
 four point types correctly and <strong>mislabel the other seven</strong> — silently, because
 each arm still parses, just as the wrong type. The arm list is written in enum
@@ -11289,9 +11330,17 @@ unpinned, and they are what stops a point read from decoding end to end:
 than it looks: <code>Physical_address_*</code> is a CHOICE whose <strong><code>virtual_addr</code> arm is
 <code>NULL_</code></strong>, so a software point costs one byte for its address and only
 physically-addressed points need <code>real_addr_</code>. <strong>[OPEN]</strong> [S]</p>
-<p>Six of the thirteen arms are wire-observed (<code>ldi</code>, <code>ldo</code>, <code>lai</code>, <code>lao</code>, <code>l2sl</code>,
-<code>lenum</code>); the remaining tag values are definitional from the enum, but their
-bodies have not been seen here. [S]</p>
+<p>Six of the sixteen arms are wire-observed here — <code>ldi</code>, <code>ldo</code>, <code>lai</code>, <code>lao</code>,
+<code>l2sl</code> and <code>lenum</code>. The remaining tag values are definitional from the enum, but
+their bodies have not been seen at this site. [S]</p>
+<p><strong>The same rule, checked on a second CHOICE.</strong> <code>Alarm_object</code>'s nine arms —
+<code>no_alarming</code>, <code>std_digital</code>, <code>std_single_analog</code>, <code>std_analog</code>,
+<code>enhanced_digital</code>, <code>enhanced_analog</code>, <code>enhanced_lenum</code>, <code>bacnet_alarm_analog</code>,
+<code>bacnet_alarm_digital</code> — match <code>Alarm_object_type_enum</code> name-for-name at every
+value, <strong>9 of 9</strong>. That enum happens to be contiguous from 0, so there the tag
+<em>does</em> coincide with arm position. The lesson is that the coincidence is a
+property of the enum, not of the protocol: read the enum, and only then note
+whether it happens to be dense. [S]</p>
 <h4 id="1042-do-not-read-the-supervisors-point-object-as-the-wire-model">10.4.2 Do not read the supervisor's point object as the wire model</h4>
 <p>The supervisor keeps its own logical-point class, and it is much larger than
 <code>Point_base</code> — on the order of 200 accessors against the twelve fields above.
