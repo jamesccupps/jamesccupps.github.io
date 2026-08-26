@@ -1222,7 +1222,7 @@ must never be used to infer a frame's meaning (§2.1.2). [I]</p>
 </tr>
 </tbody>
 </table>
-<p>The 3-tuple is the <em>conceptual</em> identity of a point and the form in which point databases store it. It is <strong>not</strong> the wire routing key — P2/IP routes frames by NUL-terminated node <strong>name</strong> strings in the four routing slots (§6), and reads/writes a point by its <strong>logical point name</strong> carried in the request body, not by the numeric tuple (see §11 for the point model). An implementer uses LAN/Drop/Address to reason about and index topology, and uses names on the wire. [W][S][I]</p>
+<p>The 3-tuple is the identity a point database stores, and it <strong>does</strong> appear on the wire — as the physical-address field of any point that has a physical location (§10.4.2). What it is <strong>not</strong> is the wire routing key — P2/IP routes frames by NUL-terminated node <strong>name</strong> strings in the four routing slots (§6), and reads/writes a point by its <strong>logical point name</strong> carried in the request body, not by the numeric tuple (see §11 for the point model). An implementer uses LAN/Drop/Address to reason about and index topology, and uses names on the wire. [W][S][I]</p>
 <p>The vendor's database tags the tuple's network types explicitly: a BLN is <code>BLN_PII</code> (Protocol II backbone) and an FLN is <code>FLN_P1</code> (Protocol 1 fieldbus), confirming the two-protocol stack the tuple spans. [D]</p>
 <h4 id="331-node-numbering-serial-integer-vs-ethernet-name">3.3.1 Node numbering: serial integer vs. Ethernet name</h4>
 <p>A node has two parallel identities depending on the BLN medium.</p>
@@ -11341,7 +11341,70 @@ value, <strong>9 of 9</strong>. That enum happens to be contiguous from 0, so th
 <em>does</em> coincide with arm position. The lesson is that the coincidence is a
 property of the enum, not of the protocol: read the enum, and only then note
 whether it happens to be dense. [S]</p>
-<h4 id="1042-do-not-read-the-supervisors-point-object-as-the-wire-model">10.4.2 Do not read the supervisor's point object as the wire model</h4>
+<h4 id="1042-the-physical-address-and-how-a-tec-subpoint-differs-from-a-panel-point">10.4.2 The physical address, and how a TEC subpoint differs from a panel point</h4>
+<p>Every point arm ends with a <code>Physical_address_*</code> field, and it is a CHOICE with
+two arms that answer a question an implementer has to get right: [S][W]</p>
+<pre><code>Physical_address_AI / _AO / _DI / _DO / _PA
+    tag_ : UNSIGNED_8
+    real_addr    : real_addr_     &lt;- the point has a physical location
+    virtual_addr : NULL_          &lt;- it does not; zero further bytes
+</code></pre>
+<p>A <strong>panel-resident software point</strong> — a calculated value, a PPCL variable, a
+schedule mode — takes <code>virtual_addr</code> and costs one byte. A point belonging to a
+<strong>terminal device on the panel's FLN</strong> takes <code>real_addr_</code>, which is <strong>8 bytes</strong>:
+[W]</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">Offset</th>
+<th>Field</th>
+<th>Observed</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">0</td>
+<td><strong>trunk / LAN</strong></td>
+<td><code>0</code>–<code>3</code> — the documented trunk range of §3.3</td>
+</tr>
+<tr>
+<td style="text-align: right;">1</td>
+<td><strong>drop</strong> — the device on that trunk</td>
+<td>constant per device; 19 distinct in the corpus</td>
+</tr>
+<tr>
+<td style="text-align: right;">2–3</td>
+<td><strong>point number within the device</strong> (u16 BE)</td>
+<td>the only part that differs between subpoints of one device</td>
+</tr>
+<tr>
+<td style="text-align: right;">4–7</td>
+<td>zero in every observed sample</td>
+<td>reserved</td>
+</tr>
+</tbody>
+</table>
+<p>The field roles are not asserted from the layout — they are measured against the
+point names. Across 34 devices, bytes 0 and 1 are <strong>constant within a device in
+34 of 34 cases</strong>, while byte 3 is constant in only 5; and three subpoints of one
+device read <code>02 08 00 19</code>, <code>02 08 00 18</code>, <code>02 08 00 13</code> while the same subpoints
+on a second device read <code>02 0b 00 …</code> — the same trunk, a different drop, the
+same point numbers. Byte 0 independently taking exactly the values <code>0</code>–<code>3</code> is
+the trunk range §3.3 documents from vendor sources. [W]</p>
+<p><strong>The point number is per application, not per name.</strong> On one device point 24 is
+the fourth digital input; on another it is the second. Which name a number maps
+to is a property of the TEC's loaded application — the same application the
+<code>0x42xx</code> family selects with <code>application_number</code> (§9.5.1). A client must not
+assume a point number means the same thing on two devices.</p>
+<blockquote>
+<p><strong>This refines §3.3.</strong> That section says the LAN/Drop/Address 3-tuple "is not
+the wire routing key", which is true and stays true — you address a point by
+<strong>name</strong>, never by tuple. But the tuple is not merely a database concept: it
+<strong>is</strong> on the wire, as the physical-address field of every point that has one.
+The distinction is that the tuple is how a panel <em>reports where a point lives</em>,
+not how a client <em>asks for it</em>.</p>
+</blockquote>
+<h4 id="1043-do-not-read-the-supervisors-point-object-as-the-wire-model">10.4.3 Do not read the supervisor's point object as the wire model</h4>
 <p>The supervisor keeps its own logical-point class, and it is much larger than
 <code>Point_base</code> — on the order of 200 accessors against the twelve fields above.
 It is tempting to treat that as a fuller description of the protocol's point.
