@@ -104,7 +104,7 @@
         {
           "@type": "TechArticle",
           "headline": "APOGEE P2 (Protocol II) — Technical Reference",
-          "dateModified": "2026-08-25",
+          "dateModified": "2026-08-26",
           "description": "A reverse-engineered technical reference for the Siemens APOGEE P2 (Protocol II) building-automation protocol: architecture, topology and addressing, frame format, discovery and replication, point types, and the Powers Protocol II / Landis & Gyr / Siemens lineage.",
           "url": "https://jamesccupps.github.io/#p2-protocol-spec",
           "keywords": "APOGEE, P2, Protocol II, Siemens, BACnet, building automation, BAS, PPCL, Powers Protocol II, reverse engineering, BLN, FLN",
@@ -710,6 +710,7 @@
 <li><a href="#115-analog-scaling-sensor-types-and-enumerations">11.5 Analog scaling, sensor types, and enumerations</a></li>
 <li><a href="#12-change-of-value-cov">12. Change-of-Value (COV)</a></li>
 <li><a href="#121-the-subscription-opcode-set">12.1 The subscription opcode set</a></li>
+<li><a href="#1211-when-subscriptions-are-registered--once-at-session-establishment">12.1.1 When subscriptions are registered — once, at session establishment</a></li>
 <li><a href="#122-the-cov-class-mask-and-subscription-type">12.2 The COV class mask and subscription type</a></li>
 <li><a href="#123-the-annunciate--value-payload">12.3 The annunciate / value payload</a></li>
 <li><a href="#124-command-priority-carried-in-the-cov-payload">12.4 Command priority (carried in the COV payload)</a></li>
@@ -732,6 +733,7 @@
 <li><a href="#152-tod-opcodes-per-point-time-of-day-scheduling">15.2 TOD opcodes (per-point time-of-day scheduling)</a></li>
 <li><a href="#153-eqs--equipment-scheduling">15.3 EQS — equipment scheduling</a></li>
 <li><a href="#1531-ssto--start-stop-time-optimization">15.3.1 SSTO — start-stop time optimization</a></li>
+<li><a href="#1532-an-eqs-zone-being-created-on-the-wire">15.3.2 An EQS zone being created, on the wire</a></li>
 <li><a href="#16-database-bulk-transfer-on-disk-p2-format-application-catalog--firmware">16. Database, Bulk Transfer, On-Disk (.P2) Format, Application Catalog &amp; Firmware</a></li>
 <li><a href="#161-bulk-database-transfer">16.1 Bulk database transfer</a></li>
 <li><a href="#162-on-disk-p2-panel-database-format">16.2 On-disk (.P2) panel-database format</a></li>
@@ -1952,7 +1954,7 @@ must derive it by observation per peer rather than assuming one value network-wi
 
   25 = 3 TLV headers (3 bytes each) + the 16-byte fixed tail
 </code></pre>
-<p>All three name lengths are site and node configuration; only the 25 is a protocol constant. Checked against every distinct body size observed: <code>25+5+3+7 = 40</code>, <code>25+6+3+7 = 41</code>, <code>25+15+3+7 = 50</code> — the last being a supervisor identity of 15 characters. Substituting this site's <code>site_name</code> (3) and <code>bln_name</code> (7) collapses it to the old <code>35 + node-name length</code>, which is how the site-specific terms went unnoticed across 349,632 single-site frames. [W] <strong>Whether a ping is answered depends on which side opened the session.</strong> Every
+<p>All three name lengths are site and node configuration; only the 25 is a protocol constant. Checked against every distinct body size observed: <code>25+5+3+7 = 40</code>, <code>25+6+3+7 = 41</code>, <code>25+15+3+7 = 50</code> — the last being a supervisor identity of 15 characters. Substituting this site's <code>site_name</code> (3) and <code>bln_name</code> (7) collapses it to the old <code>35 + node-name length</code>, which is how the site-specific terms went unnoticed across 621,268 single-site frames. [W] <strong>Whether a ping is answered depends on which side opened the session.</strong> Every
 <em>supervisor-initiated</em> <code>0x4640</code> in the corpus drew a reply. Panel-initiated pings
 into a supervisor's <code>5033</code> may not: in a 25-minute capture at one supervisor, nine
 panels each opened a fresh TCP connection to its <code>5033</code> every <strong>14.0 seconds</strong>,
@@ -2667,7 +2669,7 @@ not a P2 message class. [W]</p>
 <tr>
 <td><code>0x2A</code></td>
 <td>peer-session carrier</td>
-<td>The modern-dialect counterpart of <code>0x29</code>, carrying the <code>EBLN_PING</code> (<code>0x4640</code>) identity exchange in peer-to-peer (panel↔panel) sessions. <strong>Wire-observed in panel-side captures</strong> — 96 and 130 frames in two taps on a panel's own switch port — carrying <code>0x4640</code>, <code>0x0271</code> and <code>0x4634</code>. It is absent from the supervisor-side census only because that vantage point cannot see panel↔panel sessions.</td>
+<td>The modern-dialect counterpart of <code>0x29</code>, carrying the <code>EBLN_PING</code> (<code>0x4640</code>) identity exchange in peer-to-peer (panel↔panel) sessions. <strong>Wire-observed in panel-side captures</strong> — 12,556 frames across five taps on two different panels — carrying <code>0x4640</code>, <code>0x0271</code> and <code>0x4634</code>. It is absent from the supervisor-side census only because that vantage point cannot see panel↔panel sessions. Which of <code>0x29</code>/<code>0x2A</code> a peer uses is a property of that peer, not of the link: see §9.7.</td>
 <td>[W]</td>
 </tr>
 </tbody>
@@ -2713,9 +2715,9 @@ the <code>0x4640</code> identity exchange it carries database-change and replica
 <code>UPL_ADDED_*</code>, <code>UPL_DEL_*</code>) and alarm prints (<code>ALARM_PRINT 0x0508</code>) flowing panel→supervisor. The
 peer (panel↔panel) carriers <code>0x29</code> and <code>0x2A</code> are visible only from a panel-side mirror, never from
 the supervisor's own vantage. Measured there, <strong>both are dominated by the <code>0x4640</code> identity/keepalive
-exchange</strong>, not by COV: across two panel-side captures <code>0x29</code> carries <code>0x4640</code>, then <code>0x4634</code>, then
-<code>0x0271</code>, with <code>0x4633</code>/<code>0x4636</code> in single figures, and <code>0x2A</code> carries <code>0x4640</code> in roughly nine frames
-out of ten with <code>0x0271</code> and <code>0x4634</code> making up the rest. An earlier edition described <code>0x2A</code> as the
+exchange</strong>, not by COV: across five panel-side captures on two panels <code>0x29</code> carries <code>0x4640</code> (43,610), then <code>0x4634</code> (6,223),
+then <code>0x0271</code> (245), with <code>0x4633</code>/<code>0x4636</code> in single figures, and <code>0x2A</code> carries <code>0x4640</code> in roughly
+ninety-nine frames out of a hundred (6,228) with <code>0x0271</code> (46) and <code>0x4634</code> (4) making up the rest. An earlier edition described <code>0x2A</code> as the
 panel↔panel COV-subscription carrier; COV management rides it, but calling it that mistakes a minority
 of its traffic for its purpose. [W]</p>
 <p><strong>Second-channel session establishment.</strong> Session establishment is not a distinct opcode or message
@@ -2807,12 +2809,12 @@ Exactly three values are defined. [W]</p>
 <tr>
 <td><code>0x05</code></td>
 <td>error response</td>
-<td>exactly 2 bytes — a u16 BE error code (§7.2); <strong>no opcode</strong>. Validated across the corpus: all <strong>4,311</strong> error responses have a 2-byte body, with no exceptions.</td>
+<td>exactly 2 bytes — a u16 BE error code (§7.2); <strong>no opcode</strong>. Validated across the corpus: all <strong>6,006</strong> error responses have a 2-byte body, with no exceptions.</td>
 <td>[W]</td>
 </tr>
 </tbody>
 </table>
-<p>Observed corpus distribution: <code>0x00</code> 178,266; <code>0x01</code> 167,055; <code>0x05</code> 4,311 (summing to 349,632). [W]</p>
+<p>Observed corpus distribution: <code>0x00</code> 314,273; <code>0x01</code> 300,989; <code>0x05</code> 6,006 (summing to 621,268). [W]</p>
 <p>The governing rule is: <strong>the opcode field is present if and only if <code>dir == 0x00</code>.</strong> A response of
 either kind carries no opcode. An unsolicited push — for example a change-of-value report (opcode
 <code>0x0274</code>, <code>COV_ANNUNCIATE</code>) or an <code>0x4640</code> heartbeat — uses <code>dir == 0x00</code> exactly like a request,
@@ -2843,7 +2845,7 @@ are not <code>[BLN, dst, BLN, src]</code> but <strong>two <code>(trunk, node)</c
 with the trunk it lives on. The duplication is then not redundancy at all; it is one field per pair,
 and both pairs happen to name the same trunk on a single-BLN network.</p>
 <p>That is a <strong>falsifiable prediction</strong>: on a frame that crosses between two BLNs, slots 0 and 2 should
-carry <strong>different</strong> trunk names. The present corpus cannot test it — across <strong>349,632</strong> trusted
+carry <strong>different</strong> trunk names. The present corpus cannot test it — across <strong>621,268</strong> trusted
 four-slot frames, slots 0 and 2 are identical in <strong>206,045</strong>, and every one of the five exceptions
 is a deliberately malformed research probe rather than production traffic. Every capture to hand is
 single-BLN, so the pair reading is <strong>untested, not confirmed</strong>. A capture taken where two BLNs
@@ -3184,7 +3186,7 @@ opcode (§6.4).</p>
 <p><em>Worked error example.</em> A <code>TREND_DATA_DISPLAY</code> (<code>0x0295</code>) request naming a point that has no trend
   log returns <code>dir == 0x05</code> with the 2-byte tail <code>0x0003</code> ("not found", §7.2.2) — the same
   not-found code returned for any named object that does not exist. [W]</p>
-<p><em>The whole error vocabulary the corpus exercises.</em> Pairing all <strong>4,311</strong> error responses back to
+<p><em>The whole error vocabulary the corpus exercises.</em> Pairing all <strong>6,006</strong> error responses back to
   their request by sequence gives seven codes and no unknowns — every one is already named in the
   error table of §7.2.2, which is the first time that table has been checked against traffic rather
   than against the type system: [W]</p>
@@ -3194,6 +3196,7 @@ opcode (§6.4).</p>
 <th>Code</th>
 <th>Name</th>
 <th style="text-align: right;">Count</th>
+<th style="text-align: right;">%</th>
 <th>Chiefly answering</th>
 </tr>
 </thead>
@@ -3201,48 +3204,57 @@ opcode (§6.4).</p>
 <tr>
 <td><code>0x0003</code></td>
 <td><code>not_found</code></td>
-<td style="text-align: right;">3,996</td>
-<td><code>0x0220</code>, <code>0x0271</code>, <code>0x0273</code>, <code>0x0986</code></td>
+<td style="text-align: right;">5,805</td>
+<td style="text-align: right;">96.7%</td>
+<td><code>0x0220</code>, <code>0x0271</code>, <code>0x0273</code>, <code>0x0295</code>, <code>0x0272</code>, <code>0x0986</code></td>
 </tr>
 <tr>
 <td><code>0x00AC</code></td>
 <td><code>not_supported</code></td>
-<td style="text-align: right;">49</td>
-<td><code>0x400F</code>, <code>0x4133</code>, <code>0x4010</code>, <code>0x4011</code></td>
+<td style="text-align: right;">127</td>
+<td style="text-align: right;">2.1%</td>
+<td><code>0x400F</code>, <code>0x4133</code>, <code>0x4010</code>, <code>0x4011</code>, <code>0x09BB</code>, <code>0x4500</code></td>
 </tr>
 <tr>
 <td><code>0x0E15</code></td>
 <td><code>physical_point_not_commandable</code></td>
-<td style="text-align: right;">28</td>
+<td style="text-align: right;">38</td>
+<td style="text-align: right;">0.6%</td>
 <td><code>0x0240</code></td>
 </tr>
 <tr>
 <td><code>0x0002</code></td>
 <td><code>invalid_command</code></td>
+<td style="text-align: right;">28</td>
+<td style="text-align: right;">0.5%</td>
+<td><code>0x0244</code>, <code>0x0247</code>, <code>0x0564</code>, <code>0x0565</code></td>
+</tr>
+<tr>
+<td><code>0x0E11</code></td>
+<td><code>fln_invalid_drop_number</code></td>
 <td style="text-align: right;">4</td>
-<td><code>0x0244</code>, <code>0x0564</code>, <code>0x0565</code></td>
+<td style="text-align: right;">0.1%</td>
+<td><code>0x0204</code></td>
 </tr>
 <tr>
 <td><code>0x0E12</code></td>
 <td><code>fln_device_failed</code></td>
 <td style="text-align: right;">3</td>
+<td style="text-align: right;">0.0%</td>
 <td><code>0x4225</code>, <code>0x4224</code></td>
-</tr>
-<tr>
-<td><code>0x0E11</code></td>
-<td><code>fln_invalid_drop_number</code></td>
-<td style="text-align: right;">2</td>
-<td><code>0x0204</code></td>
 </tr>
 <tr>
 <td><code>0x0009</code></td>
 <td><code>already_exists</code></td>
 <td style="text-align: right;">1</td>
+<td style="text-align: right;">0.0%</td>
 <td><code>0x0540</code></td>
 </tr>
 </tbody>
 </table>
-<p>98% of all errors are <code>not_found</code>. Three operations in the corpus <strong>never</strong> succeed —
+<p>These sum to 6,006, the whole <code>dir == 0x05</code> population. <strong>97% of all errors are
+  <code>not_found</code></strong>, and exactly one error response in the corpus cannot be paired
+  back to its request. Three operations in the corpus <strong>never</strong> succeed —
   <code>0x0272 COV_DELETE_STUB</code> (0 ok / 46 err), <code>0x400F TEAM_DESC_UPLOAD</code> (0/12) and
   <code>0x5354 HOA_MAP_LOOK</code> (0/6) — and <code>0x0220 POINT_LOG_VALUE</code> fails more often than it succeeds
   (1,910 ok / 2,415 err), which reflects how a supervisor walks point space rather than anything
@@ -3366,8 +3378,8 @@ carries a numeric code (§7.2.2) that maps onto them. [S]</p>
 </table>
 <h4 id="722-observed-wire-error-codes">7.2.2 Observed wire error codes</h4>
 <p>These 2-byte codes appear as the <code>dir == 0x05</code> error tail in the corpus. Distribution across the
-349,632 trusted P2 frames, of which 4,311 are error responses: <code>0x0003</code> 4,224; <code>0x00AC</code> 49;
-<code>0x0E15</code> 28; <code>0x0002</code> 4; <code>0x0E12</code> 3; <code>0x0E11</code> 2; <code>0x0009</code> 1 - summing exactly to 4,311. <strong><code>not_found</code> is 98% of all errors.</strong> [W]</p>
+621,268 trusted P2 frames, of which 6,006 are error responses: <code>0x0003</code> 5,805; <code>0x00AC</code> 127;
+<code>0x0E15</code> 38; <code>0x0002</code> 28; <code>0x0E11</code> 4; <code>0x0E12</code> 3; <code>0x0009</code> 1 - summing exactly to 6,006. <strong><code>not_found</code> is 97% of all errors.</strong> [W]</p>
 <table>
 <thead>
 <tr>
@@ -3392,7 +3404,7 @@ carries a numeric code (§7.2.2) that maps onto them. [S]</p>
 </tr>
 <tr>
 <td><code>0x0002</code></td>
-<td><strong>invalid command</strong> — the command is not valid for the addressed object (seen on <code>POINT_CMD_ALARM 0x0244</code> / <code>CMD_ALARM_DISABLE 0x0247</code> against a point lacking alarm capability; the documented example is commanding a non-virtual LDI or LAI point)</td>
+<td><strong>invalid command</strong> — the command is not valid for the addressed object (seen on <code>POINT_CMD_ALARM 0x0244</code> and on <code>CMD_ALARM_DISABLE 0x0247</code> addressed to a point name that does not exist; the documented example is commanding a non-virtual LDI or LAI point)</td>
 <td>wire behaviour and the vendor catalog agree</td>
 <td>[W][D]</td>
 </tr>
@@ -4080,10 +4092,10 @@ char:   &quot; ABCDEFGHIJKLMNOPQRSTUVWXYZ$.?0123456789&quot;
 <h3 id="91-the-ap2-function-code">9.1 The AP2 function code</h3>
 <p>The AP2 function code is a 16-bit big-endian value that sits on the wire immediately after the fourth NUL-terminated routing slot, in <code>direction == 0x00</code> frames (requests and panel-originated async pushes). It is the dispatch key the panel exec (CEC) uses to select the operation; the bytes following it are the operation's ASDU body (§10). The opcode is meaningful only in <code>direction == 0x00</code> frames — reading the post-slot bytes off a <code>0x01</code> success or <code>0x05</code> error response yields response-payload bytes, not an opcode, and fabricates phantom values (see §6.4). [W][S]</p>
 <p>The complete command vocabulary of the protocol is defined by the vendor's <code>AP2_Function_Code</code> enumeration: <strong>641 named members across 630 distinct opcode values</strong> (a handful of values carry two names — historical aliases such as <code>AP2_DUMMY_CMD</code>/<code>AP2_REV_STRING</code> at 0x0100, or the <code>CONTROLLER</code>/<code>TEC</code> doublets). The enum's numeric values <strong>are</strong> the wire opcodes: cross-checking every opcode seen on the wire against the enum, all matched exactly. [S]</p>
-<p>Of the 630 defined values, <strong>125 are observed in the capture corpus</strong> (349,632 trusted P2 frames across the 89 captures that carry P2; see §9.5 for the counting criteria and for why an earlier figure of 135 was withdrawn); the remaining 505 are defined-but-unobserved (overwhelmingly configuration, database-management, upload, and BACnet/LON-integration operations that a passive supervisor↔panel capture does not exercise). Every defined opcode is enumerable from the catalog below; "not observed" means absent from this corpus, not undefined. The corpus combines passive supervisor↔panel and panel↔panel site captures with a smaller set of active read/enumeration test captures; opcode counts are corpus frequencies, not a claim about steady-state operation. [W][S]</p>
+<p>Of the 630 defined values, <strong>135 are observed in the capture corpus</strong> (621,268 trusted P2 frames across the 121 captures that carry P2; see §9.5 for the counting criteria and for why an earlier figure of 135 was withdrawn); the remaining 495 are defined-but-unobserved (overwhelmingly configuration, database-management, upload, and BACnet/LON-integration operations that a passive supervisor↔panel capture does not exercise). A further <strong>15 opcode values appear on the wire without an enum definition at all</strong> and therefore have no catalog row; thirteen of them are real panel operations and two are artifacts of a deliberately malformed test frame (§9.5). Counting those, <strong>148 distinct operations</strong> have been observed. Every defined opcode is enumerable from the catalog below; "not observed" means absent from this corpus, not undefined. The corpus combines passive supervisor↔panel and panel↔panel site captures with a smaller set of active read/enumeration test captures; opcode counts are corpus frequencies, not a claim about steady-state operation. [W][S]</p>
 <p>Rows that were seen on the wire are tagged <strong>[W]</strong> and carry their frame count; defined-but-unobserved rows are tagged <strong>[S]</strong> (struct/metadata-derived from the vendor enum — definitional truth). Wire counts in the catalog come from the corpus census; per-opcode response shapes, error tails, and message-class distributions are in §9.7.</p>
 <blockquote>
-<p><strong>Vantage point bounds every count in this section.</strong> Almost all of the corpus was captured at the supervisor, and a supervisor-side tap structurally cannot see a session between two panels — P2 is unicast TCP, so the switch shows that tap only the conversations the supervisor is in. Taps placed on a single panel's own switch port show it holding P2 sessions with <strong>nine peers</strong>, of which the supervisor is one. Read the counts here as frequencies in <em>supervisor-facing</em> P2, and read a zero as "the supervisor does not invoke this," never as "panels do not exchange this." The message-class figures in §9.7 make the difference concrete: class <code>0x2A</code> is absent from the supervisor-side census and plainly present from a panel-side one. [W]</p>
+<p><strong>Vantage point bounds every count in this section.</strong> Almost all of the corpus was captured at the supervisor, and a supervisor-side tap structurally cannot see a session between two panels — P2 is unicast TCP, so the switch shows that tap only the conversations the supervisor is in. Taps placed on a panel's own switch port — five of them, on two different panels — each show it holding P2 sessions with <strong>nine peers</strong>, of which the supervisor is one. Read the counts here as frequencies in <em>supervisor-facing</em> P2, and read a zero as "the supervisor does not invoke this," never as "panels do not exchange this." The message-class figures in §9.7 make the difference concrete: class <code>0x2A</code> is absent from the supervisor-side census and plainly present from a panel-side one. [W]</p>
 </blockquote>
 <h3 id="911-the-wire-opcode-is-the-bottom-of-a-three-tier-model">9.1.1 The wire opcode is the bottom of a three-tier model</h3>
 <p>An implementer reading only the wire sees one identifier per request. The stack
@@ -4507,9 +4519,9 @@ a response carries no opcode — gives <strong>83,876 pairs, 72 opcodes, 1 real 
 against 315 control</strong>. The real mapping scored worse than its own control.
 Whatever the panel writes the number into, <strong>it is not a P2 frame</strong>. [W]</p>
 <p><em>Coverage, since a negative is only as good as its denominator.</em> The corpus holds
-726 capture files, 233 distinct by content, of which <strong>85 carry P2 and hold
-349,632 trusted frames between them</strong> — and all 85 were in scope, 100% of frames.
-Both ports are represented: 126,832 frames on 5033 and 79,229 on 5034, so the
+764 capture files, 271 distinct by content, of which <strong>121 carry P2 and hold
+621,268 trusted frames between them</strong> — and all 121 were in scope, 100% of frames.
+Both ports are represented: 432,368 frames on 5033 and 188,900 on 5034, so the
 result is not an artifact of testing only the supervisor-facing channel. [W]</p>
 <p><strong>It is a two-stage internal operation number.</strong> The default table maps an
 opcode to a <em>group</em>; where the group needs finer resolution, that group has its
@@ -4726,7 +4738,7 @@ later addition to the protocol.</strong> [F][W]</p>
 another: these images cannot name it, and its absence from them is evidence of
 the block's age rather than of its non-existence.</p>
 <h3 id="95-the-catalog">9.5 The catalog</h3>
-<p>The catalog below is generated by joining the vendor <code>AP2_Function_Code</code> enum (the 630 distinct opcode values) with the corpus census. A recount under stated criteria — trusted frames only, <code>dir == 0x00</code> only, content-deduplicated captures — gives <strong>127 distinct wire-observed function codes across 178,266 request/push frames</strong>, of which 112 now carry a name. (Three further values appear only in frames the parser marked untrusted after a resynchronisation: <code>0x0631</code>, <code>0x1826</code>, <code>0x2226</code>. <code>0x1826</code> is precisely the fictitious opcode a mid-record resync manufactures — a TLV length <code>0x18</code> followed by ASCII <code>&amp;</code> — and is the reason the trusted flag exists. An earlier edition cited 135 wire-observed values; that figure is not reproducible from the current evidence base under any definition tried, and 125 replaced it; the corpus has since grown and the current figure is 127.) Columns: hex opcode, name(s), observed wire count (or <code>-</code>), notes (destructive flag where applicable), and evidence tag ([W] wire-observed, [S] enum-defined). Within each family, rows are sorted by opcode value. Sixteen wire values do <strong>not</strong> appear in the catalog, and they fall into three groups rather than one. <code>0x0000</code>/<code>0x0002</code> are below the enum's first defined value and <code>0x0C44</code>/<code>0x4443</code> are slot-walk misalignments of <code>0x4640</code> — those four are genuinely parser artifacts. [W] <code>0x0453</code> and <code>0x0510</code> drew <code>not_found</code>, so the panel does not implement them. [W] <strong>The remaining ten — <code>0x4641</code>, <code>0x4642</code>, <code>0x4643</code>, <code>0x4647</code>, <code>0x464A</code>, <code>0x464B</code>, <code>0x464D</code>, <code>0x464E</code>, <code>0x464F</code>, <code>0x4650</code> — are real panel operations, and an earlier reading of this document that dismissed them as noise is withdrawn.</strong> Absence from <code>AP2_Function_Code</code> proves nothing: that enum is the <strong>supervisor-side</strong> vocabulary and does not describe what a panel implements. Classify by what the panel did. <code>0x464A</code>–<code>0x4650</code> each answered <code>dir=0x01</code> <strong>success with distinct structured bodies</strong> (0 B, 22 B, 125 B, a 12,073-byte declared node table, 117 B, 26 B, 217 B respectively), and <code>0x4641</code> answered success, while <code>0x0510</code> — equally absent from the enum — answered <code>not_found</code> from the same panel in the same campaign. The <code>0x464D</code> reply is the sharpest case and needs stating precisely: the panel answered, and its response header <strong>declared</strong> 12,073 bytes of node table, of which <strong>4,380 arrived</strong> before the client reset the connection. No complete frame exists, so a strict framer reports the exchange as unanswered — it was not. A panel that begins streaming 12 KB of structured node table for one value and answers <code>not_found</code> to another is not treating them alike. <code>0x4642</code>/<code>0x4643</code> answered <code>not_supported</code>, i.e. a handler was reached and refused; <code>0x4647</code> returned nothing at all and remains <strong>[OPEN]</strong>. Low frame count is not evidence of unreality — it measures how often the <em>supervisor</em> uses an operation, and a panel-side operation the supervisor never invokes is expected to appear exactly once, when probed. [W]</p>
+<p>The catalog below is generated by joining the vendor <code>AP2_Function_Code</code> enum (the 630 distinct opcode values) with the corpus census. A recount under stated criteria — trusted frames only, <code>dir == 0x00</code> only, content-deduplicated captures — gives <strong>150 distinct opcode values across 314,273 request/push frames</strong>, of which 135 carry a name from the enum. Two of the 150 are not operations at all (below), so <strong>148 distinct operations</strong> have been observed. (Three further values appear only in frames the parser marked untrusted after a resynchronisation: <code>0x0631</code>, <code>0x1826</code>, <code>0x2226</code>. <code>0x1826</code> is precisely the fictitious opcode a mid-record resync manufactures — a TLV length <code>0x18</code> followed by ASCII <code>&amp;</code> — and is the reason the trusted flag exists. Editions of this document have cited 135, then 125, then 127; each was the honest count over the corpus held at the time, and the corpus has twice grown. The current figure is reproducible from the stated criteria by re-running the census.) Columns: hex opcode, name(s), observed wire count (or <code>-</code>), notes (destructive flag where applicable), and evidence tag ([W] wire-observed, [S] enum-defined). Within each family, rows are sorted by opcode value. Fifteen wire values do <strong>not</strong> appear in the catalog, because the enum does not define them, and they fall into three groups rather than one. <strong>Four are artifacts.</strong> <code>0x0C44</code> and <code>0x4443</code> are slot-walk misalignments of <code>0x4640</code>; <code>0x0000</code> and <code>0xFFFF</code> are the opcode field of a <em>deliberately malformed</em> test frame whose routing slots read <code>GARBAGEBLN</code> / <code>garbagenode</code> / <code>GARBAGE15CHARSXX</code>, sent once each to probe the handshake gate and never answered. Neither is an operation, and a reader reproducing the census should expect to see them and discard them. [W] <strong>One is unimplemented:</strong> <code>0x0510</code> drew <code>not_found</code>. [W] <strong>The remaining ten — <code>0x4641</code>, <code>0x4642</code>, <code>0x4643</code>, <code>0x4647</code>, <code>0x464A</code>, <code>0x464B</code>, <code>0x464D</code>, <code>0x464E</code>, <code>0x464F</code>, <code>0x4650</code> — are real panel operations, and an earlier reading of this document that dismissed them as noise is withdrawn.</strong> Absence from <code>AP2_Function_Code</code> proves nothing: that enum is the <strong>supervisor-side</strong> vocabulary and does not describe what a panel implements. Classify by what the panel did. <code>0x464A</code>–<code>0x4650</code> each answered <code>dir=0x01</code> <strong>success with distinct structured bodies</strong> (0 B, 22 B, 125 B, a 12,073-byte declared node table, 117 B, 26 B, 217 B respectively), and <code>0x4641</code> answered success, while <code>0x0510</code> — equally absent from the enum — answered <code>not_found</code> from the same panel in the same campaign. The <code>0x464D</code> reply is the sharpest case and needs stating precisely: the panel answered, and its response header <strong>declared</strong> 12,073 bytes of node table, of which <strong>4,380 arrived</strong> before the client reset the connection. No complete frame exists, so a strict framer reports the exchange as unanswered — it was not. A panel that begins streaming 12 KB of structured node table for one value and answers <code>not_found</code> to another is not treating them alike. <code>0x4642</code>/<code>0x4643</code> answered <code>not_supported</code>, i.e. a handler was reached and refused; <code>0x4647</code> returned nothing at all and remains <strong>[OPEN]</strong>. Low frame count is not evidence of unreality — it measures how often the <em>supervisor</em> uses an operation, and a panel-side operation the supervisor never invokes is expected to appear exactly once, when probed. [W]</p>
 <!-- BEGIN GENERATED CATALOG (do not hand-edit; regenerate with working/sweep/s91_gencatalog.py, which joins p2_data.py with the census of working/sweep/s90_census.py) -->
 
 <h4 id="family-nodestate">Family: NODE/STATE</h4>
@@ -4877,7 +4889,7 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x0050</td>
 <td>AP2_DISK_LOG</td>
-<td>140</td>
+<td>166</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -4933,7 +4945,7 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x010C</td>
 <td>AP2_CABINET_DISPLAY</td>
-<td>185</td>
+<td>250</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -5059,7 +5071,7 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x4011</td>
 <td>AP2_REPORT_DESC_UPLOAD</td>
-<td>6</td>
+<td>19</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -5269,7 +5281,7 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x0204</td>
 <td>AP2_POINT_ADD_LAI</td>
-<td>4</td>
+<td>8</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -5353,7 +5365,7 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x0220</td>
 <td>AP2_POINT_LOG_VALUE</td>
-<td>4382</td>
+<td>6942</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -5444,14 +5456,14 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x0240</td>
 <td>AP2_POINT_CMD_VALUE</td>
-<td>13597</td>
+<td>32521</td>
 <td><strong>DESTRUCTIVE</strong> (point command (write value))</td>
 <td>[W]</td>
 </tr>
 <tr>
 <td>0x0241</td>
 <td>AP2_POINT_CMD_PRIORITY</td>
-<td>31</td>
+<td>60</td>
 <td><strong>DESTRUCTIVE</strong> (point command (write priority))</td>
 <td>[W]</td>
 </tr>
@@ -5472,30 +5484,30 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x0244</td>
 <td>AP2_POINT_CMD_ALARM</td>
-<td>2</td>
+<td>27</td>
 <td></td>
 <td>[W]</td>
 </tr>
 <tr>
 <td>0x0245</td>
 <td>AP2_POINT_CMD_NORMAL</td>
-<td>2</td>
+<td>5</td>
 <td></td>
 <td>[W]</td>
 </tr>
 <tr>
 <td>0x0246</td>
 <td>AP2_POINT_CMD_ALARM_ENABLE</td>
-<td>-</td>
+<td>3</td>
 <td></td>
-<td>[F]</td>
+<td>[W]</td>
 </tr>
 <tr>
 <td>0x0247</td>
 <td>AP2_POINT_CMD_ALARM_DISABLE</td>
-<td>-</td>
+<td>5</td>
 <td></td>
-<td>[F]</td>
+<td>[W]</td>
 </tr>
 <tr>
 <td>0x0248</td>
@@ -5570,7 +5582,7 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x0263</td>
 <td>AP2_POINT_REMOVE</td>
-<td>4</td>
+<td>6</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -5640,28 +5652,28 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x0271</td>
 <td>AP2_COV_ENABLE</td>
-<td>5321</td>
+<td>7359</td>
 <td></td>
 <td>[W]</td>
 </tr>
 <tr>
 <td>0x0272</td>
 <td>AP2_COV_DELETE_STUB</td>
-<td>46</td>
+<td>222</td>
 <td></td>
 <td>[W]</td>
 </tr>
 <tr>
 <td>0x0273</td>
 <td>AP2_COV_DISABLE</td>
-<td>3696</td>
+<td>6043</td>
 <td></td>
 <td>[W]</td>
 </tr>
 <tr>
 <td>0x0274</td>
 <td>AP2_COV_ANNUNCIATE</td>
-<td>53101</td>
+<td>120764</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -5731,7 +5743,7 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x0291</td>
 <td>AP2_TREND_SETUP_DELETE</td>
-<td>4</td>
+<td>14</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -5752,14 +5764,14 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x0294</td>
 <td>AP2_TREND_SETUP_LOG</td>
-<td>9</td>
+<td>59</td>
 <td></td>
 <td>[W]</td>
 </tr>
 <tr>
 <td>0x0295</td>
 <td>AP2_TREND_DATA_DISPLAY</td>
-<td>291</td>
+<td>750</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -5878,7 +5890,7 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x02A8</td>
 <td>AP2_TREND_EVENT_ARC_SETUP</td>
-<td>4</td>
+<td>8</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -5913,7 +5925,7 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x0302</td>
 <td>AP2_TIME_DISPLAY_CLOCK / AP2_TIME_SET</td>
-<td>1</td>
+<td>3</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -6109,7 +6121,7 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x4100</td>
 <td>AP2_PPCL_ADD_LINE</td>
-<td>1</td>
+<td>3</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -6123,37 +6135,37 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x4103</td>
 <td>AP2_PPCL_REMOVE_LINES</td>
-<td>1</td>
+<td>3</td>
 <td></td>
 <td>[W]</td>
 </tr>
 <tr>
 <td>0x4104</td>
 <td>AP2_PPCL_ENABLE_LINES</td>
-<td>1</td>
+<td>7</td>
 <td></td>
 <td>[W]</td>
 </tr>
 <tr>
 <td>0x4105</td>
 <td>AP2_PPCL_DISABLE_LINES</td>
-<td>-</td>
+<td>2</td>
 <td></td>
-<td>[F]</td>
+<td>[W]</td>
 </tr>
 <tr>
 <td>0x4106</td>
 <td>AP2_PPCL_CLEAR_TRACE</td>
-<td>1</td>
+<td>5</td>
 <td></td>
 <td>[W]</td>
 </tr>
 <tr>
 <td>0x4107</td>
 <td>AP2_PPCL_PROGRAM_LOG</td>
-<td>-</td>
+<td>8</td>
 <td></td>
-<td>[F]</td>
+<td>[W]</td>
 </tr>
 <tr>
 <td>0x4108</td>
@@ -6746,7 +6758,7 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x040A</td>
 <td>AP2_ENUM_TYPE_DB_GET</td>
-<td>2</td>
+<td>28</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -6837,14 +6849,14 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x0508</td>
 <td>AP2_ALARM_PRINT</td>
-<td>55</td>
+<td>71</td>
 <td></td>
 <td>[W]</td>
 </tr>
 <tr>
 <td>0x0509</td>
 <td>AP2_ALARM_ACK</td>
-<td>5</td>
+<td>7</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -7194,7 +7206,7 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x0606</td>
 <td>AP2_CAL_DB_GET_OTHER</td>
-<td>27</td>
+<td>41</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -7299,7 +7311,7 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x0961</td>
 <td>AP2_UPL_DEL_POINT</td>
-<td>15</td>
+<td>25</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -7320,30 +7332,30 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x0964</td>
 <td>AP2_UPL_DEL_TREND</td>
-<td>4</td>
+<td>26</td>
 <td></td>
 <td>[W]</td>
 </tr>
 <tr>
 <td>0x0965</td>
 <td>AP2_UPL_DEL_PPCL</td>
-<td>4</td>
+<td>16</td>
 <td></td>
 <td>[W]</td>
 </tr>
 <tr>
 <td>0x0966</td>
 <td>AP2_UPL_DEL_TEC</td>
-<td>2</td>
+<td>11</td>
 <td></td>
 <td>[W]</td>
 </tr>
 <tr>
 <td>0x0967</td>
 <td>AP2_UPL_DEL_EQS_ZONE</td>
-<td>-</td>
+<td>6</td>
 <td></td>
-<td>[S]</td>
+<td>[W]</td>
 </tr>
 <tr>
 <td>0x0968</td>
@@ -7355,7 +7367,7 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x0969</td>
 <td>AP2_UPL_DEL_EQS_MODE_SCHED</td>
-<td>6</td>
+<td>26</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -7376,7 +7388,7 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x0971</td>
 <td>AP2_UPL_ADDED_POINT</td>
-<td>18</td>
+<td>32</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -7397,30 +7409,30 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x0974</td>
 <td>AP2_UPL_ADDED_TREND</td>
-<td>5</td>
+<td>21</td>
 <td></td>
 <td>[W]</td>
 </tr>
 <tr>
 <td>0x0975</td>
 <td>AP2_UPL_ADDED_PPCL</td>
-<td>5</td>
+<td>23</td>
 <td></td>
 <td>[W]</td>
 </tr>
 <tr>
 <td>0x0976</td>
 <td>AP2_UPL_ADDED_TEC</td>
-<td>4</td>
+<td>22</td>
 <td></td>
 <td>[W]</td>
 </tr>
 <tr>
 <td>0x0977</td>
 <td>AP2_UPL_ADDED_EQS_ZONE</td>
-<td>-</td>
+<td>6</td>
 <td></td>
-<td>[S]</td>
+<td>[W]</td>
 </tr>
 <tr>
 <td>0x0978</td>
@@ -7432,7 +7444,7 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x0979</td>
 <td>AP2_UPL_ADDED_EQS_MODE_SCHED</td>
-<td>6</td>
+<td>26</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -7453,126 +7465,126 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x097C</td>
 <td>AP2_UPL_ADDED_SSTO_GENERAL</td>
-<td>-</td>
+<td>8</td>
 <td></td>
-<td>[S]</td>
+<td>[W]</td>
 </tr>
 <tr>
 <td>0x097D</td>
 <td>AP2_UPL_ADDED_SSTO_START</td>
-<td>-</td>
+<td>8</td>
 <td></td>
-<td>[S]</td>
+<td>[W]</td>
 </tr>
 <tr>
 <td>0x097E</td>
 <td>AP2_UPL_ADDED_SSTO_STOP</td>
-<td>-</td>
+<td>8</td>
 <td></td>
-<td>[S]</td>
+<td>[W]</td>
 </tr>
 <tr>
 <td>0x097F</td>
 <td>AP2_UPL_ADDED_SSTO_NIGHT</td>
-<td>-</td>
+<td>8</td>
 <td></td>
-<td>[S]</td>
+<td>[W]</td>
 </tr>
 <tr>
 <td>0x0981</td>
 <td>AP2_UPL_ALL_POINT</td>
-<td>6503</td>
+<td>12547</td>
 <td></td>
 <td>[W]</td>
 </tr>
 <tr>
 <td>0x0982</td>
 <td>AP2_UPL_ALL_ALARM_SETUP</td>
-<td>14</td>
+<td>27</td>
 <td></td>
 <td>[W]</td>
 </tr>
 <tr>
 <td>0x0983</td>
 <td>AP2_UPL_ALL_ALARM_MODE</td>
-<td>14</td>
+<td>27</td>
 <td></td>
 <td>[W]</td>
 </tr>
 <tr>
 <td>0x0984</td>
 <td>AP2_UPL_ALL_TREND</td>
-<td>179</td>
+<td>288</td>
 <td></td>
 <td>[W]</td>
 </tr>
 <tr>
 <td>0x0985</td>
 <td>AP2_UPL_ALL_PPCL</td>
-<td>2511</td>
+<td>2672</td>
 <td></td>
 <td>[W]</td>
 </tr>
 <tr>
 <td>0x0986</td>
 <td>AP2_UPL_ALL_TEC</td>
-<td>541</td>
+<td>1049</td>
 <td></td>
 <td>[W]</td>
 </tr>
 <tr>
 <td>0x0987</td>
 <td>AP2_UPL_ALL_EQS_ZONE</td>
-<td>16</td>
+<td>81</td>
 <td></td>
 <td>[W]</td>
 </tr>
 <tr>
 <td>0x0988</td>
 <td>AP2_UPL_ALL_EQS_CMD_TABLE</td>
-<td>120</td>
+<td>601</td>
 <td></td>
 <td>[W]</td>
 </tr>
 <tr>
 <td>0x0989</td>
 <td>AP2_UPL_ALL_EQS_MODE_SCHED</td>
-<td>36</td>
+<td>114</td>
 <td></td>
 <td>[W]</td>
 </tr>
 <tr>
 <td>0x098B</td>
 <td>AP2_UPL_ALL_ALARM_MESSAGE</td>
-<td>6</td>
+<td>19</td>
 <td></td>
 <td>[W]</td>
 </tr>
 <tr>
 <td>0x098C</td>
 <td>AP2_UPL_ALL_SSTO_GENERAL</td>
-<td>16</td>
+<td>81</td>
 <td></td>
 <td>[W]</td>
 </tr>
 <tr>
 <td>0x098D</td>
 <td>AP2_UPL_ALL_SSTO_START</td>
-<td>16</td>
+<td>81</td>
 <td></td>
 <td>[W]</td>
 </tr>
 <tr>
 <td>0x098E</td>
 <td>AP2_UPL_ALL_SSTO_STOP</td>
-<td>16</td>
+<td>81</td>
 <td></td>
 <td>[W]</td>
 </tr>
 <tr>
 <td>0x098F</td>
 <td>AP2_UPL_ALL_SSTO_NIGHT</td>
-<td>16</td>
+<td>81</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -7593,7 +7605,7 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x099F</td>
 <td>AP2_UPL_ALL_PORT</td>
-<td>36</td>
+<td>114</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -7614,7 +7626,7 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x09A3</td>
 <td>AP2_UPL_ALL_PARTNER</td>
-<td>6</td>
+<td>19</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -7635,7 +7647,7 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x09A7</td>
 <td>AP2_UPL_ALL_EQS_OVERRIDE</td>
-<td>6</td>
+<td>19</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -7656,7 +7668,7 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x09AB</td>
 <td>AP2_UPL_ALL_UC</td>
-<td>6</td>
+<td>19</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -7719,7 +7731,7 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x09BB</td>
 <td>AP2_UPL_ALL_LON</td>
-<td>6</td>
+<td>19</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -7775,7 +7787,7 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x4133</td>
 <td>AP2_UPL_ALL_PROGRAM</td>
-<td>6</td>
+<td>19</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -7796,7 +7808,7 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x0951</td>
 <td>AP2_DBCHANGE_POINT</td>
-<td>11</td>
+<td>19</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -7817,30 +7829,30 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x0954</td>
 <td>AP2_DBCHANGE_TREND</td>
-<td>2</td>
+<td>14</td>
 <td></td>
 <td>[W]</td>
 </tr>
 <tr>
 <td>0x0955</td>
 <td>AP2_DBCHANGE_PPCL</td>
-<td>3</td>
+<td>13</td>
 <td></td>
 <td>[W]</td>
 </tr>
 <tr>
 <td>0x0956</td>
 <td>AP2_DBCHANGE_CONTROLLER</td>
-<td>2</td>
+<td>11</td>
 <td></td>
 <td>[W]</td>
 </tr>
 <tr>
 <td>0x0957</td>
 <td>AP2_DBCHANGE_EQS_ZONE</td>
-<td>-</td>
+<td>4</td>
 <td></td>
-<td>[S]</td>
+<td>[W]</td>
 </tr>
 <tr>
 <td>0x0958</td>
@@ -7852,7 +7864,7 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x0959</td>
 <td>AP2_DBCHANGE_EQS_MODE_SCHED</td>
-<td>4</td>
+<td>16</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -7873,30 +7885,30 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x095C</td>
 <td>AP2_DBCHANGE_SSTO_GENERAL</td>
-<td>-</td>
+<td>4</td>
 <td></td>
-<td>[S]</td>
+<td>[W]</td>
 </tr>
 <tr>
 <td>0x095D</td>
 <td>AP2_DBCHANGE_SSTO_START</td>
-<td>-</td>
+<td>4</td>
 <td></td>
-<td>[S]</td>
+<td>[W]</td>
 </tr>
 <tr>
 <td>0x095E</td>
 <td>AP2_DBCHANGE_SSTO_STOP</td>
-<td>-</td>
+<td>4</td>
 <td></td>
-<td>[S]</td>
+<td>[W]</td>
 </tr>
 <tr>
 <td>0x095F</td>
 <td>AP2_DBCHANGE_SSTO_NIGHT</td>
-<td>-</td>
+<td>4</td>
 <td></td>
-<td>[S]</td>
+<td>[W]</td>
 </tr>
 <tr>
 <td>0x099C</td>
@@ -8314,14 +8326,14 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x400F</td>
 <td>AP2_TEAM_DESC_UPLOAD</td>
-<td>12</td>
+<td>38</td>
 <td></td>
 <td>[W]</td>
 </tr>
 <tr>
 <td>0x4010</td>
 <td>AP2_MEMBER_DESC_UPLOAD</td>
-<td>6</td>
+<td>19</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -8370,7 +8382,7 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x4200</td>
 <td>AP2_CONTROLLER_LOG / AP2_TEC_LOG</td>
-<td>76</td>
+<td>248</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -8461,14 +8473,14 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x4221</td>
 <td>AP2_TEC_REMOTE_INIT_VALUE_LOG</td>
-<td>381</td>
+<td>1173</td>
 <td></td>
 <td>[W]</td>
 </tr>
 <tr>
 <td>0x4222</td>
 <td>AP2_TEC_SET_INIT_VALUE</td>
-<td>29</td>
+<td>38</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -8804,7 +8816,7 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x4634</td>
 <td>AP2_EBLN_REPL_PULL</td>
-<td>7560</td>
+<td>10019</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -8881,7 +8893,7 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x4640</td>
 <td>AP2_EBLN_PING</td>
-<td>78623</td>
+<td>108430</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -9294,16 +9306,16 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x5000</td>
 <td>AP2_EQS_ZONE_ADD</td>
-<td>-</td>
+<td>2</td>
 <td></td>
-<td>[S]</td>
+<td>[W]</td>
 </tr>
 <tr>
 <td>0x5001</td>
 <td>AP2_EQS_ZONE_REMOVE</td>
-<td>-</td>
+<td>2</td>
 <td></td>
-<td>[S]</td>
+<td>[W]</td>
 </tr>
 <tr>
 <td>0x5002</td>
@@ -9315,7 +9327,7 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x5003</td>
 <td>AP2_EQS_ZONE_LOOK</td>
-<td>27</td>
+<td>39</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -9364,7 +9376,7 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x5020</td>
 <td>AP2_EQS_MODE_ENTRY_ADD</td>
-<td>2</td>
+<td>10</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -9378,7 +9390,7 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x5022</td>
 <td>AP2_EQS_MODE_ENTRY_REMOVE</td>
-<td>2</td>
+<td>8</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -9455,7 +9467,7 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x5038</td>
 <td>AP2_EQS_ZONE_LOG</td>
-<td>3</td>
+<td>25</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -9469,30 +9481,30 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x503A</td>
 <td>AP2_EQS_SSTO_SETUP_GENERAL</td>
-<td>-</td>
+<td>2</td>
 <td></td>
-<td>[S]</td>
+<td>[W]</td>
 </tr>
 <tr>
 <td>0x503B</td>
 <td>AP2_EQS_SSTO_SETUP_START</td>
-<td>-</td>
+<td>2</td>
 <td></td>
-<td>[S]</td>
+<td>[W]</td>
 </tr>
 <tr>
 <td>0x503C</td>
 <td>AP2_EQS_SSTO_SETUP_STOP</td>
-<td>-</td>
+<td>2</td>
 <td></td>
-<td>[S]</td>
+<td>[W]</td>
 </tr>
 <tr>
 <td>0x503D</td>
 <td>AP2_EQS_SSTO_SETUP_NIGHT</td>
-<td>-</td>
+<td>2</td>
 <td></td>
-<td>[S]</td>
+<td>[W]</td>
 </tr>
 <tr>
 <td>0x503E</td>
@@ -9672,7 +9684,7 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x5354</td>
 <td>AP2_HOA_MAP_LOOK</td>
-<td>13</td>
+<td>27</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -9760,7 +9772,7 @@ the block's age rather than of its non-existence.</p>
 <h3 id="97-wire-behavior-message-classes-directions-error-tails">9.7 Wire behavior: message classes, directions, error tails</h3>
 <p>The corpus distribution grounds the catalog in observed behavior:</p>
 <ul>
-<li><strong>Message classes (<code>msg_type</code> low byte).</strong> Six classes are defined — the legacy/modern pairs of §6.2/§6.6 — and any other low-byte value is parser noise from a desynced stream. Corpus distribution, over <strong>349,632 trusted frames in 89 distinct P2-carrying captures</strong> (content-deduplicated; criteria stated because an earlier edition of this table gave counts that cannot be reproduced from the evidence base, see the note below):</li>
+<li><strong>Message classes (<code>msg_type</code> low byte).</strong> Six classes are defined — the legacy/modern pairs of §6.2/§6.6 — and any other low-byte value is parser noise from a desynced stream. Corpus distribution, over <strong>621,268 trusted frames in 121 distinct P2-carrying captures</strong> (content-deduplicated; criteria stated because an earlier edition of this table gave counts that cannot be reproduced from the evidence base, see the note below):</li>
 </ul>
 <table>
 <thead>
@@ -9774,48 +9786,71 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td><code>0x33</code></td>
 <td>legacy data dialect</td>
-<td style="text-align: right;">199,241</td>
+<td style="text-align: right;">420,024</td>
 </tr>
 <tr>
 <td><code>0x29</code></td>
 <td>session carrier (panel-to-panel)</td>
-<td style="text-align: right;">98,060</td>
+<td style="text-align: right;">100,200</td>
 </tr>
 <tr>
 <td><code>0x34</code></td>
 <td>modern data dialect</td>
-<td style="text-align: right;">23,193</td>
+<td style="text-align: right;">40,962</td>
 </tr>
 <tr>
 <td><code>0x2E</code></td>
 <td>legacy 2nd-channel / announce + DB-sync</td>
-<td style="text-align: right;">15,008</td>
+<td style="text-align: right;">42,542</td>
 </tr>
 <tr>
 <td><code>0x2A</code></td>
 <td>peer-session carrier (panel-to-panel)</td>
-<td style="text-align: right;">12,260</td>
+<td style="text-align: right;">12,556</td>
 </tr>
 <tr>
 <td><code>0x2F</code></td>
 <td>modern 2nd-channel</td>
-<td style="text-align: right;">1,870</td>
+<td style="text-align: right;">4,984</td>
 </tr>
 </tbody>
 </table>
-<p>These sum to the 349,632 trusted frames of 9.5. <strong>The peer carriers moved
+<p>These sum to the 621,268 trusted frames of 9.5. <strong>The peer carriers moved
   by four orders of magnitude when panel-side captures entered the corpus</strong>
-  - <code>0x29</code> from 10 frames to 98,060, and <code>0x2A</code> from zero to 12,260 -
+  - <code>0x29</code> from 10 frames to 100,200, and <code>0x2A</code> from zero to 12,556 -
   because a supervisor-side tap structurally cannot observe a
   panel-to-panel session. The earlier figures were not wrong for what they
   measured; they measured one vantage point.</p>
 <p>Most high-volume operations occur in both <code>0x33</code> and <code>0x34</code>; certain single-shot and legacy-supervisor operations occur only in <code>0x33</code>.</p>
 <p><strong>The peer carriers behave exactly as described, and the tiny counts above are a property of the vantage point, not of the protocol.</strong> Isolating conversations where neither endpoint is the supervisor or a research host leaves <strong>10 frames in this census</strong> — all class <code>0x29</code>, all <code>EBLN_PING</code>, all captured during a power cycle as panels re-established sessions with each other. A supervisor-side tap structurally cannot see a panel↔panel session, so the census measures how often the <em>supervisor</em> participates, not how much peer traffic exists.</p>
-<p><strong>Two taps on a panel's own switch port settle it.</strong> Each shows the panel holding sessions with nine peers continuously, and together they contribute 2,317 trusted P2 frames of ordinary peer traffic against the census's 10. Both carriers are wire-observed there: <code>0x29</code> at 772/1,020 frames and <strong><code>0x2A</code> at 96/130</strong> — so <code>0x2A</code> is now <code>[W]</code>, not an inference from the legacy/modern pairing. Neither carrier is single-opcode: alongside <code>0x4640</code> they carry the replication family (<code>0x4634</code>, <code>0x4633</code>, <code>0x4636</code>) and <code>0x0271 COV_ENABLE</code>. The census figures above are unchanged and remain correct for what they measure; they are counts of <em>supervisor-facing</em> P2. [W]</p>
+<p><strong>Taps on a panel's own switch port settle it.</strong> The corpus now holds five, on <strong>two different panels</strong>, each showing its panel holding sessions with nine peers continuously. Both carriers are wire-observed there — so <code>0x2A</code> is <code>[W]</code>, not an inference from the legacy/modern pairing. Neither carrier is single-opcode: alongside <code>0x4640</code> they carry the replication family (<code>0x4634</code>, <code>0x4633</code>, <code>0x4636</code>) and <code>0x0271 COV_ENABLE</code>. The census figures above are counts of <em>supervisor-facing</em> P2 and remain correct for what they measure. [W]</p>
+<p><strong>Which peer carrier a node uses is a property of the node, not of the link.</strong> Resolving every peer-carrier frame in the corpus to its host pair gives 13 pairs on <code>0x29</code> and 2 on <code>0x2A</code> — and the two <code>0x2A</code> pairs share one endpoint, which appears in <strong>none</strong> of the thirteen <code>0x29</code> pairs:</p>
+<table>
+<thead>
+<tr>
+<th>Class</th>
+<th style="text-align: right;">Host pairs</th>
+<th>Pattern</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0x29</code></td>
+<td style="text-align: right;">13</td>
+<td>every pair among the other nodes</td>
+</tr>
+<tr>
+<td><code>0x2A</code></td>
+<td style="text-align: right;">2</td>
+<td>both involve the <em>same single node</em>, which never appears on <code>0x29</code></td>
+</tr>
+</tbody>
+</table>
+<p>Two independent panels each speak <code>0x29</code> to every peer they have <strong>and <code>0x2A</code> to that one node</strong>. A single vantage could not distinguish this from "one link happens to differ"; two vantages on two devices make it a per-node property. The natural reading is a firmware-generation split — one node on the BLN speaks the other dialect of the pair, and its peers switch carrier to match it. An implementer should therefore select the peer carrier <strong>per peer</strong>, from what that peer presents, and must not assume one carrier BLN-wide. Which of the two is the newer generation is <strong>[OPEN]</strong>: it needs <code>0x010C CABINET_DISPLAY</code> read from the odd node. [W]</p>
 <blockquote>
-<p><strong>Why the numbers changed.</strong> A previous edition of this list gave 433,425 / 43,668 / 43,780 / 7,322 / 2,200 / 296, totalling 530,691 frames. That total is reproducible from neither the deduplicated corpus (349,632) nor a naive count over all 726 capture files including duplicates (910,968), and both counts put <code>0x2A</code> at zero in the supervisor-side set. The figures appear to derive from a capture set that is not the one in the evidence base. They are replaced here with counts that are reproducible from it, under the stated criteria. [W]
-- <strong>Direction byte.</strong> 0x00 request/push (178,266), 0x01 success response (167,055), 0x05 error response (4,311) - summing exactly to the 349,632 trusted frames of 9.5. A success response carries the operation's payload after the routing slots; an error response carries exactly a 2-byte error code and nothing else. [W]
-- <strong>Error tail values (the 2-byte code on a 0x05 response).</strong> <code>0x0003</code> not-found / unrecognized-opcode (4,224×), <code>0x00AC</code> not-supported (49×), <code>0x0E15</code> physical-point-not-commandable (28×), <code>0x0002</code> invalid-operation (4×), <code>0x0E11</code> FLN-invalid-drop-number (2×), <code>0x0E12</code> FLN-device-failed (3×), <code>0x0009</code> already-exists (1×). See §7.2.2; <code>0x0E1x</code> is the FLN band. An opcode the panel does not implement returns <code>0x05 ... 00 03</code>; this is how the defined-but-unimplemented-on-this-firmware opcodes announce themselves on the wire. [W]
+<p><strong>Why the numbers changed.</strong> A previous edition of this list gave 433,425 / 43,668 / 43,780 / 7,322 / 2,200 / 296, totalling 530,691 frames. That total is reproducible from neither the deduplicated corpus (621,268) nor a naive count over all 764 capture files including duplicates (1,326,186), and both counts put <code>0x2A</code> at zero in the supervisor-side set. The likeliest explanation is now a mundane one: the corpus has since been shown to have been <strong>incomplete</strong> — thirty-four captures, 271,636 frames, were recovered into it after this note was first written — so an earlier edition counting a capture set that no longer existed in the evidence tree is exactly what one would expect. The figures here are replaced with counts reproducible from the current corpus under the stated criteria, and a reader who reproduces them should expect them to move again if the corpus grows. [W]
+- <strong>Direction byte.</strong> 0x00 request/push (314,273), 0x01 success response (300,989), 0x05 error response (6,006) - summing exactly to the 621,268 trusted frames of 9.5. A success response carries the operation's payload after the routing slots; an error response carries exactly a 2-byte error code and nothing else. [W]
+- <strong>Error tail values (the 2-byte code on a 0x05 response).</strong> <code>0x0003</code> not-found / unrecognized-opcode (5,805×), <code>0x00AC</code> not-supported (49×), <code>0x0E15</code> physical-point-not-commandable (28×), <code>0x0002</code> invalid-operation (4×), <code>0x0E11</code> FLN-invalid-drop-number (2×), <code>0x0E12</code> FLN-device-failed (3×), <code>0x0009</code> already-exists (1×). See §7.2.2; <code>0x0E1x</code> is the FLN band. An opcode the panel does not implement returns <code>0x05 ... 00 03</code>; this is how the defined-but-unimplemented-on-this-firmware opcodes announce themselves on the wire. [W]
 - <strong>Per-opcode response shapes.</strong> Response lengths vary by opcode and by the addressed object; representative shapes from the census (opcode → success-response sizes): 0x010C → 230/231 B (firmware/identity block, §10.5); 0x0220 (read) → 126/138 B or <code>err 0003</code> when the point is absent; 0x0271 (COV enable) → 96/108 B; 0x0274 (annunciate) → 0 B (acknowledged, no payload); 0x4640 → 40/41/45/47 B at this site (three TLVs + a 16-byte tail; the length follows the <em>sender's</em> node name, not the addressee's — see §7.1); 0x0981 (enumerate points) → 88/115/118 B. The "0 B success" pattern (direction 0x01, empty body) is a bare acknowledgement used by push/command/replication opcodes. [W] <strong>A request may also carry a zero-length body</strong>, and 220 in the corpus do: <code>0x010C</code> (163×), <code>0x4633 EBLN_REPL_NOTIFY</code> (22×), <code>0x0951 DBCHANGE_POINT</code> (11×), <code>0x0100</code> (9×) and the rest of the <code>DBCHANGE</code> family. This is the natural encoding of a <strong>parameterless operation</strong> — the <code>u16</code> opcode is the whole message. An encoder must be willing to emit an ASDU of length zero, and a decoder must accept it as complete rather than truncated: after the two opcode bytes are taken off, <code>total - 2</code> is legitimately 0. [W]</p>
 </blockquote>
 <hr>
@@ -12842,7 +12877,7 @@ programmatically. [D]</p>
 <td><code>AP2_PPCL_DISABLE_LINES</code></td>
 <td>disable a line range</td>
 <td>write</td>
-<td>[S]</td>
+<td><strong>[W]</strong></td>
 </tr>
 <tr>
 <td><code>0x4106</code></td>
@@ -12856,7 +12891,7 @@ programmatically. [D]</p>
 <td><code>AP2_PPCL_PROGRAM_LOG</code></td>
 <td>report program execution log</td>
 <td>read</td>
-<td>[S]</td>
+<td><strong>[W]</strong></td>
 </tr>
 <tr>
 <td><code>0x4108</code></td>
@@ -13170,7 +13205,7 @@ programmatically. [D]</p>
 <td>Zone edit</td>
 <td><code>0x5000</code>–<code>0x5005</code> (<code>AP2_EQS_ZONE_ADD/REMOVE/MODIFY/LOOK/ENABLE/DISABLE</code>)</td>
 <td>create/modify/query an EQS zone</td>
-<td>[S]</td>
+<td>[W] for <code>0x5000</code>/<code>0x5001</code>, else [S]</td>
 </tr>
 <tr>
 <td>Command-table edit</td>
@@ -13200,7 +13235,7 @@ programmatically. [D]</p>
 <td>SSTO setup</td>
 <td><code>0x503A</code>–<code>0x503D</code> (<code>AP2_EQS_SSTO_SETUP_GENERAL/START/STOP/NIGHT</code>)</td>
 <td>configure optimization</td>
-<td>[S]</td>
+<td><strong>[W], all four</strong></td>
 </tr>
 <tr>
 <td>SSTO look/control</td>
@@ -13224,7 +13259,7 @@ programmatically. [D]</p>
 <td>Replication / upload</td>
 <td><code>0x0957</code>–<code>0x0959</code>, <code>0x0967</code>–<code>0x0969</code>, <code>0x0977</code>–<code>0x0979</code>, <code>0x0987</code>–<code>0x0989</code> (<code>AP2_{DBCHANGE,UPL_DEL,UPL_ADDED,UPL_ALL}_EQS_{ZONE,CMD_TABLE,MODE_SCHED}</code>); <code>0x09A4</code>–<code>0x09A7</code> (EQS_OVERRIDE); <code>0x095C</code>–<code>0x095F</code>, <code>0x097C</code>–<code>0x097F</code>, <code>0x098C</code>–<code>0x098F</code> (SSTO_GENERAL/START/STOP/NIGHT)</td>
 <td>DB-change + upload of all EQS sub-objects</td>
-<td>[W for <code>0x0988</code>]</td>
+<td><strong>[W]</strong> for <code>0x0957</code>, <code>0x095C</code>–<code>0x095F</code>, <code>0x0967</code>, <code>0x0977</code>, <code>0x097C</code>–<code>0x097F</code>, <code>0x0988</code>; else [S]</td>
 </tr>
 </tbody>
 </table>
@@ -13264,6 +13299,66 @@ programmatically. [D]</p>
 <p><code>Recharacterization_value</code> (per-member override): <code>member_number</code> (UNSIGNED16) + <code>logical_value</code> (FLOAT_) + <code>point_priority</code> (Point_priority — the §8 ladder) + <code>control_status</code>. So an EQS zone commands each member at an explicit priority, exactly like a PPCL <code>@</code>-command. [S]</p>
 <h3 id="1531-ssto--start-stop-time-optimization">15.3.1 SSTO — start-stop time optimization</h3>
 <p>SSTO is referenced both by PPCL (<code>SSTO</code>, <code>SSTOCOEF</code> statements, §14.3) and by the EQS SSTO opcode family above. SSTO computes an optimized equipment start time (and night-setback strategy) from learned coefficients so the zone reaches occupied setpoint by the scheduled occupancy time. The <code>SSTO_GENERAL/START/STOP/NIGHT</code> four-way split (visible across the setup/look/display opcode rows) corresponds to the four configuration blocks: general parameters, optimized-start, optimized-stop, and night-cycle. [D/S]</p>
+<h4 id="1532-an-eqs-zone-being-created-on-the-wire">15.3.2 An EQS zone being created, on the wire</h4>
+<p>A capture taken simultaneously from both a panel and the supervisor contains a
+complete EQS zone-and-SSTO configuration transaction, which pins the opcode
+taxonomy above to observed behaviour. Read in timestamp order (supervisor
+<code>SUP</code>, panel <code>PNL</code>, times in seconds from the start of the exchange): [W]</p>
+<pre><code>200.49  SUP -&gt; PNL   EQS_ZONE_ADD  (0x5000)          User_profile(SYST) + zone name
+200.51  PNL -&gt; SUP   DBCHANGE_EQS_ZONE (0x0957)      body EMPTY        -&gt; SUP answers OK
+200.51  SUP -&gt; PNL   UPL_DEL_EQS_ZONE  (0x0967)      selector '*', resume &quot;&quot;
+200.52  PNL -&gt; SUP   DBCHANGE_SSTO_GENERAL (0x095C)  body EMPTY        -&gt; SUP answers OK
+   ...                 START / STOP / NIGHT likewise, all empty
+200.64  SUP -&gt; PNL   UPL_ADDED_EQS_ZONE (0x0977)     resume &quot;&quot;         -&gt; OK, record returned
+200.81  SUP -&gt; PNL   UPL_ADDED_EQS_ZONE (0x0977)     resume &lt;last name&gt; -&gt; ERR 0x0003
+200.82  SUP -&gt; PNL   UPL_ADDED_SSTO_GENERAL (0x097C) resume &quot;&quot;         -&gt; OK, record returned
+   ...                 START / STOP / NIGHT likewise
+202.67  SUP -&gt; PNL   EQS_SSTO_SETUP_GENERAL (0x503A) -&gt; OK, zone name echoed
+202.69  SUP -&gt; PNL   EQS_SSTO_SETUP_START/STOP/NIGHT (0x503B/C/D) -&gt; OK each
+</code></pre>
+<p>Three things an implementer needs, each counted rather than read off one
+exchange:</p>
+<p><strong>1. The four-way <code>{GENERAL, START, STOP, NIGHT}</code> split is real on the wire, and
+it repeats across all three tiers</strong> — setup (<code>0x503A</code>–<code>0x503D</code>), database-change
+(<code>0x095C</code>–<code>0x095F</code>), and upload-added (<code>0x097C</code>–<code>0x097F</code>). This is the operand
+model of §9.1.1 in its clearest form: one operation with a four-valued
+record-type parameter folded into the opcode, three times over. [W]</p>
+<p><strong>2. A <code>DBCHANGE_*</code> notification carries no data.</strong> Every <code>DBCHANGE_*</code> frame
+observed — <strong>20 of 20</strong> — has a <strong>zero-length body</strong>, and <strong>20 of 20</strong> travel
+<strong>panel → supervisor</strong>, each answered by the supervisor with a bare success. The
+panel does not push what changed; it pushes <em>that</em> its <code>&lt;section&gt;</code> changed, and
+the supervisor then reads the content back with the matching
+<code>UPL_ADDED_&lt;section&gt;</code>. This is why the <code>DBCHANGE</code>/<code>UPL_ADDED</code> opcode pairs exist
+at all, and it means a client that wants change notification must implement a
+<strong>server</strong> role for these opcodes, not merely a reader. [W]</p>
+<p><strong>3. Enumeration terminates with <code>0x0003</code>.</strong> The <code>UPL_*</code> body is the paging idiom
+of §10.2.3 — a <code>'*'</code> wildcard selector and a resume key. Feeding back the name
+just returned ends the walk:</p>
+<table>
+<thead>
+<tr>
+<th>resume key</th>
+<th>outcome</th>
+<th style="text-align: right;">observed</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>empty TLV (<code>01 00 00</code>)</td>
+<td>success, record returned</td>
+<td style="text-align: right;">20</td>
+</tr>
+<tr>
+<td>the name just returned</td>
+<td><strong>error <code>0x0003</code></strong></td>
+<td style="text-align: right;">20</td>
+</tr>
+</tbody>
+</table>
+<p>Twenty for twenty across five distinct opcodes, without exception. Note that
+<code>0x0003</code> is the <em>object-not-found</em> code of §7.2.2 doing double duty as normal
+control flow: <strong>a client that treats <code>0x0003</code> as a fault will log an error at the
+end of every successful enumeration.</strong> [W]</p>
 <hr>
 <h2 id="16-database-bulk-transfer-on-disk-p2-format-application-catalog--firmware">16. Database, Bulk Transfer, On-Disk (.P2) Format, Application Catalog &amp; Firmware</h2>
 <h3 id="161-bulk-database-transfer">16.1 Bulk database transfer</h3>
