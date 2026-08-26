@@ -10254,6 +10254,22 @@ field with nothing left over — <code>User_profile</code> + <code>Team_search</
 </tr>
 </tbody>
 </table>
+<p><strong>Enum values are sparse. Never index an enum positionally.</strong> Of the 66 value
+enums in the protocol's type system, <strong>18 have gaps</strong> — the value space is not
+<code>0..n-1</code> and a value is not an ordinal. <code>Point_type</code> skips 5 and 8–10 and 16–19;
+<code>Point_priority</code> uses 0, 1, 5, 10, 15, 20, 25, 30, 32, 34, 35 and then a
+BACnet band at 101–116; <code>Node_complete_state</code> runs 2–15 with 4–6 missing. Any
+code that treats an enum value as an index into a list of names — or into the
+arm list of a CHOICE — is correct only up to the first gap and wrong
+thereafter, <strong>silently</strong>, because the wrong name is still a valid name. This is
+not hypothetical: an earlier edition of §10.4.1 read the <code>All_points</code> tag as an
+ordinal and mislabelled seven of eleven point types. [S]</p>
+<p>A related hazard follows from the same sparseness. <strong>Four values are legal in
+both <code>Point_priority</code> and <code>Point_type</code></strong> — <code>0</code>, <code>1</code>, <code>15</code> and <code>20</code> — so a
+decoder that is off by one field between a priority byte and a type byte
+produces a plausible value rather than an error. Where both appear in one
+structure, validate against the field's own enum, not against "is this a
+sensible small integer". [S]</p>
 <p><strong>Enum field widths are not in the structure library, and they have to be.</strong> The
 library gives an ordered field list for all 1,144 structures, but for an enum
 field it gives only a type name — so <strong>field order is fully specified and field
