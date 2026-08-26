@@ -11145,52 +11145,100 @@ frames. The
 descriptors are free text typed into a panel database by a commissioning
 engineer; they cannot have been fitted to a structure ordering they know nothing
 about, which is what makes them an independent check rather than a restatement.</p>
-<p><strong>Every arm opens with the same prologue</strong>, and it is the same shape as the team
-bodies of §16.3: [W]</p>
+<p><strong>The arms are named, and the "prologue" is <code>Point_base</code>.</strong> The structure
+library types each arm <em>field</em> in lowercase with a trailing underscore — <code>ldi_</code>,
+<code>lao_</code> — and names the <em>structure</em> in upper case with a <code>_type</code> suffix:</p>
+<pre><code>ldi_ -&gt; LDI_type    lai_ -&gt; LAI_type    l2sl_ -&gt; L2SL_type    lenum_ -&gt; LENUM_type   …
+</code></pre>
+<p>A resolver matching the field type literally will not find them and will report
+the point arms as undefined. They are not. And what precedes the arm is
+<code>Point_base</code>, common to every point: [S][W]</p>
 <table>
 <thead>
 <tr>
 <th>Field</th>
 <th>Type</th>
-<th>Notes</th>
+<th>Wire</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>tag_</code></td>
-<td>u8</td>
-<td>arm selector, 1-based</td>
+<td><code>point_type</code></td>
+<td><code>Point_type</code></td>
+<td>1 byte — the tag above</td>
 </tr>
 <tr>
 <td><code>nrOfnames</code></td>
 <td>u16 BE</td>
-<td><strong>2</strong> in all 71 observed bodies</td>
+<td>2 in every observed body</td>
 </tr>
 <tr>
-<td><code>names[0]</code></td>
-<td><code>Name_response</code></td>
-<td><code>name_space = 0</code> (system)</td>
+<td><code>names[]</code></td>
+<td><code>Name_response</code> × n</td>
+<td>system view, then user view</td>
 </tr>
 <tr>
-<td><code>names[1]</code></td>
-<td><code>Name_response</code></td>
-<td><code>name_space = 1</code> (user)</td>
-</tr>
-<tr>
-<td><code>descriptor</code></td>
+<td><code>point_descriptor</code></td>
 <td><code>TEXT_</code></td>
-<td>free text</td>
+<td>free text (declared empty in the library; a TLV on the wire)</td>
 </tr>
 <tr>
-<td>…</td>
-<td></td>
-<td>arm-specific fields follow</td>
+<td><code>access_class</code></td>
+<td><code>BITSTRING32</code></td>
+<td>4</td>
+</tr>
+<tr>
+<td><code>out_of_service</code>, <code>failed</code></td>
+<td><code>BOOLEAN_</code></td>
+<td>1 each</td>
+</tr>
+<tr>
+<td><code>control_status</code></td>
+<td>enum</td>
+<td>1</td>
+</tr>
+<tr>
+<td><strong><code>point_value</code></strong></td>
+<td><code>Point_value</code></td>
+<td><strong>4 — IEEE-754 f32</strong></td>
+</tr>
+<tr>
+<td><code>point_priority</code></td>
+<td><code>Point_priority</code></td>
+<td>1 — the §8.2 ladder</td>
+</tr>
+<tr>
+<td><code>point_totalizer</code></td>
+<td>CHOICE</td>
+<td>tag <code>0</code> = <code>disabled</code>, 0-byte arm</td>
+</tr>
+<tr>
+<td><code>alarm_object</code></td>
+<td>CHOICE</td>
+<td>tag <code>0</code> = <code>no_alarming</code>, 0-byte arm</td>
 </tr>
 </tbody>
 </table>
-<p>The two names are the system and user views of one point. A decoder can
-therefore read the <strong>point type and identity out of any point-bearing body</strong>
-without knowing the arm's type-specific tail.</p>
+<p>then the arm's own fields, then <code>Physical_address_Lenum</code> and
+<code>Point_extension2</code> where the enclosing response carries them.</p>
+<p><strong>Worked example — an enumerated point, every byte accounted for.</strong> <code>LENUM_type</code>
+is a single <code>state_text_table</code>, so this is the whole tail after the descriptor,
+fixed at 20 bytes across 139 responses: [W]</p>
+<pre><code>00 00 00 00   access_class
+00 00 00      out_of_service, failed, control_status
+3F 80 00 00   point_value  = 1.0            &lt;- f32
+23            point_priority = 0x23 = OPER  &lt;- the ladder of 8.2
+00            point_totalizer  tag 0 = disabled
+00            alarm_object     tag 0 = no_alarming
+FC 13         state_text_table              &lt;- LENUM_type
+01            Physical_address_Lenum tag 1 = present
+01 00 00      present_
+              Point_extension2 = 0 bytes
+</code></pre>
+<p>An enumerated point's value arrives as an f32 of <code>0.0</code>/<code>1.0</code>/<code>2.0</code>; the priority
+byte reads off the command ladder; and the two bytes before the address are the
+state-text-table id. A decoder can therefore read <strong>point type, identity, value,
+priority, alarm state and text-table</strong> out of any point-bearing body.</p>
 <p><strong>The rule generalises, and it is the safe way to read any CHOICE here.</strong> A
 <code>tag_</code> is an enum value drawn from that structure's own enum type — not an
 ordinal. <code>Eqs_start_where</code> makes the same point from the other direction: its
@@ -11198,11 +11246,17 @@ tag <code>0</code> selects <code>beginning : NULL_</code> and tag <code>1</code>
 which <em>is</em> positional, because that particular enum happens to start at zero and
 skip nothing. Reading either structure by position alone gets one of them wrong.
 [S][W]</p>
-<p><strong>What is still open.</strong> The fields <em>after</em> the descriptor differ per arm, and
-the eleven arm types are referenced 75 times in the structure library and
-defined nowhere in it — so the tails are <strong>[OPEN]</strong>. Only three arms are
-exercised at this site; the other eight tag values are read from the enum, which
-is definitional, but their <em>bodies</em> have never been observed. [S]</p>
+<p><strong>What is still open.</strong> Four leaf types inside the <em>analog</em> arms remain
+unpinned, and they are what stops a point read from decoding end to end:
+<code>Representation</code> (an enum — <code>float_repr</code>, <code>integer_repr</code>, <code>time_of_day_repr</code>,
+<code>date_repr</code>, <code>date_time_repr</code> — of unstated width), <code>cov_limit_</code> inside
+<code>Analog_units</code>, <code>Proof_status</code>, and <code>real_addr_</code>. The last of those matters less
+than it looks: <code>Physical_address_*</code> is a CHOICE whose <strong><code>virtual_addr</code> arm is
+<code>NULL_</code></strong>, so a software point costs one byte for its address and only
+physically-addressed points need <code>real_addr_</code>. <strong>[OPEN]</strong> [S]</p>
+<p>Six of the thirteen arms are wire-observed (<code>ldi</code>, <code>ldo</code>, <code>lai</code>, <code>lao</code>, <code>l2sl</code>,
+<code>lenum</code>); the remaining tag values are definitional from the enum, but their
+bodies have not been seen here. [S]</p>
 <h4 id="1042-do-not-read-the-supervisors-point-object-as-the-wire-model">10.4.2 Do not read the supervisor's point object as the wire model</h4>
 <p>The supervisor keeps its own logical-point class, and it is much larger than
 <code>Point_base</code> — on the order of 200 accessors against the twelve fields above.
