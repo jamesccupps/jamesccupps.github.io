@@ -11047,9 +11047,50 @@ while the wire carries it. The EQS schedule set and trend delete remain
 <pre><code>All_points :  tag_ : UNSIGNED_8
               ldi_  ldo_  lai_  lao_  l2sl_  looap_  lpaci_  l2sp_  looal_  lfssl_  lfssp_
 </code></pre>
-<p><strong><code>tag_</code> selects the arm by 1-based position in that list</strong>, so <code>1 = ldi</code>,
-<code>3 = lai</code>, <code>6 = looap</code>, and so on. That is confirmed by an authority independent
-of the structure definition — the <strong>point descriptors</strong>, free text written by
+<p><strong><code>tag_</code> is a <code>Point_type</code> enum value, not a positional index.</strong> This
+distinction is not cosmetic: the enum <strong>skips 5 and jumps from 7 to 11</strong>, so
+counting arms and reading the enum agree for the first four values and diverge
+for every one after. [S][W]</p>
+<table>
+<thead>
+<tr>
+<th><code>tag_</code></th>
+<th>1</th>
+<th>2</th>
+<th>3</th>
+<th>4</th>
+<th>6</th>
+<th>7</th>
+<th>11</th>
+<th>12</th>
+<th>13</th>
+<th>14</th>
+<th>15</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>arm</td>
+<td><code>ldi</code></td>
+<td><code>ldo</code></td>
+<td><code>lai</code></td>
+<td><code>lao</code></td>
+<td><code>l2sl</code></td>
+<td><code>looap</code></td>
+<td><code>lpaci</code></td>
+<td><code>l2sp</code></td>
+<td><code>looal</code></td>
+<td><code>lfssl</code></td>
+<td><code>lfssp</code></td>
+</tr>
+</tbody>
+</table>
+<p>A decoder that indexes the declared arm list positionally will read the first
+four point types correctly and <strong>mislabel the other seven</strong> — silently, because
+each arm still parses, just as the wrong type. The arm list is written in enum
+order, which is exactly what makes the mistake easy.</p>
+<p>The mapping is corroborated by an authority independent of both the structure
+definition and the enum — the <strong>point descriptors</strong>, free text written by
 whoever commissioned the site. Across all 71 <code>0x0508 ALARM_PRINT</code> request
 bodies: [W]</p>
 <table>
@@ -11076,14 +11117,15 @@ bodies: [W]</p>
 </tr>
 <tr>
 <td><code>0x06</code></td>
-<td><code>looap</code> — on/off/auto, pulsed</td>
+<td><code>l2sl</code> — logical two-state, latched</td>
 <td style="text-align: right;">10</td>
-<td>supply and exhaust <strong>fan command</strong> points, without exception</td>
+<td>supply and exhaust <strong>fan start/stop</strong> points, without exception</td>
 </tr>
 </tbody>
 </table>
 <p>Alarms and statuses under the digital-input arm, temperatures under the
-analog-input arm, fans under the on/off/auto arm, across all 71 frames. The
+analog-input arm, fan start/stop under the two-state latched arm, across all 71
+frames. The
 descriptors are free text typed into a panel database by a commissioning
 engineer; they cannot have been fitted to a structure ordering they know nothing
 about, which is what makes them an independent check rather than a restatement.</p>
@@ -11133,12 +11175,18 @@ bodies of §16.3: [W]</p>
 <p>The two names are the system and user views of one point. A decoder can
 therefore read the <strong>point type and identity out of any point-bearing body</strong>
 without knowing the arm's type-specific tail.</p>
+<p><strong>The rule generalises, and it is the safe way to read any CHOICE here.</strong> A
+<code>tag_</code> is an enum value drawn from that structure's own enum type — not an
+ordinal. <code>Eqs_start_where</code> makes the same point from the other direction: its
+tag <code>0</code> selects <code>beginning : NULL_</code> and tag <code>1</code> selects <code>last_mode : SHORT_</code>,
+which <em>is</em> positional, because that particular enum happens to start at zero and
+skip nothing. Reading either structure by position alone gets one of them wrong.
+[S][W]</p>
 <p><strong>What is still open.</strong> The fields <em>after</em> the descriptor differ per arm, and
 the eleven arm types are referenced 75 times in the structure library and
-defined nowhere in it — so the tails are <strong>[OPEN]</strong>. And only three of the
-eleven arms are exercised at this site: the tag values for <code>ldo</code>, <code>lao</code>, <code>l2sl</code>,
-<code>lpaci</code>, <code>l2sp</code>, <code>looal</code>, <code>lfssl</code> and <code>lfssp</code> follow from the declared order by
-the same rule but are <strong>inferred, not measured</strong>. [I]</p>
+defined nowhere in it — so the tails are <strong>[OPEN]</strong>. Only three arms are
+exercised at this site; the other eight tag values are read from the enum, which
+is definitional, but their <em>bodies</em> have never been observed. [S]</p>
 <h4 id="1042-do-not-read-the-supervisors-point-object-as-the-wire-model">10.4.2 Do not read the supervisor's point object as the wire model</h4>
 <p>The supervisor keeps its own logical-point class, and it is much larger than
 <code>Point_base</code> — on the order of 200 accessors against the twelve fields above.
