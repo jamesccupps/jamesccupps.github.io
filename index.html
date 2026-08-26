@@ -768,7 +768,7 @@
 <li><strong>Peer model.</strong> On the backbone (the BLN, also called the ALN) every member — supervisor and panel alike — is an equal node, and any node may originate traffic. "Request" and "response" describe the role of a <em>frame</em>, not of a node.</li>
 <li><strong>Frame.</strong> Big-endian throughout: <code>u32 total_len | u32 message_type (low byte = message class) | u32 sequence | u8 direction | four NUL-terminated ASCII routing slots [BLN, dst-node, BLN, src-node] | (request/push frames only) u16 opcode | body</code>. The opcode is present only on <code>direction == 0x00</code> frames; a response is matched to its request by the echoed sequence number.</li>
 <li><strong>Dialect.</strong> The message class is a legacy/modern pair fixed by a panel's firmware generation — data <code>0x33</code>/<code>0x34</code>, second channel <code>0x2E</code>/<code>0x2F</code>, peer carriers <code>0x29</code>/<code>0x2A</code> — not by direction. A client reads a panel's firmware once (via <code>CABINET_DISPLAY</code>, opcode <code>0x010C</code>) and selects the dialect and the string encoding (ASCII vs RAD-50) from it; there is no on-wire negotiation.</li>
-<li><strong>Operations.</strong> A 2-byte function code (the "AP2 function code") selects the operation; about 630 are defined and <strong>125</strong> are observed on the wire in the reference corpus (§9.5). The high-volume operations are the COV value push (<code>0x0274</code>), the liveness/identity heartbeat (<code>0x4640</code>), point command and read (<code>0x0240</code> / <code>0x0220</code>), COV subscribe/unsubscribe (<code>0x0271</code> / <code>0x0273</code>), and the database upload/replication family.</li>
+<li><strong>Operations.</strong> A 2-byte function code (the "AP2 function code") selects the operation; about 630 are defined and <strong>127</strong> are observed on the wire in the reference corpus (§9.5). The high-volume operations are the COV value push (<code>0x0274</code>), the liveness/identity heartbeat (<code>0x4640</code>), point command and read (<code>0x0240</code> / <code>0x0220</code>), COV subscribe/unsubscribe (<code>0x0271</code> / <code>0x0273</code>), and the database upload/replication family.</li>
 <li><strong>Encoding.</strong> Strings are length-prefixed TLVs (<code>01 00 &lt;len&gt; &lt;ascii&gt;</code>); analog values are IEEE-754 single-precision big-endian floats; command priority rides a scope tag. Bodies are ordered, positionally-typed field structures (ASDUs).</li>
 <li><strong>Control logic.</strong> Panels run a resident, line-numbered control language — Powers Process Control Language (PPCL); the supervisor reads, edits, and uploads it over P2 but never executes it (§14).</li>
 <li><strong>Security.</strong> P2 carries no authentication and no encryption; the only admission gate is a matching BLN name. Any party with network reachability and the BLN name can read points, command points, and reconfigure panels. §17 covers the implications and an owner-operator hardening posture.</li>
@@ -1935,7 +1935,24 @@ at 720–840 panels depending on the setting, which is far above the
 liveness-addressable node ceiling of §14.2 — the cap is not the binding limit on
 BLN size.</p>
 <h3 id="51-eping--ethernet-bln-availability-probe-liveness-not-a-beacon">5.1 EPing — Ethernet-BLN availability probe (liveness, not a beacon)</h3>
-<p>The Ethernet BLN's availability/liveness primitive is <strong>EPing</strong> (Ethernet Ping). On the wire EPing is the <strong>AP2 function code <code>0x4640</code> (<code>AP2_EBLN_PING</code>)</strong> [S], and <code>0x4640</code> is one of the two highest-frequency opcodes in the capture corpus (second only to the COV value-push <code>0x0274</code>) — the steady ~10-second per-peer heartbeat, present in the tens of thousands of frames in any multi-hour supervisor capture [W]. <strong>That cadence is configuration, not protocol.</strong> The EPing interval is a per-device supervisor setting whose documented <em>minimum</em> is 10 seconds, so an observed ~10 s means the site is sitting at the floor; other installations may ping far less often. A client MUST NOT hard-code the interval, MUST NOT infer a peer is dead from a single missed interval, and MUST NOT use the observed cadence to fingerprint a firmware or product generation. [D] The same <code>0x4640</code> opcode also serves as the session establish / IdentifyBlock exchange and the in-session keepalive (see §6, §7): establishing presence and proving continued liveness are the same operation, which is why this one opcode is so prominent in the traffic. <code>0x4640</code> is observed under every message class seen anywhere — <code>0x29</code>, <code>0x2A</code>, <code>0x2E</code>, <code>0x2F</code>, <code>0x33</code>, <code>0x34</code> — and on both observed ports <code>5033/5034</code>. (<code>0x2A</code> carries it only in panel↔panel sessions, so it appears in panel-side captures and not in the supervisor-side census; see §9.7.) Its success-response <strong>body length is variable — <code>35 + node-name length</code></strong> (so 40 B for a 5-char name, 41 B for 6, 45 B for 10, 47 B for 12 — all observed); a parser MUST treat the length as variable, not as one of two fixed sizes. <strong>Whether a ping is answered depends on which side opened the session.</strong> Every
+<p>The Ethernet BLN's availability/liveness primitive is <strong>EPing</strong> (Ethernet Ping). On the wire EPing is the <strong>AP2 function code <code>0x4640</code> (<code>AP2_EBLN_PING</code>)</strong> [S], and <code>0x4640</code> is <strong>the single most frequent opcode in the capture corpus</strong> (78,623 requests against 53,101 for the COV value-push <code>0x0274</code>). That ranking inverted when panel-side captures were added: measured from the supervisor alone <code>0x0274</code> leads, because a supervisor sees COV pushes and point reads while a panel mostly sees the mesh keeping itself alive — the steady ~10-second per-peer heartbeat, present in the tens of thousands of frames in any multi-hour supervisor capture [W]. <strong>That cadence is configuration, not protocol.</strong> The EPing interval is a per-device supervisor setting whose documented <em>minimum</em> is 10 seconds, so an observed ~10 s means the site is sitting at the floor; other installations may ping far less often. A client MUST NOT hard-code the interval, MUST NOT infer a peer is dead from a single missed interval, and MUST NOT use the observed cadence to fingerprint a firmware or product generation. [D]</p>
+<p><strong>Measured, and it is remarkably tight.</strong> Over 16.7 continuous hours on a
+panel's own switch port, each of its eight panel↔panel pairs exchanged
+<strong>6,008–6,010 pings at a median interval of 10.0 s and a maximum of 10.5 s</strong> —
+essentially no jitter, sitting exactly on the configured floor. Across the whole
+window no peer was silent for longer than a single interval, so a peer that
+misses two consecutive pings is genuinely unusual and is a reasonable liveness
+threshold at a site configured this way. <strong>The supervisor is on its own
+schedule</strong>, however: the panel↔supervisor pair carried 8,403 pings at a median
+of 8.8 s over the same window — about 40% more traffic and a shorter interval
+than any peer pair. Liveness cadence is therefore per-endpoint, and a client
+must derive it by observation per peer rather than assuming one value network-wide. [W] The same <code>0x4640</code> opcode also serves as the session establish / IdentifyBlock exchange and the in-session keepalive (see §6, §7): establishing presence and proving continued liveness are the same operation, which is why this one opcode is so prominent in the traffic. <code>0x4640</code> is observed under every message class seen anywhere — <code>0x29</code>, <code>0x2A</code>, <code>0x2E</code>, <code>0x2F</code>, <code>0x33</code>, <code>0x34</code> — and on both observed ports <code>5033/5034</code>. (<code>0x2A</code> carries it only in panel↔panel sessions, so it appears in panel-side captures and not in the supervisor-side census; see §9.7.) Its body is the <strong><code>eBLN_Node</code> block</strong> (§10.6) and its length is variable. <strong>Do not compute it arithmetically.</strong> An earlier edition of this document gave <code>35 + node-name length</code>, which reproduces every observation in the corpus and is still wrong to publish: the corpus is a single site, and that 35 is <code>3 (name TLV header) + 6 (site_name TLV) + 10 (bln_name TLV) + 16 (fixed tail)</code> — the site's own site-name and BLN-name lengths baked into a constant. At a site whose site or BLN name differs in length the figure differs, and an implementation using it would mis-frame every ping.</p>
+<p><strong>The correct rule.</strong> Parse the three leading TLVs, then take a 16-byte tail. Where a length must be computed rather than parsed — sizing a buffer, or validating a frame before decoding it — the general form is:</p>
+<pre><code>body_length = 25 + len(node_name) + len(site_name) + len(bln_name)
+
+  25 = 3 TLV headers (3 bytes each) + the 16-byte fixed tail
+</code></pre>
+<p>All three name lengths are site and node configuration; only the 25 is a protocol constant. Checked against every distinct body size observed: <code>25+5+3+7 = 40</code>, <code>25+6+3+7 = 41</code>, <code>25+15+3+7 = 50</code> — the last being a supervisor identity of 15 characters. Substituting this site's <code>site_name</code> (3) and <code>bln_name</code> (7) collapses it to the old <code>35 + node-name length</code>, which is how the site-specific terms went unnoticed across 349,632 single-site frames. [W] <strong>Whether a ping is answered depends on which side opened the session.</strong> Every
 <em>supervisor-initiated</em> <code>0x4640</code> in the corpus drew a reply. Panel-initiated pings
 into a supervisor's <code>5033</code> may not: in a 25-minute capture at one supervisor, nine
 panels each opened a fresh TCP connection to its <code>5033</code> every <strong>14.0 seconds</strong>,
@@ -2790,12 +2807,12 @@ Exactly three values are defined. [W]</p>
 <tr>
 <td><code>0x05</code></td>
 <td>error response</td>
-<td>exactly 2 bytes — a u16 BE error code (§7.2); <strong>no opcode</strong>. Validated across the corpus: all <strong>4,083</strong> error responses have a 2-byte body, with no exceptions.</td>
+<td>exactly 2 bytes — a u16 BE error code (§7.2); <strong>no opcode</strong>. Validated across the corpus: all <strong>4,311</strong> error responses have a 2-byte body, with no exceptions.</td>
 <td>[W]</td>
 </tr>
 </tbody>
 </table>
-<p>Observed corpus distribution: <code>0x00</code> ≈ 262,142; <code>0x01</code> ≈ 261,466; <code>0x05</code> ≈ 7,103. [W]</p>
+<p>Observed corpus distribution: <code>0x00</code> 178,266; <code>0x01</code> 167,055; <code>0x05</code> 4,311 (summing to 349,632). [W]</p>
 <p>The governing rule is: <strong>the opcode field is present if and only if <code>dir == 0x00</code>.</strong> A response of
 either kind carries no opcode. An unsolicited push — for example a change-of-value report (opcode
 <code>0x0274</code>, <code>COV_ANNUNCIATE</code>) or an <code>0x4640</code> heartbeat — uses <code>dir == 0x00</code> exactly like a request,
@@ -2826,7 +2843,7 @@ are not <code>[BLN, dst, BLN, src]</code> but <strong>two <code>(trunk, node)</c
 with the trunk it lives on. The duplication is then not redundancy at all; it is one field per pair,
 and both pairs happen to name the same trunk on a single-BLN network.</p>
 <p>That is a <strong>falsifiable prediction</strong>: on a frame that crosses between two BLNs, slots 0 and 2 should
-carry <strong>different</strong> trunk names. The present corpus cannot test it — across <strong>206,050</strong> trusted
+carry <strong>different</strong> trunk names. The present corpus cannot test it — across <strong>349,632</strong> trusted
 four-slot frames, slots 0 and 2 are identical in <strong>206,045</strong>, and every one of the five exceptions
 is a deliberately malformed research probe rather than production traffic. Every capture to hand is
 single-BLN, so the pair reading is <strong>untested, not confirmed</strong>. A capture taken where two BLNs
@@ -3138,7 +3155,7 @@ the <strong>wire</strong> carries the AP2 function code only. [S]</p>
 </table>
 <p>The stack-selector layer's read primitives confirm the split: <code>ReadConfirmedInd</code> (confirmed
 request/response) versus <code>ReadEventInd</code> (asynchronous event indication). [S] The dominant Event-class
-transaction is the change-of-value push <code>0x0274</code> (<code>COV_ANNUNCIATE</code>): 48,393 request frames in the corpus under the criteria of §9.5 —
+transaction is the change-of-value push <code>0x0274</code> (<code>COV_ANNUNCIATE</code>): 53,101 request frames in the corpus under the criteria of §9.5 —
 almost all acknowledged with a 0-byte success, a small minority unanswered. [W] COV itself is a
 register/cancel <strong>subscription</strong> — a peer arms COV with <code>COV_ENABLE</code> (<code>0x0271</code>) / disarms with
 <code>COV_DISABLE</code> (<code>0x0273</code>), after which the panel emits <code>COV_ANNUNCIATE</code> events. [W][S] The
@@ -3167,7 +3184,7 @@ opcode (§6.4).</p>
 <p><em>Worked error example.</em> A <code>TREND_DATA_DISPLAY</code> (<code>0x0295</code>) request naming a point that has no trend
   log returns <code>dir == 0x05</code> with the 2-byte tail <code>0x0003</code> ("not found", §7.2.2) — the same
   not-found code returned for any named object that does not exist. [W]</p>
-<p><em>The whole error vocabulary the corpus exercises.</em> Pairing all <strong>4,083</strong> error responses back to
+<p><em>The whole error vocabulary the corpus exercises.</em> Pairing all <strong>4,311</strong> error responses back to
   their request by sequence gives seven codes and no unknowns — every one is already named in the
   error table of §7.2.2, which is the first time that table has been checked against traffic rather
   than against the type system: [W]</p>
@@ -3348,9 +3365,9 @@ carries a numeric code (§7.2.2) that maps onto them. [S]</p>
 </tbody>
 </table>
 <h4 id="722-observed-wire-error-codes">7.2.2 Observed wire error codes</h4>
-<p>These 2-byte codes appear as the <code>dir == 0x05</code> error tail in the corpus. Distribution across 530,715
-P2 frames (7,103 of which are error responses): <code>0x0003</code> ≈ 6,860; <code>0x00AC</code> ≈ 163; <code>0x0E15</code> ≈ 40;
-<code>0x0002</code> ≈ 30; <code>0x0E11</code> ≈ 6; <code>0x0E12</code> ≈ 3; <code>0x0009</code> ≈ 1. [W]</p>
+<p>These 2-byte codes appear as the <code>dir == 0x05</code> error tail in the corpus. Distribution across the
+349,632 trusted P2 frames, of which 4,311 are error responses: <code>0x0003</code> 4,224; <code>0x00AC</code> 49;
+<code>0x0E15</code> 28; <code>0x0002</code> 4; <code>0x0E12</code> 3; <code>0x0E11</code> 2; <code>0x0009</code> 1 - summing exactly to 4,311. <strong><code>not_found</code> is 98% of all errors.</strong> [W]</p>
 <table>
 <thead>
 <tr>
@@ -4063,7 +4080,7 @@ char:   &quot; ABCDEFGHIJKLMNOPQRSTUVWXYZ$.?0123456789&quot;
 <h3 id="91-the-ap2-function-code">9.1 The AP2 function code</h3>
 <p>The AP2 function code is a 16-bit big-endian value that sits on the wire immediately after the fourth NUL-terminated routing slot, in <code>direction == 0x00</code> frames (requests and panel-originated async pushes). It is the dispatch key the panel exec (CEC) uses to select the operation; the bytes following it are the operation's ASDU body (§10). The opcode is meaningful only in <code>direction == 0x00</code> frames — reading the post-slot bytes off a <code>0x01</code> success or <code>0x05</code> error response yields response-payload bytes, not an opcode, and fabricates phantom values (see §6.4). [W][S]</p>
 <p>The complete command vocabulary of the protocol is defined by the vendor's <code>AP2_Function_Code</code> enumeration: <strong>641 named members across 630 distinct opcode values</strong> (a handful of values carry two names — historical aliases such as <code>AP2_DUMMY_CMD</code>/<code>AP2_REV_STRING</code> at 0x0100, or the <code>CONTROLLER</code>/<code>TEC</code> doublets). The enum's numeric values <strong>are</strong> the wire opcodes: cross-checking every opcode seen on the wire against the enum, all matched exactly. [S]</p>
-<p>Of the 630 defined values, <strong>125 are observed in the capture corpus</strong> (206,050 trusted P2 frames across the 85 captures that carry P2; see §9.5 for the counting criteria and for why an earlier figure of 135 was withdrawn); the remaining 505 are defined-but-unobserved (overwhelmingly configuration, database-management, upload, and BACnet/LON-integration operations that a passive supervisor↔panel capture does not exercise). Every defined opcode is enumerable from the catalog below; "not observed" means absent from this corpus, not undefined. The corpus combines passive supervisor↔panel and panel↔panel site captures with a smaller set of active read/enumeration test captures; opcode counts are corpus frequencies, not a claim about steady-state operation. [W][S]</p>
+<p>Of the 630 defined values, <strong>125 are observed in the capture corpus</strong> (349,632 trusted P2 frames across the 89 captures that carry P2; see §9.5 for the counting criteria and for why an earlier figure of 135 was withdrawn); the remaining 505 are defined-but-unobserved (overwhelmingly configuration, database-management, upload, and BACnet/LON-integration operations that a passive supervisor↔panel capture does not exercise). Every defined opcode is enumerable from the catalog below; "not observed" means absent from this corpus, not undefined. The corpus combines passive supervisor↔panel and panel↔panel site captures with a smaller set of active read/enumeration test captures; opcode counts are corpus frequencies, not a claim about steady-state operation. [W][S]</p>
 <p>Rows that were seen on the wire are tagged <strong>[W]</strong> and carry their frame count; defined-but-unobserved rows are tagged <strong>[S]</strong> (struct/metadata-derived from the vendor enum — definitional truth). Wire counts in the catalog come from the corpus census; per-opcode response shapes, error tails, and message-class distributions are in §9.7.</p>
 <blockquote>
 <p><strong>Vantage point bounds every count in this section.</strong> Almost all of the corpus was captured at the supervisor, and a supervisor-side tap structurally cannot see a session between two panels — P2 is unicast TCP, so the switch shows that tap only the conversations the supervisor is in. Taps placed on a single panel's own switch port show it holding P2 sessions with <strong>nine peers</strong>, of which the supervisor is one. Read the counts here as frequencies in <em>supervisor-facing</em> P2, and read a zero as "the supervisor does not invoke this," never as "panels do not exchange this." The message-class figures in §9.7 make the difference concrete: class <code>0x2A</code> is absent from the supervisor-side census and plainly present from a panel-side one. [W]</p>
@@ -4396,7 +4413,7 @@ behaviour, and should stay that way.</p>
 <p><strong>EBLN panel reconfiguration.</strong> <code>AP2_EBLN_FP_NAME_SET</code> (0x4620), <code>AP2_EBLN_FP_IP_CONFIGURE</code> (0x4621), <code>AP2_EBLN_FP_SITE_NAME_SET</code> (0x462A), <code>AP2_EBLN_FP_BLN_NAME_SET</code> (0x462B), <code>AP2_EBLN_FP_MULTICAST_CONFIGURE</code> (0x462C), <code>AP2_EBLN_HOSTTABLE_ENTRY_ADD</code>/<code>REMOVE</code> (0x462D/0x462E), <code>AP2_EBLN_MAC_ADDRESS_SET</code> (0x4638), <code>AP2_EBLN_TELNET_ENABLE</code>/<code>DISABLE</code> (0x4644/0x4645). These rewrite the panel's network identity (IP, MAC, names) and management surface. [S]</p>
 <p><strong>Point command (write).</strong> <code>AP2_POINT_CMD_VALUE</code> (0x0240) and <code>AP2_POINT_CMD_PRIORITY</code> (0x0241) command a live point's value/priority — the primary actuation write path (§10.3). High wire volume (32,044 / 101) confirms these as the routine supervisor write opcodes. The full <code>AP2_POINT_CMD_*</code> band (0x0240–0x024E) includes alarm-state forcing, limit setting, totalizer/trouble commands, and <code>RELEASE</code>. [W]</p>
 <p><strong>Database / flash / memory / license / COLBAS.</strong> <code>AP2_RESTORE_FLASH_DBASE</code> (0x5331, overwrites the panel flash DB), <code>AP2_CLEAR_FLASH_DBASE</code> (0x5332, erases it), <code>AP2_CABINET_MEMORY_MODIFY</code> (0x012F, direct memory write), <code>AP2_LICENSE_MANAGER_DELETE</code>/<code>DELETE_ALL</code> (0x0111/0x0112), <code>AP2_COLBAS_WRITE</code>/<code>ABORT</code> (0x4A03/0x4A04). <code>AP2_BACKUP_FLASH_DBASE</code> (0x5330) is a read/export and is <strong>not</strong> destructive. [S]</p>
-<p><em>Correction of record (COV pair).</em> <code>AP2_COV_ENABLE</code> (0x0271) and <code>AP2_COV_DISABLE</code> (0x0273) are the change-of-value subscription enable/disable pair — <strong>not</strong> "ReadExtended"/"PointExistenceProbe" as an earlier behavioral reading labeled them. <code>AP2_COV_ANNUNCIATE</code> (0x0274) is the actual COV report (the highest-volume opcode in the corpus, 48,393 request frames under the §9.5 criteria), and <code>AP2_COV_DELETE_STUB</code> (0x0272) tears down a subscription stub. These are not destructive but are corrected here because the wrong names propagated into earlier notes. [W][S]</p>
+<p><em>Correction of record (COV pair).</em> <code>AP2_COV_ENABLE</code> (0x0271) and <code>AP2_COV_DISABLE</code> (0x0273) are the change-of-value subscription enable/disable pair — <strong>not</strong> "ReadExtended"/"PointExistenceProbe" as an earlier behavioral reading labeled them. <code>AP2_COV_ANNUNCIATE</code> (0x0274) is the actual COV report (the highest-volume opcode in the corpus, 53,101 request frames under the §9.5 criteria), and <code>AP2_COV_DELETE_STUB</code> (0x0272) tears down a subscription stub. These are not destructive but are corrected here because the wrong names propagated into earlier notes. [W][S]</p>
 <h3 id="94-family-overview">9.4 Family overview</h3>
 <ul>
 <li><strong>NODE/STATE</strong> (0x0030–0x0035, 0x5301/0x5304, logger-state) — BLN global data get/set, remote node check, node-state get/set, FLN/MEC-expansion topology query. The destructive members are the set-node-state pair.</li>
@@ -4491,7 +4508,7 @@ against 315 control</strong>. The real mapping scored worse than its own control
 Whatever the panel writes the number into, <strong>it is not a P2 frame</strong>. [W]</p>
 <p><em>Coverage, since a negative is only as good as its denominator.</em> The corpus holds
 726 capture files, 233 distinct by content, of which <strong>85 carry P2 and hold
-206,050 trusted frames between them</strong> — and all 85 were in scope, 100% of frames.
+349,632 trusted frames between them</strong> — and all 85 were in scope, 100% of frames.
 Both ports are represented: 126,832 frames on 5033 and 79,229 on 5034, so the
 result is not an artifact of testing only the supervisor-facing channel. [W]</p>
 <p><strong>It is a two-stage internal operation number.</strong> The default table maps an
@@ -4709,7 +4726,7 @@ later addition to the protocol.</strong> [F][W]</p>
 another: these images cannot name it, and its absence from them is evidence of
 the block's age rather than of its non-existence.</p>
 <h3 id="95-the-catalog">9.5 The catalog</h3>
-<p>The catalog below is generated by joining the vendor <code>AP2_Function_Code</code> enum (the 630 distinct opcode values) with the corpus census. A recount under stated criteria — trusted frames only, <code>dir == 0x00</code> only, content-deduplicated captures — gives <strong>125 distinct wire-observed function codes across 104,752 request/push frames</strong>, of which 112 now carry a name. (Three further values appear only in frames the parser marked untrusted after a resynchronisation: <code>0x0631</code>, <code>0x1826</code>, <code>0x2226</code>. <code>0x1826</code> is precisely the fictitious opcode a mid-record resync manufactures — a TLV length <code>0x18</code> followed by ASCII <code>&amp;</code> — and is the reason the trusted flag exists. An earlier edition cited 135 wire-observed values; that figure is not reproducible from the current evidence base under any definition tried, and 125 replaces it.) Columns: hex opcode, name(s), observed wire count (or <code>-</code>), notes (destructive flag where applicable), and evidence tag ([W] wire-observed, [S] enum-defined). Within each family, rows are sorted by opcode value. Sixteen wire values do <strong>not</strong> appear in the catalog, and they fall into three groups rather than one. <code>0x0000</code>/<code>0x0002</code> are below the enum's first defined value and <code>0x0C44</code>/<code>0x4443</code> are slot-walk misalignments of <code>0x4640</code> — those four are genuinely parser artifacts. [W] <code>0x0453</code> and <code>0x0510</code> drew <code>not_found</code>, so the panel does not implement them. [W] <strong>The remaining ten — <code>0x4641</code>, <code>0x4642</code>, <code>0x4643</code>, <code>0x4647</code>, <code>0x464A</code>, <code>0x464B</code>, <code>0x464D</code>, <code>0x464E</code>, <code>0x464F</code>, <code>0x4650</code> — are real panel operations, and an earlier reading of this document that dismissed them as noise is withdrawn.</strong> Absence from <code>AP2_Function_Code</code> proves nothing: that enum is the <strong>supervisor-side</strong> vocabulary and does not describe what a panel implements. Classify by what the panel did. <code>0x464A</code>–<code>0x4650</code> each answered <code>dir=0x01</code> <strong>success with distinct structured bodies</strong> (0 B, 22 B, 125 B, a 12,073-byte declared node table, 117 B, 26 B, 217 B respectively), and <code>0x4641</code> answered success, while <code>0x0510</code> — equally absent from the enum — answered <code>not_found</code> from the same panel in the same campaign. The <code>0x464D</code> reply is the sharpest case and needs stating precisely: the panel answered, and its response header <strong>declared</strong> 12,073 bytes of node table, of which <strong>4,380 arrived</strong> before the client reset the connection. No complete frame exists, so a strict framer reports the exchange as unanswered — it was not. A panel that begins streaming 12 KB of structured node table for one value and answers <code>not_found</code> to another is not treating them alike. <code>0x4642</code>/<code>0x4643</code> answered <code>not_supported</code>, i.e. a handler was reached and refused; <code>0x4647</code> returned nothing at all and remains <strong>[OPEN]</strong>. Low frame count is not evidence of unreality — it measures how often the <em>supervisor</em> uses an operation, and a panel-side operation the supervisor never invokes is expected to appear exactly once, when probed. [W]</p>
+<p>The catalog below is generated by joining the vendor <code>AP2_Function_Code</code> enum (the 630 distinct opcode values) with the corpus census. A recount under stated criteria — trusted frames only, <code>dir == 0x00</code> only, content-deduplicated captures — gives <strong>127 distinct wire-observed function codes across 178,266 request/push frames</strong>, of which 112 now carry a name. (Three further values appear only in frames the parser marked untrusted after a resynchronisation: <code>0x0631</code>, <code>0x1826</code>, <code>0x2226</code>. <code>0x1826</code> is precisely the fictitious opcode a mid-record resync manufactures — a TLV length <code>0x18</code> followed by ASCII <code>&amp;</code> — and is the reason the trusted flag exists. An earlier edition cited 135 wire-observed values; that figure is not reproducible from the current evidence base under any definition tried, and 125 replaced it; the corpus has since grown and the current figure is 127.) Columns: hex opcode, name(s), observed wire count (or <code>-</code>), notes (destructive flag where applicable), and evidence tag ([W] wire-observed, [S] enum-defined). Within each family, rows are sorted by opcode value. Sixteen wire values do <strong>not</strong> appear in the catalog, and they fall into three groups rather than one. <code>0x0000</code>/<code>0x0002</code> are below the enum's first defined value and <code>0x0C44</code>/<code>0x4443</code> are slot-walk misalignments of <code>0x4640</code> — those four are genuinely parser artifacts. [W] <code>0x0453</code> and <code>0x0510</code> drew <code>not_found</code>, so the panel does not implement them. [W] <strong>The remaining ten — <code>0x4641</code>, <code>0x4642</code>, <code>0x4643</code>, <code>0x4647</code>, <code>0x464A</code>, <code>0x464B</code>, <code>0x464D</code>, <code>0x464E</code>, <code>0x464F</code>, <code>0x4650</code> — are real panel operations, and an earlier reading of this document that dismissed them as noise is withdrawn.</strong> Absence from <code>AP2_Function_Code</code> proves nothing: that enum is the <strong>supervisor-side</strong> vocabulary and does not describe what a panel implements. Classify by what the panel did. <code>0x464A</code>–<code>0x4650</code> each answered <code>dir=0x01</code> <strong>success with distinct structured bodies</strong> (0 B, 22 B, 125 B, a 12,073-byte declared node table, 117 B, 26 B, 217 B respectively), and <code>0x4641</code> answered success, while <code>0x0510</code> — equally absent from the enum — answered <code>not_found</code> from the same panel in the same campaign. The <code>0x464D</code> reply is the sharpest case and needs stating precisely: the panel answered, and its response header <strong>declared</strong> 12,073 bytes of node table, of which <strong>4,380 arrived</strong> before the client reset the connection. No complete frame exists, so a strict framer reports the exchange as unanswered — it was not. A panel that begins streaming 12 KB of structured node table for one value and answers <code>not_found</code> to another is not treating them alike. <code>0x4642</code>/<code>0x4643</code> answered <code>not_supported</code>, i.e. a handler was reached and refused; <code>0x4647</code> returned nothing at all and remains <strong>[OPEN]</strong>. Low frame count is not evidence of unreality — it measures how often the <em>supervisor</em> uses an operation, and a panel-side operation the supervisor never invokes is expected to appear exactly once, when probed. [W]</p>
 <!-- BEGIN GENERATED CATALOG (do not hand-edit; regenerate with working/sweep/s91_gencatalog.py, which joins p2_data.py with the census of working/sweep/s90_census.py) -->
 
 <h4 id="family-nodestate">Family: NODE/STATE</h4>
@@ -4916,7 +4933,7 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x010C</td>
 <td>AP2_CABINET_DISPLAY</td>
-<td>163</td>
+<td>185</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -5336,7 +5353,7 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x0220</td>
 <td>AP2_POINT_LOG_VALUE</td>
-<td>4331</td>
+<td>4382</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -5427,7 +5444,7 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x0240</td>
 <td>AP2_POINT_CMD_VALUE</td>
-<td>11385</td>
+<td>13597</td>
 <td><strong>DESTRUCTIVE</strong> (point command (write value))</td>
 <td>[W]</td>
 </tr>
@@ -5623,7 +5640,7 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x0271</td>
 <td>AP2_COV_ENABLE</td>
-<td>5219</td>
+<td>5321</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -5644,7 +5661,7 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x0274</td>
 <td>AP2_COV_ANNUNCIATE</td>
-<td>48393</td>
+<td>53101</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -5742,7 +5759,7 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x0295</td>
 <td>AP2_TREND_DATA_DISPLAY</td>
-<td>29</td>
+<td>291</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -5896,9 +5913,9 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x0302</td>
 <td>AP2_TIME_DISPLAY_CLOCK / AP2_TIME_SET</td>
-<td>-</td>
+<td>1</td>
 <td></td>
-<td>[F]</td>
+<td>[W]</td>
 </tr>
 <tr>
 <td>0x4500</td>
@@ -6645,7 +6662,7 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x0368</td>
 <td>AP2_EMS_PRINT</td>
-<td>3</td>
+<td>8</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -7016,7 +7033,7 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x0549</td>
 <td>AP2_CATEGORY_NODES_APPEND</td>
-<td>10</td>
+<td>13</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -8409,9 +8426,9 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x4208</td>
 <td>AP2_TEC_DEFINITION</td>
-<td>-</td>
+<td>1</td>
 <td></td>
-<td>[S]</td>
+<td>[W]</td>
 </tr>
 <tr>
 <td>0x4210</td>
@@ -8780,14 +8797,14 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x4633</td>
 <td>AP2_EBLN_REPL_NOTIFY</td>
-<td>23</td>
+<td>41</td>
 <td></td>
 <td>[W]</td>
 </tr>
 <tr>
 <td>0x4634</td>
 <td>AP2_EBLN_REPL_PULL</td>
-<td>1267</td>
+<td>7560</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -8801,7 +8818,7 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x4636</td>
 <td>AP2_EBLN_REPL_CHANGES</td>
-<td>171</td>
+<td>180</td>
 <td>corpus-wide count; a single passive capture alone holds 170 requests + 170 replies — see §5.3</td>
 <td>[W]</td>
 </tr>
@@ -8864,7 +8881,7 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td>0x4640</td>
 <td>AP2_EBLN_PING</td>
-<td>18796</td>
+<td>78623</td>
 <td></td>
 <td>[W]</td>
 </tr>
@@ -9739,11 +9756,11 @@ the block's age rather than of its non-existence.</p>
 </tbody>
 </table>
 <h3 id="96-the-sessionkeepalive-opcode-0x4640-ebln_ping">9.6 The session/keepalive opcode 0x4640 (EBLN_PING)</h3>
-<p><code>AP2_EBLN_PING</code> (0x4640) is the most cross-cutting opcode in the corpus: it is the only opcode that appears under every message class seen anywhere — 0x29, 0x2A, 0x2E, 0x2F, 0x33 and 0x34 — and it dominates the peer carriers, though it is not alone under them: panel-side captures show class 0x29 also carrying <code>0x4634</code>, <code>0x4633</code>, <code>0x4636</code> and <code>0x0271</code> (see §9.7) — and it serves three roles. As <strong>session establish</strong> it is the IdentifyBlock handshake carrying the peer's identity slots; as <strong>keepalive</strong> it recurs on a ~10-second cadence (the EPing / Ethernet-Ping liveness heartbeat — a configurable interval whose documented minimum is 10 s, not a protocol constant; see §7.1); and its request/response body is the <code>eBLN_Node</code> block (§10.6). It is also the opcode whose malformed slot-walk produces the <code>0x0C44</code>/<code>0x4443</code> phantoms in §9.5. Its response length is variable and deterministic — <code>35 + node-name length</code> (40/41/45/47 B observed for 5/6/10/12-char names) — so a parser must treat 0x4640 response-length as variable. Every <em>supervisor-initiated</em> request in the corpus drew a reply; panel-initiated pings into a supervisor's <code>5033</code> are a different matter (§5.1). [W][S]</p>
+<p><code>AP2_EBLN_PING</code> (0x4640) is the most cross-cutting opcode in the corpus: it is the only opcode that appears under every message class seen anywhere — 0x29, 0x2A, 0x2E, 0x2F, 0x33 and 0x34 — and it dominates the peer carriers, though it is not alone under them: panel-side captures show class 0x29 also carrying <code>0x4634</code>, <code>0x4633</code>, <code>0x4636</code> and <code>0x0271</code> (see §9.7) — and it serves three roles. As <strong>session establish</strong> it is the IdentifyBlock handshake carrying the peer's identity slots; as <strong>keepalive</strong> it recurs on a ~10-second cadence (the EPing / Ethernet-Ping liveness heartbeat — a configurable interval whose documented minimum is 10 s, not a protocol constant; see §7.1); and its request/response body is the <code>eBLN_Node</code> block (§10.6). It is also the opcode whose malformed slot-walk produces the <code>0x0C44</code>/<code>0x4443</code> phantoms in §9.5. Its length is variable: three leading TLVs (<code>node_name</code>, <code>site_name</code>, <code>bln_name</code>) followed by a fixed 16-byte tail. The <code>35 + node-name length</code> shorthand of earlier editions is this corpus's single site expressed as a constant — see §7.1. Every <em>supervisor-initiated</em> request in the corpus drew a reply; panel-initiated pings into a supervisor's <code>5033</code> are a different matter (§5.1). [W][S]</p>
 <h3 id="97-wire-behavior-message-classes-directions-error-tails">9.7 Wire behavior: message classes, directions, error tails</h3>
 <p>The corpus distribution grounds the catalog in observed behavior:</p>
 <ul>
-<li><strong>Message classes (<code>msg_type</code> low byte).</strong> Six classes are defined — the legacy/modern pairs of §6.2/§6.6 — and any other low-byte value is parser noise from a desynced stream. Corpus distribution, over <strong>206,050 trusted frames in 85 distinct P2-carrying captures</strong> (content-deduplicated; criteria stated because an earlier edition of this table gave counts that cannot be reproduced from the evidence base, see the note below):</li>
+<li><strong>Message classes (<code>msg_type</code> low byte).</strong> Six classes are defined — the legacy/modern pairs of §6.2/§6.6 — and any other low-byte value is parser noise from a desynced stream. Corpus distribution, over <strong>349,632 trusted frames in 85 distinct P2-carrying captures</strong> (content-deduplicated; criteria stated because an earlier edition of this table gave counts that cannot be reproduced from the evidence base, see the note below):</li>
 </ul>
 <table>
 <thead>
@@ -9757,43 +9774,49 @@ the block's age rather than of its non-existence.</p>
 <tr>
 <td><code>0x33</code></td>
 <td>legacy data dialect</td>
-<td style="text-align: right;">171,190</td>
+<td style="text-align: right;">199,241</td>
+</tr>
+<tr>
+<td><code>0x29</code></td>
+<td>session carrier (panel-to-panel)</td>
+<td style="text-align: right;">98,060</td>
 </tr>
 <tr>
 <td><code>0x34</code></td>
 <td>modern data dialect</td>
-<td style="text-align: right;">21,419</td>
+<td style="text-align: right;">23,193</td>
 </tr>
 <tr>
 <td><code>0x2E</code></td>
 <td>legacy 2nd-channel / announce + DB-sync</td>
-<td style="text-align: right;">11,670</td>
+<td style="text-align: right;">15,008</td>
+</tr>
+<tr>
+<td><code>0x2A</code></td>
+<td>peer-session carrier (panel-to-panel)</td>
+<td style="text-align: right;">12,260</td>
 </tr>
 <tr>
 <td><code>0x2F</code></td>
 <td>modern 2nd-channel</td>
-<td style="text-align: right;">1,761</td>
-</tr>
-<tr>
-<td><code>0x29</code></td>
-<td>session carrier</td>
-<td style="text-align: right;">10</td>
-</tr>
-<tr>
-<td><code>0x2A</code></td>
-<td>peer-session carrier</td>
-<td style="text-align: right;"><strong>0 in this census — but 96 and 130 in two panel-side captures</strong></td>
+<td style="text-align: right;">1,870</td>
 </tr>
 </tbody>
 </table>
+<p>These sum to the 349,632 trusted frames of 9.5. <strong>The peer carriers moved
+  by four orders of magnitude when panel-side captures entered the corpus</strong>
+  - <code>0x29</code> from 10 frames to 98,060, and <code>0x2A</code> from zero to 12,260 -
+  because a supervisor-side tap structurally cannot observe a
+  panel-to-panel session. The earlier figures were not wrong for what they
+  measured; they measured one vantage point.</p>
 <p>Most high-volume operations occur in both <code>0x33</code> and <code>0x34</code>; certain single-shot and legacy-supervisor operations occur only in <code>0x33</code>.</p>
 <p><strong>The peer carriers behave exactly as described, and the tiny counts above are a property of the vantage point, not of the protocol.</strong> Isolating conversations where neither endpoint is the supervisor or a research host leaves <strong>10 frames in this census</strong> — all class <code>0x29</code>, all <code>EBLN_PING</code>, all captured during a power cycle as panels re-established sessions with each other. A supervisor-side tap structurally cannot see a panel↔panel session, so the census measures how often the <em>supervisor</em> participates, not how much peer traffic exists.</p>
 <p><strong>Two taps on a panel's own switch port settle it.</strong> Each shows the panel holding sessions with nine peers continuously, and together they contribute 2,317 trusted P2 frames of ordinary peer traffic against the census's 10. Both carriers are wire-observed there: <code>0x29</code> at 772/1,020 frames and <strong><code>0x2A</code> at 96/130</strong> — so <code>0x2A</code> is now <code>[W]</code>, not an inference from the legacy/modern pairing. Neither carrier is single-opcode: alongside <code>0x4640</code> they carry the replication family (<code>0x4634</code>, <code>0x4633</code>, <code>0x4636</code>) and <code>0x0271 COV_ENABLE</code>. The census figures above are unchanged and remain correct for what they measure; they are counts of <em>supervisor-facing</em> P2. [W]</p>
 <blockquote>
-<p><strong>Why the numbers changed.</strong> A previous edition of this list gave 433,425 / 43,668 / 43,780 / 7,322 / 2,200 / 296, totalling 530,691 frames. That total is reproducible from neither the deduplicated corpus (206,050) nor a naive count over all 726 capture files including duplicates (910,968), and both counts put <code>0x2A</code> at zero in the supervisor-side set. The figures appear to derive from a capture set that is not the one in the evidence base. They are replaced here with counts that are reproducible from it, under the stated criteria. [W]
-- <strong>Direction byte.</strong> 0x00 request/push (262,142), 0x01 success response (261,466), 0x05 error response (7,103). A success response carries the operation's payload after the routing slots; an error response carries exactly a 2-byte error code and nothing else. [W]
-- <strong>Error tail values (the 2-byte code on a 0x05 response).</strong> <code>0x0003</code> not-found / unrecognized-opcode (6,860×), <code>0x00AC</code> not-supported (163×), <code>0x0E15</code> physical-point-not-commandable (40×), <code>0x0002</code> invalid-operation (30×), <code>0x0E11</code> FLN-invalid-drop-number (6×), <code>0x0E12</code> FLN-device-failed (3×), <code>0x0009</code> already-exists (1×). See §7.2.2; <code>0x0E1x</code> is the FLN band. An opcode the panel does not implement returns <code>0x05 ... 00 03</code>; this is how the defined-but-unimplemented-on-this-firmware opcodes announce themselves on the wire. [W]
-- <strong>Per-opcode response shapes.</strong> Response lengths vary by opcode and by the addressed object; representative shapes from the census (opcode → success-response sizes): 0x010C → 230/231 B (firmware/identity block, §10.5); 0x0220 (read) → 126/138 B or <code>err 0003</code> when the point is absent; 0x0271 (COV enable) → 96/108 B; 0x0274 (annunciate) → 0 B (acknowledged, no payload); 0x4640 → 40/41/45/47 B (= 35 + node-name length); 0x0981 (enumerate points) → 88/115/118 B. The "0 B success" pattern (direction 0x01, empty body) is a bare acknowledgement used by push/command/replication opcodes. [W] <strong>A request may also carry a zero-length body</strong>, and 220 in the corpus do: <code>0x010C</code> (163×), <code>0x4633 EBLN_REPL_NOTIFY</code> (22×), <code>0x0951 DBCHANGE_POINT</code> (11×), <code>0x0100</code> (9×) and the rest of the <code>DBCHANGE</code> family. This is the natural encoding of a <strong>parameterless operation</strong> — the <code>u16</code> opcode is the whole message. An encoder must be willing to emit an ASDU of length zero, and a decoder must accept it as complete rather than truncated: after the two opcode bytes are taken off, <code>total - 2</code> is legitimately 0. [W]</p>
+<p><strong>Why the numbers changed.</strong> A previous edition of this list gave 433,425 / 43,668 / 43,780 / 7,322 / 2,200 / 296, totalling 530,691 frames. That total is reproducible from neither the deduplicated corpus (349,632) nor a naive count over all 726 capture files including duplicates (910,968), and both counts put <code>0x2A</code> at zero in the supervisor-side set. The figures appear to derive from a capture set that is not the one in the evidence base. They are replaced here with counts that are reproducible from it, under the stated criteria. [W]
+- <strong>Direction byte.</strong> 0x00 request/push (178,266), 0x01 success response (167,055), 0x05 error response (4,311) - summing exactly to the 349,632 trusted frames of 9.5. A success response carries the operation's payload after the routing slots; an error response carries exactly a 2-byte error code and nothing else. [W]
+- <strong>Error tail values (the 2-byte code on a 0x05 response).</strong> <code>0x0003</code> not-found / unrecognized-opcode (4,224×), <code>0x00AC</code> not-supported (49×), <code>0x0E15</code> physical-point-not-commandable (28×), <code>0x0002</code> invalid-operation (4×), <code>0x0E11</code> FLN-invalid-drop-number (2×), <code>0x0E12</code> FLN-device-failed (3×), <code>0x0009</code> already-exists (1×). See §7.2.2; <code>0x0E1x</code> is the FLN band. An opcode the panel does not implement returns <code>0x05 ... 00 03</code>; this is how the defined-but-unimplemented-on-this-firmware opcodes announce themselves on the wire. [W]
+- <strong>Per-opcode response shapes.</strong> Response lengths vary by opcode and by the addressed object; representative shapes from the census (opcode → success-response sizes): 0x010C → 230/231 B (firmware/identity block, §10.5); 0x0220 (read) → 126/138 B or <code>err 0003</code> when the point is absent; 0x0271 (COV enable) → 96/108 B; 0x0274 (annunciate) → 0 B (acknowledged, no payload); 0x4640 → 40/41/45/47 B at this site (three TLVs + a 16-byte tail; the length follows the <em>sender's</em> node name, not the addressee's — see §7.1); 0x0981 (enumerate points) → 88/115/118 B. The "0 B success" pattern (direction 0x01, empty body) is a bare acknowledgement used by push/command/replication opcodes. [W] <strong>A request may also carry a zero-length body</strong>, and 220 in the corpus do: <code>0x010C</code> (163×), <code>0x4633 EBLN_REPL_NOTIFY</code> (22×), <code>0x0951 DBCHANGE_POINT</code> (11×), <code>0x0100</code> (9×) and the rest of the <code>DBCHANGE</code> family. This is the natural encoding of a <strong>parameterless operation</strong> — the <code>u16</code> opcode is the whole message. An encoder must be willing to emit an ASDU of length zero, and a decoder must accept it as complete rather than truncated: after the two opcode bytes are taken off, <code>total - 2</code> is legitimately 0. [W]</p>
 </blockquote>
 <hr>
 <h2 id="10-message-body-structures">10. Message Body Structures</h2>
@@ -10331,7 +10354,7 @@ does not yet describe. [W]</p>
 </tbody>
 </table>
 <p>The COV-enable response returns the point's <code>All_points</code> value block (same shape as the read response). On the wire the enable/disable pair is also distinguishable by a 2-byte trailer (<code>00 FF</code> enable vs <code>00 00</code> disable). [W]</p>
-<p><strong><code>AP2_COV_ANNUNCIATE</code> request (0x0274)</strong> — the panel-originated COV report (highest-volume opcode, 48,393 request frames under the §9.5 criteria; pushed on <code>direction == 0x00</code>, acknowledged with a 0-byte success). [S][W]</p>
+<p><strong><code>AP2_COV_ANNUNCIATE</code> request (0x0274)</strong> — the panel-originated COV report (highest-volume opcode, 53,101 request frames under the §9.5 criteria; pushed on <code>direction == 0x00</code>, acknowledged with a 0-byte success). [S][W]</p>
 <table>
 <thead>
 <tr>
@@ -10759,7 +10782,7 @@ and, via the version/<code>APOGEE</code>-vs-<code>BACnet</code> banner text, whi
 </blockquote>
 <h3 id="106-session--ebln-node-block-0x4640">10.6 Session / EBLN node block (0x4640)</h3>
 <p><code>AP2_eBLN_Ping</code> request and response (0x4640) both carry the <code>eBLN_Node</code> block — the peer-identity and liveness/replication state exchanged on session establish and on the ~10 s keepalive. [S][W]</p>
-<p><strong><code>eBLN_Node</code></strong> [S]</p>
+<p><strong><code>eBLN_Node</code></strong> [S][W]</p>
 <table>
 <thead>
 <tr>
@@ -10844,6 +10867,61 @@ and, via the version/<code>APOGEE</code>-vs-<code>BACnet</code> banner text, whi
 </tr>
 </tbody>
 </table>
+<p><strong>Wire-confirmed, field by field.</strong> [W] The block above was struct-derived; a
+16.7-hour panel-side capture decodes it with nothing left over. The three
+<code>TEXT_</code> fields are TLVs (<code>01 00 &lt;len&gt; &lt;bytes&gt;</code>) and the nine that follow are a
+<strong>fixed 16-byte tail</strong>:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">offset in tail</th>
+<th>field</th>
+<th style="text-align: right;">width</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">0–4</td>
+<td><code>failed</code>, <code>ready</code>, <code>replication_online</code>, <code>reresolve_all</code>, <code>reresolve_unresolved</code></td>
+<td style="text-align: right;">1 each</td>
+</tr>
+<tr>
+<td style="text-align: right;">5–8</td>
+<td><code>spare1</code></td>
+<td style="text-align: right;">4</td>
+</tr>
+<tr>
+<td style="text-align: right;">9–12</td>
+<td><code>baseTime</code></td>
+<td style="text-align: right;">4</td>
+</tr>
+<tr>
+<td style="text-align: right;">13–14</td>
+<td><code>offset</code></td>
+<td style="text-align: right;">2</td>
+</tr>
+<tr>
+<td style="text-align: right;">15</td>
+<td><code>dst_flag</code></td>
+<td style="text-align: right;">1</td>
+</tr>
+</tbody>
+</table>
+<p>So the body is <strong>three TLVs then exactly 16 bytes</strong>, and that — not an
+arithmetic constant — is how to frame it. Where a length is needed without
+parsing, <code>body_length = 25 + len(node_name) + len(site_name) + len(bln_name)</code>,
+in which only the 25 is protocol (three TLV headers plus the tail); see §7.1. <code>baseTime</code> decodes as a
+<strong>seconds-since-1970 epoch</strong>; a sampled ping gives <code>1787673637</code> =
+2026-08-25 16:00:37 UTC. The last three fields are the same triple that
+constitutes the whole of <code>AP2_eBLN_Time_Set_Request</code> (<code>0x0302</code>, §10.x): the ping
+<em>advertises</em> a node's clock state and <code>0x0302</code> <em>sets</em> it.</p>
+<p>Two consequences worth stating for a monitoring implementation. The body
+describes the <strong>sender</strong>, not the addressee — confirmed across 56,475 pings by
+the cases where the two names differ in length. And <code>failed</code>, <code>ready</code> and
+<code>replication_online</code> are therefore broadcast by every peer on every keepalive,
+which makes the liveness heartbeat a complete health feed: a passive listener
+learns each node's readiness and replication state every interval without
+issuing a single request.</p>
 <p>The <code>bln_name</code> field here is the same value the access gate checks: a peer presenting the wrong BLN is rejected at the network layer; the node/site/bln triple is also echoed back in <code>CABINET_DISPLAY</code> (§10.5). [W][I]</p>
 <h3 id="107-node--bln-management-bodies">10.7 Node / BLN management bodies</h3>
 <p><strong><code>Node_Choice</code></strong> (target selector for node-management ops) — CHOICE: <code>all_nodes : NULL_</code> or <code>single_node : UNSIGNED8</code> (node number). Used by the <code>SET_NODE_STATE</code> / cabinet online-offline family. [S]</p>
@@ -11790,6 +11868,37 @@ different generations do not represent the same transfer function. [S]</p>
 <p>Correction of an earlier reading: these opcodes were previously read as "ReadExtended / ReadDescriptorOnly / WriteNoValue-ExistenceProbe" against <code>0x0271/0x0272/0x0273</code>. The function-code enumeration shows they are the COV subscription register/delete/cancel/report quartet. The <code>00 FF</code> vs <code>00 00</code> mode trailer that earlier analysis treated as read-mode versus command-mode is the enable-vs-disable selector of the subscription. [S] This register/cancel-subscription model — rather than a one-shot read — is consistent with that enable/disable trailer. [S/I]</p>
 </blockquote>
 <p>The <code>AP2_COV_ENABLE</code> request body (<code>AP2_COV_Enable_Request</code>) is <code>{ name_response, cov_mask }</code> — the addressed point plus the subscription's class mask; the response (<code>AP2_COV_Enable_Response</code>) is <code>{ point: All_points, lenum_address, point_extension2 }</code>, i.e. the panel returns the full current point object as the subscription's first report. [S] <code>AP2_COV_DISABLE</code> is <code>{ name_response, cov_mask }</code>; <code>AP2_COV_DELETE_STUB</code> is <code>{ name_response }</code>. [S] <code>AP2_COV_ANNUNCIATE</code> carries a count-prefixed array of <code>Annunciate_request</code> records (§12.3). [S] An annunciate push uses the request encoding (direction byte <code>0x00</code>, §6.3) because it is unsolicited; the peer acknowledges with a direction-<code>0x01</code> empty success. [W]</p>
+<h3 id="1211-when-subscriptions-are-registered--once-at-session-establishment">12.1.1 When subscriptions are registered — once, at session establishment</h3>
+<p>A subscriber registers its COV subscriptions <strong>when the session comes up, and
+not again</strong>. This is measured rather than inferred: a 16.7-hour capture on a
+panel's own switch port holds <strong>48 <code>COV_ENABLE</code> requests, every one of them
+within the first 8.9 seconds</strong>, and none across the remaining sixteen hours.
+Subscriptions that succeed are not renewed, and — importantly — <strong>a subscription
+that fails is not re-attempted for the life of the session.</strong> [W]</p>
+<p>Three consequences an implementer needs:</p>
+<ul>
+<li><strong>A subscription's lifetime is bounded by its TCP session.</strong> There is no
+  renewal or lease traffic to maintain, and none to expect from a peer. A
+  subscriber that reconnects must re-register everything it wants; a publisher
+  must not assume a prior session's subscriptions survive.</li>
+<li><strong>A failed subscription is silent thereafter.</strong> <code>not_found</code> on <code>COV_ENABLE</code>
+  ends the matter until the next reconnect. Nothing on the wire will indicate,
+  minutes or hours later, that a subscriber is missing values it asked for — so
+  a diagnostic tool must capture the session's opening seconds to see the
+  failure at all.</li>
+<li><strong>Do not read <code>COV_ENABLE</code> volume as a health signal.</strong> A burst of
+  subscription traffic means sessions are being established, not that anything
+  is wrong or busy. Sustained bursts mean sustained reconnection, which is a
+  transport-layer symptom rather than a COV one.</li>
+</ul>
+<blockquote>
+<p>A caution for anyone measuring this, learned the hard way: an inline tap has
+to break the link to be installed, which tears down every session on the port.
+The first minutes of such a capture are the segment re-establishing, and they
+are dense with subscription registrations that are an artifact of the
+measurement. Take steady-state readings from a capture long enough to leave
+that window behind.</p>
+</blockquote>
 <h3 id="122-the-cov-class-mask-and-subscription-type">12.2 The COV class mask and subscription type</h3>
 <p>A subscription names a <strong>COV mask</strong> selecting which classes of change generate a report. The <code>Cov_mask</code> is a bitfield; the bit positions are the panel's own <code>Cov_mask</code> enumeration: [S]</p>
 <table>
