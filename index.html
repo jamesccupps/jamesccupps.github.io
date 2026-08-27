@@ -12607,6 +12607,18 @@ a <code>gain</code> f32 that a digital one does not.</p>
 digital-output boolean is <code>inverted</code> and the digital-input one is
 <code>normally_closed</code>. Same width, same position, different meaning — a decoder that
 labels both "inverted" is right about the bytes and wrong about the point. [S]</p>
+<p><strong><code>real_addr_</code> is not the exception it looks like — it is the general case.</strong>
+Sixty-five names in the type system are declared <em>inside</em> a parent, and a
+decoder must resolve them <strong>against the enclosing type, not globally</strong>. Six more
+turned up behaving exactly like <code>real_addr_</code> once anyone looked:
+<code>LON_extension_</code> (different under <code>Extended_team_desc</code> than under
+<code>Extended_team_member</code>), <code>name_suffix_</code>, <code>xfixed_</code> (a lone <code>f32</code> inside
+<code>cov_limit_</code>, a counted address array inside <code>dns_</code>), <code>address_</code> (a
+virtual/physical CHOICE in one parent, a bare <code>UNSIGNED32</code> IP in another),
+<code>alarm_info_</code> and <code>Fln_type_</code>. Resolving those six by parent removed them from
+§10.9's blocked list at a stroke. <strong>A flat type table is therefore not enough to
+decode P2</strong>: the same field name, in two structures, is two different layouts,
+and nothing in the name says so. [S]</p>
 <pre><code>a digital output      03 01 00 07 01
                       FLN3 Drop1 Pt7  inverted
 
@@ -13636,15 +13648,15 @@ described.</p>
 <tbody>
 <tr>
 <td><strong>Decodable</strong> from widths this document pins</td>
-<td style="text-align: right;"><strong>378 (83%)</strong></td>
+<td style="text-align: right;"><strong>384 (84%)</strong></td>
 </tr>
 <tr>
 <td>Blocked on at least one unstated width or unpinned CHOICE</td>
-<td style="text-align: right;">77</td>
+<td style="text-align: right;">71</td>
 </tr>
 <tr>
 <td>distinct blocking types</td>
-<td style="text-align: right;"><strong>46</strong></td>
+<td style="text-align: right;"><strong>40</strong></td>
 </tr>
 </tbody>
 </table>
@@ -13663,12 +13675,6 @@ immediately:</p>
 </thead>
 <tbody>
 <tr>
-<td><code>LON_extension_</code></td>
-<td style="text-align: right;">10</td>
-<td style="text-align: right;">0</td>
-<td>LonWorks member description — a different fieldbus</td>
-</tr>
-<tr>
 <td><code>Duct_type</code> (CHOICE)</td>
 <td style="text-align: right;">8</td>
 <td style="text-align: right;">0</td>
@@ -13686,8 +13692,29 @@ immediately:</p>
 <td style="text-align: right;">0</td>
 <td>the user-account family, which travels together</td>
 </tr>
+<tr>
+<td><code>Reference_Type</code>, <code>Pattern_type</code></td>
+<td style="text-align: right;">7 each</td>
+<td style="text-align: right;">0</td>
+<td>team-member description</td>
+</tr>
+<tr>
+<td><code>Date_type</code></td>
+<td style="text-align: right;">5</td>
+<td style="text-align: right;">5</td>
+<td>the calendar — and see below, this one is <em>unmeasurable here</em></td>
+</tr>
 </tbody>
 </table>
+<p><strong>What the remaining list is made of matters more than its length.</strong> Thirty-one
+of the forty are <strong>enum widths</strong>, and §10.9's dead rule means each has to be
+measured against a body rather than derived. Of the 71 blocked operations, only
+five have any body in this corpus at all, and the one with a clean single
+blocker — <code>AP2_CAL_DB_GET_OTHER</code> (<code>0x0606</code>, <code>Date_type</code>) — returns a two-byte
+empty response nineteen times over, because <strong>this site keeps no calendar
+entries</strong>. That is the honest ceiling: the rest cannot be closed by looking
+harder at this capture set, only by a capture from a system that exercises those
+features. They are listed rather than guessed.</p>
 <p><code>Baud_rate</code> topped this table at 11 operations until §16.1.3 measured it, and
 how it fell is worth more than the twelve operations it took with it — see the
 warning at the end of this section.</p>
@@ -13695,9 +13722,14 @@ warning at the end of this section.</p>
 were topped by <code>use_proof_</code> at 48 operations and the <code>All_points</code> arms at 41
 each, and those are gone — not measured, but <em>recovered</em>: the vendor type system
 declares them and the extraction that built §10.1's catalog had flattened them
-away (§10.4.1, §10.4.2). Nothing left blocks more than 14 operations, and the
-remaining families are peripheral to the point model: LonWorks, user accounts,
-serial port settings.</p>
+away (§10.4.1, §10.4.2). <code>LON_extension_</code> topped the third edition at 10 and
+went the same way, along with <code>name_suffix_</code>, <code>xfixed_</code>, <code>address_</code>,
+<code>alarm_info_</code> and <code>Fln_type_</code>: <strong>all six are declared inside a parent type, and
+one name means different things under different parents</strong> — exactly the
+<code>real_addr_</code> situation of §10.4.2, which turned out to be a general pattern
+rather than a special case. Nothing left blocks more than 8 operations, and the
+remaining families are peripheral to the point model: user accounts, calendars,
+duct geometry, LonWorks and MSTP team extensions.</p>
 <p><strong>The register predicts its own gains, which is the check that it works.</strong> Its
 first run named <code>Alarm_mode_type</code> as blocking 19 operations and being the <em>only</em>
 thing missing from all 19. Pinning it (§10.1, 1 byte) moved the total from 274
