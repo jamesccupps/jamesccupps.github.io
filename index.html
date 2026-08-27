@@ -10464,6 +10464,11 @@ far: [W][S]</p>
 <td>the <code>0x0986 UPL_ALL_TEC</code> body, 59 of 60 consuming exactly once its absent trailing field is allowed for</td>
 </tr>
 <tr>
+<td><code>Ssto_zo_mod_cl</code>, <code>Ssto_zo_mod_ht</code></td>
+<td style="text-align: right;">1 each</td>
+<td><strong>resolved, see below</strong> — an apparent contradiction whose cause was an undeclared field, not a width</td>
+</tr>
+<tr>
 <td><strong><code>Schedule_days</code></strong></td>
 <td style="text-align: right;"><strong>4</strong></td>
 <td>a <strong>bitmask</strong>, §15.3 — see the warning below</td>
@@ -10488,13 +10493,24 @@ far: [W][S]</p>
 <td style="text-align: right;"><strong>4 together</strong></td>
 <td>they occur only together, in <code>0x099f</code>; the group width is fixed, the split is <strong>[OPEN]</strong></td>
 </tr>
-<tr>
-<td><code>Ssto_zo_mod_cl</code>, <code>Ssto_zo_mod_ht</code></td>
-<td style="text-align: right;"><strong>[OPEN]</strong></td>
-<td><code>0x503b</code> and <code>0x097d</code> give 1, <code>0x098d</code> gives 2 — an unresolved contradiction, so one of those three parses is wrong</td>
-</tr>
 </tbody>
 </table>
+<p><strong>A contradiction worth showing, because of how it resolved.</strong> <code>Ssto_zo_mod_cl</code>
+and <code>Ssto_zo_mod_ht</code> came out as <strong>1</strong> from <code>0x097d</code> and as <strong>2</strong> from
+<code>0x098d</code>. A type has one width, so one parse was wrong — and taking the majority
+would have reached the right answer for the wrong reason. The cause is in the
+declarations:</p>
+<pre><code>AP2_Upl_Added_SSTO_Start_Response :  team_response | ssto_start_setup
+                                     | state_text_id : SHORT_ | panel_logging
+AP2_Upl_All_SSTO_Start_Response   :  team_response | ssto_start_setup
+</code></pre>
+<p>The <strong>All</strong> variant declares nothing after <code>ssto_start_setup</code>; its own <strong>Added</strong>
+sibling declares a <code>state_text_id</code> there, and the wire carries one in both. Two
+fields at +1 each is the same two bytes as one missing tail, which is exactly
+why width 2 appeared to fit. Restore the tail and <strong>60 of 60 bodies consume at
+width 1</strong>, with the tail reading <code>-1005</code> ×45 and <code>-2005</code> ×15 — the same two
+state-text tables in the same split as <code>0x098C</code>, <code>0x098E</code> and <code>0x098F</code> (§11.5).
+Three independent confirmations, and none of them a vote. [W][S]</p>
 <p><strong>Do not size an enum field from its enum's value range.</strong> The obvious shortcut
 — <em>the largest member is 13, so one byte is enough</em> — is wrong, and
 <code>Schedule_days</code> is the counter-example. Its fourteen members are <code>Sunday</code> …
