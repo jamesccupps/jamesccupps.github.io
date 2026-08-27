@@ -2003,6 +2003,57 @@ BLN</strong>. All values in seconds. [D]</p>
 </tr>
 </tbody>
 </table>
+<p><strong>Measured against the wire.</strong> Five opcodes run on a fixed period, measured per
+peer connection across 621,268 frames — every one with a median absolute
+deviation of <strong>0.00 s</strong>: [W]</p>
+<table>
+<thead>
+<tr>
+<th>Opcode</th>
+<th style="text-align: right;">Period</th>
+<th style="text-align: right;">Intervals</th>
+<th style="text-align: right;">Connections</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0x4636</code> <code>EBLN_REPL_CHANGES</code>, <code>0x4635</code> <code>EBLN_REPL_PULL_MORE</code></td>
+<td style="text-align: right;">1.00 s</td>
+<td style="text-align: right;">147 / 111</td>
+<td style="text-align: right;">16 / 8</td>
+</tr>
+<tr>
+<td><code>0x4640</code> <code>EBLN_PING</code></td>
+<td style="text-align: right;"><strong>10.00 s</strong></td>
+<td style="text-align: right;">99,383</td>
+<td style="text-align: right;">366</td>
+</tr>
+<tr>
+<td><code>0x010C</code> <code>CABINET_DISPLAY</code></td>
+<td style="text-align: right;">30.01 s</td>
+<td style="text-align: right;">102</td>
+<td style="text-align: right;">17</td>
+</tr>
+<tr>
+<td><code>0x4634</code> <code>EBLN_REPL_PULL</code></td>
+<td style="text-align: right;">60.01 s</td>
+<td style="text-align: right;">9,805</td>
+<td style="text-align: right;">168</td>
+</tr>
+</tbody>
+</table>
+<p><code>EBLN_PING</code> at 10.00 s is the EPing row of the table above, confirmed on the
+wire. <code>EBLN_REPL_PULL</code> at 60 s per peer does <strong>not</strong> match the 30 s
+"replication polling period", and the discrepancy is left open rather than
+reconciled: the mapping from that documented timer name to this opcode is an
+assumption — §5.3 describes <code>0x4634</code> as the digest advertisement, not
+necessarily as what the polling timer governs. Either the timer is not this
+opcode's, or this site is configured off-default. <strong>[OPEN]</strong></p>
+<p><strong>Measure per peer connection, not per node.</strong> A node with several peers emits
+one of these per peer, so a per-node aggregate reads far faster than the
+protocol cadence — for <code>EBLN_PING</code> on a node with three or more peers the
+aggregate median is 0.01 s, which is the emission burst, not the timer. Every
+period above is per connection.</p>
 <p>The intra-site column is what a single-site capture shows, and it is the column
 this document's observed timings match. The scaling rule applies only to the
 inter-site timers, and the guidance is to leave the defaults alone <strong>below 50
@@ -10011,7 +10062,7 @@ with nothing left over: [S][W]</p>
 <td><code>0x0954 DBCHANGE_TREND</code></td>
 <td>(no body)</td>
 <td>0 B</td>
-<td><strong>exact</strong> (§16.1.1)</td>
+<td><strong>exact</strong> (§16.1.2)</td>
 </tr>
 <tr>
 <td><code>0x4208 TEC_DEFINITION</code></td>
@@ -14670,7 +14721,7 @@ supervisor</strong>, each answered with a bare success. The panel does not push 
 changed; it pushes <em>that</em> its <code>&lt;section&gt;</code> changed, and the supervisor then reads
 the content back with the matching <code>UPL_ADDED_&lt;section&gt;</code>. This is not particular
 to equipment scheduling — it holds for <strong>every</strong> <code>DBCHANGE_*</code> opcode in the
-corpus, across ten database sections (§16.1.1). This is why the <code>DBCHANGE</code>/<code>UPL_ADDED</code> opcode pairs exist
+corpus, across ten database sections (§16.1.2). This is why the <code>DBCHANGE</code>/<code>UPL_ADDED</code> opcode pairs exist
 at all, and it means a client that wants change notification must implement a
 <strong>server</strong> role for these opcodes, not merely a reader. [W]</p>
 <p><strong>3. Enumeration terminates with <code>0x0003</code>.</strong> The <code>UPL_*</code> body is the paging idiom
@@ -14707,7 +14758,33 @@ end of every successful enumeration.</strong> [W]</p>
 <p>A panel database is moved across P2 <strong>record-by-record</strong>, not as a single monolithic blob. Each record is its own request that returns either a success (dir <code>0x01</code>) or a 2-byte fault/error code (dir <code>0x05</code>), corroborating the directory-byte/error model of §7. The transfer is organized into sections gated by firmware revision — a section unsupported by a panel's firmware is skipped or rejected per-record rather than aborting the whole transfer. [D/W]</p>
 <p>The transfer surface is the <code>UPL_*</code> / <code>DBCHANGE_*</code> / <code>*_DB_GET</code> / <code>*_DB_REPLACE</code> opcode families: the <code>0x09xx</code> <code>UPL_ALL_*</code>/<code>UPL_ADDED_*</code>/<code>UPL_DEL_*</code> block enumerates each object class (points, PPCL, TEC, trend, EQS, SSTO, TOD), and per-domain <code>*_DB_GET</code>/<code>*_DB_REPLACE</code> pairs move whole sub-databases (e.g. <code>0x0337/0x0338</code> <code>USER_ACCT_DB_GET/REPLACE</code>, <code>0x0357/0x0358</code> <code>ACCESS_GROUPS_DB_*</code>, <code>0x0362/0x0363</code> <code>EMS_DB_*</code>, <code>0x040A/0x040B</code> <code>ENUM_TYPE_DB_GET/REPLACE</code>, the <code>0x06xx</code> <code>CAL_DB_*</code>/<code>DST_DB_*</code> calendar blocks). <code>0x0950 AP2_DOWNLOAD_ME</code> initiates a download <em>to</em> a panel. [S]</p>
 <p>The replication-direction mechanics (notify/pull/changes push) live in the <code>0x46xx</code> EBLN family and are specified in §5.3 (replication). [S]</p>
-<h4 id="1611-dbchange_-is-a-data-less-notification-and-the-reader-pulls">16.1.1 <code>DBCHANGE_*</code> is a data-less notification, and the reader pulls</h4>
+<h4 id="1611-the-supervisor-uploads-the-whole-database-as-one-ordered-sweep">16.1.1 The supervisor uploads the whole database as one ordered sweep</h4>
+<p>What §16.1 describes as a surface, the supervisor drives as a <strong>single periodic
+sweep</strong>. On the busiest connection in the corpus it issues <strong>611 requests in
+about 8 seconds</strong> and repeats the whole thing every <strong>90–135 seconds</strong>, always
+in the same order: [W]</p>
+<pre><code>UPL_ALL_PORT -&gt; UPL_ALL_PROGRAM -&gt; TEAM_DESC_UPLOAD -&gt; MEMBER_DESC_UPLOAD
+-&gt; REPORT_DESC_UPLOAD -&gt; UPL_ALL_TEC xN -&gt; UPL_ALL_UC -&gt; UPL_ALL_LON
+-&gt; UPL_ALL_POINT xN                       &lt;- the bulk of the sweep
+-&gt; UPL_ALL_ALARM_SETUP -&gt; UPL_ALL_ALARM_MODE -&gt; UPL_ALL_ALARM_MESSAGE
+-&gt; UPL_ALL_TREND xN -&gt; UPL_ALL_PPCL xN
+-&gt; UPL_ALL_EQS_ZONE xN -&gt; UPL_ALL_EQS_CMD_TABLE xN
+-&gt; UPL_ALL_EQS_MODE_SCHED xN -&gt; UPL_ALL_EQS_OVERRIDE
+-&gt; UPL_ALL_SSTO_GENERAL xN -&gt; _START xN -&gt; _STOP xN -&gt; _NIGHT xN
+-&gt; UPL_ALL_PARTNER -&gt; HOA_MAP_LOOK -&gt; CAL_DB_GET_OTHER
+</code></pre>
+<p>Each <code>xN</code> is the cursor pagination of §6.7 — the opcode is re-issued carrying
+the previous record's name until the panel signals end-of-list — which is why
+the point and TEC sections dominate the frame count.</p>
+<p><strong>Do not read a per-opcode cadence off this.</strong> Every <code>UPL_ALL_*</code> opcode shows
+the <em>same</em> inter-burst interval (90 s for those at the head of the sweep, 102 s
+for those after the long <code>UPL_ALL_POINT</code> run) because they are not independently
+scheduled; those numbers are their positions in one sweep. The schedulable unit
+is the sweep.</p>
+<p>For an implementer building a panel: it must answer a ~600-request burst within
+seconds <strong>while</strong> continuing to meet its 10-second <code>EPing</code> obligation on every
+peer connection (§5.0). The two run concurrently on separate connections. [W]</p>
+<h4 id="1612-dbchange_-is-a-data-less-notification-and-the-reader-pulls">16.1.2 <code>DBCHANGE_*</code> is a data-less notification, and the reader pulls</h4>
 <p>The <code>DBCHANGE_*</code> family is not a change <em>feed</em>. It carries no payload at all.</p>
 <p>Across the corpus, <strong>ten distinct <code>DBCHANGE_*</code> opcodes are wire-observed, 93
 requests in total, and every single one has a zero-length body</strong>. Every one is
