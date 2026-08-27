@@ -11180,31 +11180,41 @@ far: [W][S]</p>
 <td><strong>one opcode only</strong> (<code>0x4636</code>, 60 bodies) — unique for it, uncorroborated</td>
 </tr>
 <tr>
-<td><code>Baud_rate</code> + <code>Port_number</code> + <code>Port_type</code></td>
-<td style="text-align: right;"><strong>4 together</strong></td>
-<td>co-occur in <code>0x099f</code>, so only their <strong>sum</strong> is measured here; the split is <strong>[OPEN]</strong> — but see the note below, which names a one-field frame that would settle it</td>
+<td><code>Baud_rate</code></td>
+<td style="text-align: right;"><strong>2</strong></td>
+<td><code>0x099f</code>, 60 bodies, and the record carries its own oracle — see below</td>
+</tr>
+<tr>
+<td><code>Port_number</code>, <code>Port_type</code></td>
+<td style="text-align: right;">1 each</td>
+<td>same 60 bodies; <code>Port_number</code> corroborated by <code>Port_request</code>, which types the same concept <code>UNSIGNED8</code></td>
 </tr>
 </tbody>
 </table>
-<p><strong>The <code>Baud_rate</code> split has a cheap falsification test, and the structure
-library names it.</strong> Those three enums are <em>not</em> adjacent fields of one group —
-<code>Port_log</code> is <code>port_number : Port_number</code> followed by <code>port_status :
-Port_status</code>, and <code>Port_status</code> interposes a <code>descriptor : TEXT_</code> and four
-<code>BOOLEAN_</code>s before reaching <code>port_type</code>. Only their sum is constrained here, and
-three enums summing to 4 bytes means exactly one of them is two bytes wide while
-the value spaces (<code>Baud_rate</code> 0–11, <code>Port_number</code> 0–4, <code>Port_type</code> 0–1) would
-all fit in one.</p>
-<p>The library isolates one of the three: six request structures carry
+<p><strong>How that split was closed, and why it is worth reading.</strong> For a long time
+only the <strong>sum</strong> of those three was measured: they co-occur in <code>0x099F</code> and
+nothing isolated them, so the entry here read "4 together, split <strong>[OPEN]</strong>".
+Three enums summing to 4 bytes means exactly one is two bytes wide — and the
+value spaces gave no clue, because <code>Baud_rate</code> 0–12, <code>Port_number</code> 0–4 and
+<code>Port_type</code> 0–1 all fit comfortably in one byte each. The obvious inference was
+that the wide one must be whichever had the most members, which is the
+value-range reasoning §10.9 records as false.</p>
+<p>What settled it was not a new capture but reading the body properly (§16.1.3).
+<code>Baud_rate</code> is <strong>2</strong>, <code>Port_number</code> and <code>Port_type</code> <strong>1</strong> each, and the split
+reproduces the previously measured sum of 4 exactly — two independent
+measurements meeting. The decisive evidence is inside the record: its
+<code>DiagPortString</code> spells the port's settings in ASCII as <code>;bd=9600;…</code>, and the
+<code>Baud_rate</code> enum decodes to <code>baud9600</code> in all 60. [W]</p>
+<p>The library also offers a second, still-unused check on the same value, worth
+keeping for a commissioning capture: six request structures carry
 <code>baud_rate : Baud_rate</code> <strong>and nothing else</strong> —</p>
 <pre><code>AP2_Cabinet_Set_BLN_BaudRate_Request  = baud_rate : Baud_rate     (0x0126)
 AP2_Cabinet_Set_FLN1..3_Baudrate      = baud_rate : Baud_rate     (0x0123-0x0125)
 AP2_Cabinet_Set_MMI1..2_Baudrate      = baud_rate : Baud_rate     (0x0120-0x0121)
 </code></pre>
-<p>so <strong>the body length of any one of those six frames is <code>Baud_rate</code>'s width</strong>,
-and the other two follow by subtraction. None of the six appears anywhere in
-this corpus — they are configuration writes, which a monitoring supervisor never
-sends — so this is a gap that a single frame from a commissioning session would
-close, not one needing an experiment. [S]</p>
+<p>so the body length of any one of those six frames is <code>Baud_rate</code>'s width on its
+own, and should read 2. None appears in this corpus — they are configuration
+writes, which a monitoring supervisor never sends. [S]</p>
 <p><strong>A contradiction worth showing, because of how it resolved.</strong> <code>Ssto_zo_mod_cl</code>
 and <code>Ssto_zo_mod_ht</code> came out as <strong>1</strong> from <code>0x097d</code> and as <strong>2</strong> from
 <code>0x098d</code>. A type has one width, so one parse was wrong — and taking the majority
@@ -13626,15 +13636,15 @@ described.</p>
 <tbody>
 <tr>
 <td><strong>Decodable</strong> from widths this document pins</td>
-<td style="text-align: right;"><strong>366 (80%)</strong></td>
+<td style="text-align: right;"><strong>378 (83%)</strong></td>
 </tr>
 <tr>
 <td>Blocked on at least one unstated width or unpinned CHOICE</td>
-<td style="text-align: right;">89</td>
+<td style="text-align: right;">77</td>
 </tr>
 <tr>
 <td>distinct blocking types</td>
-<td style="text-align: right;"><strong>50</strong></td>
+<td style="text-align: right;"><strong>46</strong></td>
 </tr>
 </tbody>
 </table>
@@ -13652,12 +13662,6 @@ immediately:</p>
 </tr>
 </thead>
 <tbody>
-<tr>
-<td><code>Baud_rate</code></td>
-<td style="text-align: right;">11</td>
-<td style="text-align: right;">6</td>
-<td>§10.1 — one <code>CABINET_SET_*_BAUDRATE</code> frame settles it</td>
-</tr>
 <tr>
 <td><code>LON_extension_</code></td>
 <td style="text-align: right;">10</td>
@@ -13684,6 +13688,9 @@ immediately:</p>
 </tr>
 </tbody>
 </table>
+<p><code>Baud_rate</code> topped this table at 11 operations until §16.1.3 measured it, and
+how it fell is worth more than the twelve operations it took with it — see the
+warning at the end of this section.</p>
 <p><strong>What is no longer here is the point of the table.</strong> Its first two editions
 were topped by <code>use_proof_</code> at 48 operations and the <code>All_points</code> arms at 41
 each, and those are gone — not measured, but <em>recovered</em>: the vendor type system
@@ -13701,7 +13708,7 @@ never regressed — which matters, because a "decodable" verdict that quietly
 broke a working parse would be worse than no register at all. Treat the table
 as a work queue, not a scoreboard.</p>
 <p><strong>Read this against the parse rate, not instead of it.</strong> A reference
-implementation consumes 95.1% of the bodies in the corpus, and the two figures
+implementation consumes 96.9% of the bodies in the corpus, and the two figures
 measure different things — the parse rate measures <em>this site</em>, the register
 measures <em>the document</em>. Where they disagree, the disagreement is the useful
 part, and every case falls into one of two kinds:</p>
@@ -13727,6 +13734,27 @@ while <code>revstring</code> is <strong>field 1</strong> and the whole point of 
 clients (§7.3.1, §10.5). Read a blocked verdict as "do not assume you can walk
 this body generically", not as "this operation is undocumented"; where a section
 of §10 describes an opcode in prose, that description is the authority.</p>
+<p><strong>Do not guess a width from an enum's value range.</strong> This is the one shortcut
+that looks safe and is not, and it is recorded here because it very nearly went
+into this document as a rule. Twenty-one enum widths had been measured
+individually; nineteen were 1 byte and two were 2, and the obvious rule — <em>one
+byte while every member fits in a byte, two when one does not</em> — reproduced all
+twenty-one. <code>Application_family</code> tops out at 257, exactly the case that forces
+two. Twenty-one chances to fail and none taken; applying it moved this table
+from 366 operations to 416.</p>
+<p><strong>It is wrong.</strong> The first structure in the corpus able to test it on a fresh
+enum killed it: <code>Baud_rate</code> has thirteen members topping out at 12, so the rule
+says one byte, and it is <strong>two</strong> — 0 of 60 bodies consume exactly at width 1,
+60 of 60 at width 2, with the decoded rate matching an oracle inside the message
+itself (§16.1.3). Fifty were 83, not 91, and the difference was entirely
+imaginary.</p>
+<p>The twenty-one agreements were a <strong>selection effect</strong>, and the shape of it
+generalises past enums: a field gets measured when someone finds a structure
+tight enough to pin it, and the structures tight enough to pin anything are the
+densely packed point records — which are packed to the byte. The sample was
+never "enums"; it was "enums that live in point bodies". Enum width in P2 is a
+property of the field, not of the type, and every one of the 46 remaining
+blockers has to be measured the slow way. [W][I]</p>
 <h3 id="1010-the-full-structure-set-is-enumerable">10.10 The full structure set is enumerable</h3>
 <p>The ~30 structures above cover the read/command/COV core, the firmware/identity block, the session block, and one representative of each remaining major family (upload, PPCL, trend, TEC, alarm, node-management). The remaining ~1,110 structures follow the same conventions — ordered typed fields, the shared sub-types of §10.2, counted arrays, and CHOICE unions — and each maps one-to-one to a <code>*_Request</code> / <code>*_Response</code> pair for an opcode in the §9 catalog. For any opcode not detailed here, its body is the like-named ASDU structure (e.g. <code>AP2_&lt;name&gt;_Request</code> / <code>AP2_&lt;name&gt;_Response</code>), readable from the structure library with the §10.1 type mapping. [S]</p>
 <p><strong>[OPEN]</strong> The exact byte offsets of the COV <em>condition/priority</em> block within the <code>All_points</code> per-type value alternatives (i.e. the precise on-wire layout of each <code>lai_</code>/<code>ldo_</code>/<code>lenum_</code> CHOICE arm) are not pinned from the structure metadata alone — the metadata gives field order, not the codec's exact byte packing of each arm. Confirming these requires an alarmed/commanded capture or codec-level evidence. The field <em>order</em> and types are [S]; the per-arm byte offsets are [OPEN].</p>
@@ -14156,43 +14184,190 @@ The map's response layout is therefore <code>[S]</code> only. [W]</p>
 <p>An analog subpoint converts a raw digitized count to an engineering value by a linear transform: [D]</p>
 <pre><code>EngValue = (DigitizedValue × Slope) + Intercept
 </code></pre>
-<p><code>Slope</code> and <code>Intercept</code> are 32-bit big-endian floats fixed by the physical point's sensor/hardware type. [D] <code>DigitizedValue</code> is the raw ADC count. [D] A point carries <strong>two</strong> slope/intercept pairs — one for engineering (display) units and one for SI units — so the same digitized reading renders in either unit system; each pair is an independent linear transform from the same raw count. [S/D] The ASDU <code>Analog_scale</code> record is exactly <code>{ slope: f32, intercept: f32 }</code>; the dual-unit set is two such records plus the eng/SI units strings. [S]</p>
+<p><code>Slope</code> and <code>Intercept</code> are 32-bit big-endian floats fixed by the physical point's sensor/hardware type. [D] <code>DigitizedValue</code> is the raw ADC count. [D] The ASDU <code>Analog_scale</code> record is exactly <code>{ slope: f32, intercept: f32 }</code>. [S]</p>
+<p><strong>Where the two constants come from — and why nothing else is applied at run
+time.</strong> They are not measured per reading and not derived by the decoder. They
+are computed once, when the point is defined, from five inputs: the <strong>signal
+range</strong> (the electrical span the device presents — 4–20 mA, 0–10 Vdc,
+3–15 psig), the <strong>device range</strong> (the engineering span that signal represents —
+0–100 %, 0–0.5 in w.c.), the <strong>sensor type</strong> (§11.5.2), the <strong>field panel or FLN
+device type</strong>, and the <strong>unit system</strong> being calculated for. The vendor's
+engineering tooling takes exactly those five and emits the pair, from a lookup
+table keyed by <code>(device type, sensor type, unit system)</code> that carries the signal
+and device spans and the resulting slope and intercept together. [D] So every
+range, span and live-zero is already folded into <code>slope</code> and <code>intercept</code> before
+they reach the wire, and the transform above is the whole of the run-time
+arithmetic — see §11.5.1.1, where applying an offset a second time is the
+specific trap.</p>
+<p><strong>A point carries two pairs, and the pair sits behind a CHOICE.</strong> The same
+digitized reading renders in engineering or SI units, so the scale record is
+doubled, each half with its own COV limit: [S]</p>
+<pre><code>scale_                     CHOICE, u8 tag
+  virtual_pt   NULL_       0 B     &lt;- carries no scale record at all
+  physical_pt  20 B
+       eng_units      Analog_scale     slope f32 | intercept f32
+       eng_cov_limit  f32
+       si_units       Analog_scale     slope f32 | intercept f32
+       si_cov_limit   f32
+</code></pre>
+<p>Two cautions, both of which produce a decoder that looks correct on the bench:</p>
+<ul>
+<li><strong>The <code>NULL_</code> arm is not decoration.</strong> A reader that always consumes 20 bytes
+  here desynchronises on the first virtual member it meets, and a virtual member
+  is the common case in a team carrying computed values.</li>
+<li><strong>Which tag selects which arm is [OPEN].</strong> Declaration order puts
+  <code>virtual_pt</code> first, which would make tag <code>0</code> the empty arm — but the
+  <code>Physical_address_*</code> CHOICEs pair the same two concepts in the <em>opposite</em>
+  order (§10.4.2: there tag <code>0</code> is the arm that <em>has</em> an address). One of the
+  two inverts the convention and this document cannot yet say which, because the
+  only structure carrying <code>scale_</code> is <code>AP2_MEMBER_DESC_ADD_ANALOG</code> (0x4002) and
+  <strong>neither it nor a <code>MEMBER_DESC_UPLOAD</code> response appears anywhere in the
+  corpus</strong> — 0x4010 is present as 19 requests and no reply. Read the tag; do not
+  assume it. [S][OPEN]</li>
+</ul>
+<p>The units <em>strings</em> are not in this record. A point's own type (<code>LAI_type</code>,
+<code>LAO_type</code>, <code>LPACI_type</code>) carries a single <code>Analog_units = { eng_units: TEXT_,
+cov_limit }</code>, and the analog point-definition body carries the English and SI
+unit strings alongside initial values and alarm limits for both systems. Three
+structures, three scopes — an earlier revision of this section described them as
+one. [S]</p>
 <p>The FLN raw-count form is distinct from the BLN f32 value form: on the fieldbus an analog value is a raw integer whose register width is the point's <code>P1MaxRange</code> (most commonly 0–255, i.e. an 8-bit count), while the value seen at the BLN layer and in the COV payload is the scaled <code>f32</code> (§12.3). [D] Worked example: a digitized count of 1954 with slope 0.03125 and intercept −5.0 yields <code>1954 × 0.03125 + (−5.0) = 56.0625</code>, displayed as 56.06. [D]</p>
-<h4 id="11511-the-raw-count-is-not-0255-on-a-panel-input-and-the-full-scale-is-not-a-power-of-two">11.5.1.1 The raw count is not 0–255 on a panel input, and the full scale is not a power of two</h4>
+<h4 id="11511-the-raw-count-range-is-a-property-of-the-controller-family-and-neither-end-of-it-is-0">11.5.1.1 The raw count range is a property of the controller family, and neither end of it is 0</h4>
 <p>§11.5.1 gives the transform and notes that FLN raw counts are commonly 8-bit.
 Panel-resident analog points are different, and the constants are unobvious:
 [D/S]</p>
+<p><strong>The count range is a property of the controller family and the signal class
+together</strong>, and neither end of it is 0 or a power of two. These are the raw
+digitized ranges an analog <strong>input</strong> is defined against: [D]</p>
 <table>
 <thead>
 <tr>
-<th>Signal class</th>
-<th style="text-align: right;">Full-scale count</th>
-<th style="text-align: right;">Zero offset</th>
+<th>Controller family</th>
+<th>current</th>
+<th>voltage</th>
+<th>pneumatic</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>Analog input, current</td>
-<td style="text-align: right;">25,600 or 24,576 (hardware-generation dependent)</td>
-<td style="text-align: right;">3,584 or 6,144</td>
+<td>MBC</td>
+<td>3,584 … 29,184 → 4–20 mA</td>
+<td>3,584 … 29,184 → 0–10 V</td>
+<td>—</td>
 </tr>
 <tr>
-<td>Analog input, voltage</td>
-<td style="text-align: right;">25,600</td>
-<td style="text-align: right;">3,584</td>
+<td>MEC</td>
+<td>0 … 30,720 → <strong>0–20 mA</strong></td>
+<td>3,584 … 29,184 → 0–10 V</td>
+<td>—</td>
 </tr>
 <tr>
-<td>Analog output</td>
-<td style="text-align: right;">30,720</td>
-<td style="text-align: right;">0</td>
+<td>AHUC</td>
+<td>0 … 30,720 → <strong>0–20 mA</strong></td>
+<td>3,584 … 29,184 → 0–10 V</td>
+<td>—</td>
+</tr>
+<tr>
+<td>RCU (P2)</td>
+<td>4,200 … 21,000 → 4–20 mA</td>
+<td>0 … 21,000 → 0–10 V</td>
+<td>—</td>
+</tr>
+<tr>
+<td>SCU</td>
+<td>800 … 4,000 → 4–20 mA</td>
+<td>0 … 4,000 → 0–10 V</td>
+<td>1,120 … 2,400 → 3–15 psi / 21–103 kPa</td>
 </tr>
 </tbody>
 </table>
+<p>and for an analog <strong>output</strong>: [D]</p>
+<table>
+<thead>
+<tr>
+<th>Controller family</th>
+<th>current</th>
+<th>voltage</th>
+<th>pneumatic</th>
+<th>resistive</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MBC</td>
+<td>0 … 30,720 → 4–20 mA</td>
+<td>0 … 30,720 → 0–10 V</td>
+<td>0 … 30,720 → 0–20 psi / 0–138 kPa</td>
+<td>—</td>
+</tr>
+<tr>
+<td>MEC, AHUC</td>
+<td>0 … 30,720 → <strong>0–20 mA</strong></td>
+<td>0 … 30,720 → 0–10 V</td>
+<td>—</td>
+<td>—</td>
+</tr>
+<tr>
+<td>RCU (P2)</td>
+<td>0 … 1,023 → 4–20 mA</td>
+<td>0 … 1,023 → 0–10 V</td>
+<td>42 … 211 → 3–15 psi / 21–103 kPa</td>
+<td>—</td>
+</tr>
+<tr>
+<td>SCU</td>
+<td>0 … 255 → 4–20 mA</td>
+<td>0 … 255 → <strong>0–16 V</strong></td>
+<td>0 … 255 → 0–18 psi / 0–124 kPa</td>
+<td>0 … 135 → 0–135 (×1 kΩ)</td>
+</tr>
+</tbody>
+</table>
+<p>A <strong>virtual</strong> point on every family is <code>0 … 32,767</code>, identity — no signal, no
+span, and (§11.5.1) no scale record on the wire at all.</p>
+<p><strong>An earlier revision of this section had this wrong in a way worth naming</strong>,
+because the same mistake is easy to make from the conversion constants alone: it
+listed "full-scale count 25,600, zero offset 3,584". <strong>25,600 is the <em>span</em>, not
+the full scale.</strong> The MBC current input runs 3,584 … 29,184, and 29,184 − 3,584
+= 25,600. The figure was right, the label was wrong, and the difference matters
+the moment anyone tries to bound a count field: a decoder that rejects counts
+above 25,600 rejects the top 12 % of every MBC analog input. The span is the
+quantity that appears in the generation-conversion ratios of §11.5.1.2, which is
+how it came to be recorded as if it were the maximum.</p>
+<p>Three consequences an implementer should carry:</p>
+<ul>
+<li><strong>Live zero is per family, not per signal.</strong> A 4–20 mA input starts at 3,584
+  counts on an MBC but at 4,200 on an RCU and 800 on an SCU — and at <strong>0</strong> on an
+  MEC or AHUC, whose current inputs are 0–20 mA and have no live zero to encode.</li>
+<li><strong>Voltage inputs carry the same 3,584 offset as current on MBC/MEC/AHUC</strong>,
+  even though 0–10 V has no live zero. The offset is a property of the input
+  circuit, not of the 4 mA floor.</li>
+<li><strong>The SCU is an 8-bit-class device throughout</strong> — 0…255 on every output,
+  0…4,000 on inputs — and its voltage output spans <strong>16 V</strong>, not 10. That single
+  fact is the whole of the <code>AOV16</code> sub-type below.</li>
+</ul>
 <p>So a 4–20 mA input spans a raw count of 3,584…25,600 rather than 0…full-scale:
-the zero offset <strong>is</strong> the live-zero of the 4 mA floor, expressed in counts. An
-implementer computing engineering values from raw counts without the offset
-gets a reading that is wrong by the live-zero and right at full scale, which is
-the hardest kind of scaling error to notice.</p>
+the zero offset <strong>is</strong> the live-zero of the 4 mA floor, expressed in counts.</p>
+<p><strong>These constants do not belong in the run-time transform, and putting them
+there is a bug.</strong> §11.5.1's single line is complete on its own: <code>slope</code> and
+<code>intercept</code> were derived from the signal range when the point was defined, so
+the live-zero is already inside <code>intercept</code>. A decoder that reads the table
+above and helpfully "corrects" for the offset —
+<code>(count − 3584) × slope + intercept</code> — subtracts the live-zero a second time.
+The result is not wrong by a little at one end: it is low by a <strong>constant</strong>
+<code>zero_offset × slope</code> at every count in the range, full scale included, which
+for the common 3,584…25,600 span is <strong>16.3 % of the device range</strong>. A 0–100 %
+point built this way reads −16.3 at 4 mA and 83.7 at 20 mA and is internally
+consistent the whole way, so nothing about the numbers looks broken unless
+someone knows what the reading ought to be.</p>
+<p>What the counts in the table are actually for is the other direction — reading a
+raw count when you do <em>not</em> have the point's slope and intercept, and
+sanity-checking a pair you do have. A count of 3,584 on a current input is 4 mA
+and therefore the bottom of the device range whatever the engineering units are;
+and a slope that does not satisfy
+<code>slope ≈ (dev_high − dev_low) / (count_high − count_low)</code> for its sub-type's
+counts belongs to a different sub-type or a different hardware generation
+(§11.5.1.2).</p>
 <p>Analog points carry a <strong>sub-type</strong> finer than the <code>LAI</code>/<code>LAO</code> distinction of
 §11.2, and the sub-type — not the point type — selects the transform:</p>
 <table>
@@ -14242,7 +14417,10 @@ the hardest kind of scaling error to notice.</p>
 generations</strong>. Moving a point from one termination generation to another
 requires re-deriving both from the originals, and the vendor's own tooling
 carries a conversion table keyed by <code>(source sub-type, target sub-type,
-generation)</code> to do it. Five generations are covered. [S]</p>
+generation)</code> to do it. Five generations are covered. [S] The controller families
+the scaling data distinguishes are <strong>MBC</strong>, <strong>SCU</strong>, <strong>MEC</strong>, <strong>AHUC</strong>, <strong>RCU</strong>
+(the P2 variant), <strong>FLNC</strong>, and the <strong>MPU</strong>, the last with a table of its own
+(§11.5.2.1). [D]</p>
 <p>The conversions have three shapes:</p>
 <ul>
 <li><strong>Identity</strong> — <code>slope' = slope</code>, <code>intercept' = intercept</code>. The majority, and
@@ -14259,6 +14437,64 @@ generation)</code> to do it. Five generations are covered. [S]</p>
 <code>AOV16</code>), and current output additionally shifts the intercept by −4 on one
 generation — the 4 mA live zero again, this time in engineering units rather
 than counts.</p>
+<p><strong>Those are not five magic numbers; they are one rule.</strong> Every ratio above falls
+out of the count and device spans in §11.5.1.1:</p>
+<pre><code>ratio = (device span, source / device span, target)
+      × (count  span, target / count  span, source)
+</code></pre>
+<p>Check each against the table: [I]</p>
+<table>
+<thead>
+<tr>
+<th>Constant</th>
+<th>Source span</th>
+<th>Target span</th>
+<th>Reads as</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>255/30720</code></td>
+<td>MBC out, 0–20 mA over 30,720</td>
+<td>SCU out, 0–20 mA over 255</td>
+<td>device spans equal → count ratio alone</td>
+</tr>
+<tr>
+<td><code>10/16 × 255/30720</code> (<code>AOV16</code>)</td>
+<td>MBC out, <strong>0–10 V</strong> over 30,720</td>
+<td>SCU out, <strong>0–16 V</strong> over 255</td>
+<td>the SCU voltage output really does span 16 V</td>
+</tr>
+<tr>
+<td><code>20/18 × 255/30720</code> (<code>AOP</code>)</td>
+<td>MBC out, <strong>0–20 psi</strong> over 30,720</td>
+<td>SCU out, <strong>0–18 psi</strong> over 255</td>
+<td>two different pneumatic spans</td>
+</tr>
+<tr>
+<td><code>135/30720</code> (<code>AOR</code>)</td>
+<td>MBC out over 30,720</td>
+<td>SCU resistive, 0–135 over 135 counts</td>
+<td>resistive is count-identical, so only the count ratio survives</td>
+</tr>
+<tr>
+<td><code>3200/25600</code></td>
+<td>MBC <strong>input</strong>, 3,584…29,184 = 25,600</td>
+<td>SCU input, 800…4,000 = 3,200</td>
+<td>both 4–20 mA, so device spans cancel</td>
+</tr>
+</tbody>
+</table>
+<p>and the <code>−4</code> intercept shift is the same reconciliation one level up: <strong>MEC and
+AHUC current channels are 0–20 mA where MBC, SCU and RCU are 4–20 mA</strong>, so
+moving a point between those two groups moves the engineering zero by exactly
+4 mA. It is not a per-generation fudge factor; it is the live zero appearing in
+engineering units because the two families disagree about whether there is one.</p>
+<p>The one constant this does not account for is <strong><code>25600/24576</code></strong>. No family in
+§11.5.1.1's tables has a 24,576-count span, so a sixth input generation exists
+that those tables do not cover — <code>24,576 = 24 × 1024</code>, against MBC's
+<code>25,600 = 25 × 1024</code>, which makes it look like a near neighbour of the MBC
+rather than a different class. <strong>[OPEN]</strong></p>
 <p>The practical consequence for anyone reading a point database: <strong>a slope and
 intercept are only meaningful alongside the sub-type and the termination
 generation that produced them.</strong> Two points with identical slope/intercept on
@@ -14319,9 +14555,182 @@ different generations do not represent the same transfer function. [S]</p>
 </tr>
 </tbody>
 </table>
-<p>An <code>intercept_adjustment</code> (f32) accompanies the sensor type for field trim of the linear transform (<code>Analog_sensor = { sensor_type, intercept_adjustment }</code>). [S]</p>
+<p>The physical signal each class presents: <strong>current</strong> 4–20 mA, <strong>voltage</strong>
+0–10 Vdc, <strong>pneumatic</strong> 3–15 psig. [D] <code>ltype</code> is not a sensor technology at
+all — it marks <strong>an analog input terminated on an FLN device rather than on the
+panel</strong>, which is why it has no signal range of its own and why its scaling is
+the FLN device's business (§11.4). [D]</p>
+<p><strong>Do not read a code off a pick-list position.</strong> The codes above are the values
+that appear in the address record on the wire. Engineering tooling presents the
+same sensor set ordered for a human — current first, then thermistor, then
+voltage — and with slightly different granularity: it offers a generic
+<em>Thermistor</em> alongside the 10 kΩ, 100 kΩ and 10 k Type-3 entries, and it does
+not offer <code>resistance</code> at all. Only <code>current</code> happens to land on the same
+number in both. A value transcribed from a configuration screen is not a wire
+code. [D][I]</p>
+<p><strong>Most temperature inputs are already linearised, and §11.5.1.1's count ranges
+do not apply to them.</strong> This is the single most consequential thing in §11.5 and
+it is invisible from the wire, because a linearised input and a raw one carry
+the same <code>f32</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Sensor class on MBC / SCU / MEC / AHUC</th>
+<th>eng (°F) pair</th>
+<th>SI (°C) pair</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>thermistor, MEC RTD, nickel (all variants)</td>
+<td>slope <strong>1</strong>, intercept <strong>0</strong></td>
+<td>slope 0.5556, intercept −17.7778</td>
+</tr>
+<tr>
+<td>series-1000 (MEC, AHUC)</td>
+<td>slope 1, intercept <strong>−0.6</strong></td>
+<td>slope 0.5556, intercept −17.4445</td>
+</tr>
+<tr>
+<td><strong>RTD on an MBC</strong> — the exception</td>
+<td>slope 0.03984, intercept −501.453</td>
+<td>slope 0.02205, intercept −296.3628</td>
+</tr>
+</tbody>
+</table>
+<p>The first row's engineering pair is the identity, and its SI pair is
+<code>0.5556 x − 17.7778</code>, which is exactly <code>(°F − 32) × 5/9</code> and nothing else. <strong>For
+these sensors the panel has already done the linearisation and the "raw count"
+is degrees Fahrenheit</strong>; the two <code>Analog_scale</code> records are doing unit
+conversion, not signal conversion. Only the MBC's RTD channel — and the
+current/voltage/pneumatic classes generally — carry a genuine count-to-
+engineering transform. A decoder that reasons about the 3,584 live-zero on a
+thermistor input is reasoning about a number that is not there. [D]</p>
+<p><strong><code>intercept_adjustment</code> is lead-wire compensation, not a general trim.</strong>
+<code>Analog_sensor = { sensor_type, intercept_adjustment: f32 }</code> (5 B, §10.4.2), and
+the adjustment exists for one purpose: on a resistance sensor the resistance of
+the sensor <em>leads</em> adds to the resistance of the sensor, and on a long run that
+is a real temperature error. It is computed from the <strong>wire gauge and the run
+length</strong>, using a per-AWG coefficient: [D]</p>
+<table>
+<thead>
+<tr>
+<th>AWG</th>
+<th>14</th>
+<th>16</th>
+<th>18</th>
+<th>20</th>
+<th>22</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>coefficient, per foot</td>
+<td>0.03292</td>
+<td>0.02070</td>
+<td>0.01302</td>
+<td>0.00818</td>
+<td>0.00516</td>
+</tr>
+<tr>
+<td>coefficient, per metre</td>
+<td>0.10798</td>
+<td>0.06789</td>
+<td>0.04271</td>
+<td>0.02683</td>
+<td>0.01692</td>
+</tr>
+</tbody>
+</table>
+<p>Two internal checks confirm the reading: each column is <strong>3.280×</strong> the one above
+it, which is feet per metre; and each gauge step is <strong>1.59×</strong> the next, which is
+the resistance ratio of a two-size AWG step. The MEC uses a slightly different
+set for the three heaviest gauges (0.02932 / 0.01844 / 0.01289 per foot),
+converging on the same values at 20 and 22 AWG. The coefficient's <em>unit</em> is not
+stated anywhere and is not raw ohms per foot — it is ~13× copper's — so treat it
+as a vendor-calibrated constant rather than a physical one. <strong>[OPEN]</strong> [D]</p>
+<h4 id="11521-standard-input-ranges-and-the-mpus-two">11.5.2.1 Standard input ranges, and the MPU's two</h4>
+<p>A sensor's signal range is usually not typed in. The tooling offers a fixed set
+of <strong>standard input ranges</strong>, and picking one fills in both the signal and the
+device span; these nine are the whole set: [D]</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Engineering (°F)</th>
+<th>SI (°C)</th>
+<th>Quantity</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>20 … 120</td>
+<td>−6.7 … 48.9</td>
+<td>temperature</td>
+</tr>
+<tr>
+<td>2</td>
+<td>70 … 220</td>
+<td>21.1 … 104.4</td>
+<td>temperature</td>
+</tr>
+<tr>
+<td>3</td>
+<td>−30 … 120</td>
+<td>−34.4 … 48.9</td>
+<td>temperature</td>
+</tr>
+<tr>
+<td>4</td>
+<td>−30 … 212</td>
+<td>−34.4 … 100</td>
+<td>temperature</td>
+</tr>
+<tr>
+<td>5</td>
+<td>200 … 350</td>
+<td>93.3 … 176.7</td>
+<td>temperature</td>
+</tr>
+<tr>
+<td>6</td>
+<td>−58 … 122</td>
+<td>−50 … 50</td>
+<td>temperature</td>
+</tr>
+<tr>
+<td>7</td>
+<td>−20.2 … 50.1</td>
+<td>−29.2 … 10.1</td>
+<td>dewpoint (<code>FDP</code> / <code>CDP</code>)</td>
+</tr>
+<tr>
+<td>8</td>
+<td>−55.3 … 114.7</td>
+<td>−48.5 … 45.9</td>
+<td>dewpoint</td>
+</tr>
+<tr>
+<td>9</td>
+<td>0 … 100</td>
+<td>0 … 100</td>
+<td>relative humidity (<code>% RH</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>The <strong>MPU</strong> is the one controller with a scaling table of its own, and it has
+exactly two ranges, both on <code>ltype</code> inputs: [D]</p>
+<pre><code>narrow    °F:  0.5    × count            °C:  0.2778 × count − 17.7778
+wide      °F:  1.098  × count − 40       °C:  0.61   × count − 40
+</code></pre>
+<p>The narrow transform reproduces the documented <strong>34–117 °F</strong> span exactly, at
+counts 68 and 234. The wide transform gives −40 °F at count 0 as documented, but
+reaches only 240 °F at count 255 against a documented top of 260 — so either the
+wide range runs past 8 bits or the published figure is the sensor's rating
+rather than the channel's. <strong>[OPEN]</strong> [D]</p>
 <h4 id="1153-enumerated-and-digital-state-decoding">11.5.3 Enumerated and digital state decoding</h4>
-<p>For digital and enumerated points the wire/value field carries a small integer <strong>state index</strong>, not a string. The index is resolved for display against a named <strong>text group / state-text set</strong> (the <code>State_text_table</code>), stored once per panel as a shared catalog and referenced by name from the point or team member. [S/D] Example sets: 2000 = {Off, On}; 2001 = {Normal, Alarm}; generic sets like {Clean, Dirty}. [D] <strong>On the wire the id is a <em>signed</em> 16-bit integer and every observed value is negative</strong> — the per-type defaults <code>-1</code>/<code>-2</code> of §11.2, then two bands of named groups at <code>-1002</code>…<code>-1018</code> and <code>-2003</code>…<code>-2018</code>. A decoder that reads the field unsigned turns every one of them into a meaningless number in the 63,500s. The distribution is not a clean split by point type: LDI points draw exclusively from the <code>-20xx</code> band, LDO points predominantly from <code>-10xx</code> but from both, and enumerated points from both — so the bands are not "digital versus enumerated" and what separates them is <strong>[OPEN]</strong>. [W] The signedness is corroborated from a second direction: this id is the <code>enum_type_id</code> the <strong>ENUM family (0x0401–0x040E)</strong> creates and edits (§9.4), and every one of those bodies types it <code>i16</code> — <code>enum_type : { type_id:i16, type_name, nrOfelements:u16, elements:{ value:i16, value_text }[] }</code> is the state-text table itself, id and all its value→text pairs. A client that wants the display strings reads them with <code>AP2_ENUM_TYPE_DISPLAY</code> (0x0404) or <code>_LOOK</code> (0x0405) against the id the point carries. [S] A digital point's present value is encoded as the float <code>0.0</code> (OFF) or <code>1.0</code> (ON) in the value field (§12.3); an enumerated point's present value is the integer state index carried in that same float field. [D] An implementer renders the value by taking the index and looking it up in the referenced state-text group; the wire never carries the display string for <strong>a value</strong>. [D] <strong>It does carry the whole table, and a client can therefore render points without any vendor file.</strong> The ENUM family transfers them, and one of its opcodes is wire-observed: [W]</p>
+<p>For digital and enumerated points the wire/value field carries a small integer <strong>state index</strong>, not a string. The index is resolved for display against a named <strong>text group / state-text set</strong> (the <code>State_text_table</code>), stored once per panel as a shared catalog and referenced by name from the point or team member. [S/D] Example sets: 2000 = {Off, On}; 2001 = {Normal, Alarm}; generic sets like {Clean, Dirty}. [D] <strong>On the wire the id is a <em>signed</em> 16-bit integer and every observed value is negative</strong> — the per-type defaults <code>-1</code>/<code>-2</code> of §11.2, then two bands of named groups at <code>-1002</code>…<code>-1018</code> and <code>-2003</code>…<code>-2018</code>. A decoder that reads the field unsigned turns every one of them into a meaningless number in the 63,500s. The distribution is not a clean split by point type: LDI points draw exclusively from the <code>-20xx</code> band, LDO points predominantly from <code>-10xx</code> but from both, and enumerated points from both — so the bands are not "digital versus enumerated". <strong>Nor is anything else</strong>: see "the bands are allocation blocks" below, where three candidate rules are tested and all three fail. [W] The signedness is corroborated from a second direction: this id is the <code>enum_type_id</code> the <strong>ENUM family (0x0401–0x040E)</strong> creates and edits (§9.4), and every one of those bodies types it <code>i16</code> — <code>enum_type : { type_id:i16, type_name, nrOfelements:u16, elements:{ value:i16, value_text }[] }</code> is the state-text table itself, id and all its value→text pairs. A client that wants the display strings reads them with <code>AP2_ENUM_TYPE_DISPLAY</code> (0x0404) or <code>_LOOK</code> (0x0405) against the id the point carries. [S] A digital point's present value is encoded as the float <code>0.0</code> (OFF) or <code>1.0</code> (ON) in the value field (§12.3); an enumerated point's present value is the integer state index carried in that same float field. [D] An implementer renders the value by taking the index and looking it up in the referenced state-text group; the wire never carries the display string for <strong>a value</strong>. [D] <strong>It does carry the whole table, and a client can therefore render points without any vendor file.</strong> The ENUM family transfers them, and one of its opcodes is wire-observed: [W]</p>
 <pre><code>0x040A AP2_ENUM_TYPE_DB_GET
   request   last_enum_type_id : SHORT_        &lt;- a resume key
   response  enum_type : Enum_type
@@ -14340,6 +14749,58 @@ ENUM_TYPE_DISPLAY</code> and <code>0x0405 ENUM_TYPE_LOOK</code> fetch a single t
 or by name. So the full render path for a digital or enumerated point is: read
 the point's <code>state_text_table</code> id (§10.4.1), fetch that table, index it with the
 value. [W][S]</p>
+<p><strong>The catalogue itself, and the two things about it that break decoders.</strong> The
+shipped state-text catalogue holds <strong>346 types and 2,060 levels</strong>. Two
+properties of it are load-bearing: [D]</p>
+<ul>
+<li><strong>A level's display text is at most 8 characters.</strong> No exception in 2,060
+  levels; the distribution runs 1–8 with a pronounced spike at both ends (325
+  one-character names, 310 eight-character). A renderer can size a state column
+  at 8 and a generator can reject anything longer.</li>
+<li><strong>One type in three is sparse.</strong> <code>VALUE</code> is drawn from 0…255 but only 93
+  distinct values are ever used, and <strong>118 of the 346 types do not number their
+  levels <code>0…n−1</code></strong> — <code>CR_CONTROLMODE1</code> is <code>{0, 2, 3, 15}</code>, <code>MC_HP_FAULTS</code> is
+  <code>{187, 188, 189, 204, 205, 206, 207, 255}</code>. <strong>Index a state-text table by
+  <code>value</code>, never by array position.</strong> Position-indexing is correct for the 2-level
+  majority and silently wrong for a third of the catalogue — and wrong in the
+  worst way, because it returns <em>some</em> other legitimate state name rather than
+  failing. This is §10.1's sparse-enum rule again, and here it is quantified.</li>
+</ul>
+<p>Type sizes are mostly small — 184 of 346 have exactly two levels — but the tail
+is long, up to <strong>77 levels</strong> in one type, so a fixed-size table is not safe
+either.</p>
+<p><strong>The bands are allocation blocks, not a typed namespace.</strong> It is tempting to
+read meaning into <code>-10xx</code> versus <code>-20xx</code>, and three natural rules were tested
+against the catalogue. All three fail: [I]</p>
+<table>
+<thead>
+<tr>
+<th>Candidate rule</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>-10xx</code> is two-state, <code>-20xx</code> is multi-state</td>
+<td>74 % vs 61 % two-level — no split</td>
+</tr>
+<tr>
+<td><code>-10xx</code> ships every vocabulary in both polarities (<code>OFF_ON</code> / <code>ON_OFF</code>)</td>
+<td>only 46 of 194 have a reversed twin; 2 of 31 in <code>-20xx</code> — a tendency, not a rule</td>
+</tr>
+<tr>
+<td><code>-20xx</code> exists because a name-length limit was lifted</td>
+<td>both bands top out at 16 characters</td>
+</tr>
+</tbody>
+</table>
+<p>There is one real class boundary, and it is at <strong><code>-3xxx</code></strong>: those 107 types are
+the LonMark/BACnet standard vocabularies, distinguishable by lowercase <code>name_t</code>
+spelling, and they are the only band containing types flagged as <em>not</em> supported
+on APOGEE. Everything from <code>-1000</code> to <code>-2999</code> is one flat, APOGEE-supported
+vocabulary that happens to have been allocated in two sittings. <strong>Treat the id
+as opaque and resolve it through the catalogue; nothing about the band is
+decodable.</strong></p>
 <blockquote>
 <p>Implementation caution: the TEC-template "PTYPE" field is a <strong>template-local</strong> taxonomy, NOT the §11.2 <code>Point_type</code> L-codes and NOT priority values. The 1–4 alignment with LDI/LDO/LAI/LAO is coincidental for those four only. Do not cross-map PTYPE to L-codes. [D]</p>
 <p>Censused rather than sampled, because the value set depends on where you look and on the controller family: [W]</p>
@@ -14926,53 +15387,173 @@ AP2_COV_Disable_Request =  name_response : Name_response ,  cov_mask : Cov_mask
 </tr>
 </tbody>
 </table>
-<p><strong>Standard</strong> alarms are the base form (limit-crossing or digital-state alarm, single destination set). <strong>Enhanced</strong> alarms add the richer alarm-mode machinery — multiple alarm modes (day/night/special), per-mode limits and setpoints, and enhanced-count behavior — and exist for digital, analog, and enumerated points. [S/D] The runtime alarm state of a point is the <code>Alarm_object_data</code> record: timestamps for current-state / first-alarm / acknowledgment, a <code>state_changes</code> counter, and the boolean condition set <code>{ ack_pending, return_to_normal_acks, inalarm, introuble, inalarm_by_command, operator_disabled, program_disabled, proofing, is_enhanced, print_alarms, enable_almcnt2 }</code>. [S]</p>
+<p><strong>Standard</strong> alarms are the base form (limit-crossing or digital-state alarm, single destination set). <strong>Enhanced</strong> alarms add the richer alarm-mode machinery — multiple alarm modes, per-mode limits and setpoints, and enhanced-count behavior — and exist for digital, analog, and enumerated points. [S/D] <strong>The nine arms' wire widths are in §10.4.4</strong>, where four of them are measured; this section is the model, that section is the bytes.</p>
+<p>The runtime alarm state of a point is the <code>Alarm_object_data</code> record: timestamps for current-state / first-alarm / acknowledgment, a <code>state_changes</code> counter, and the boolean condition set <code>{ ack_pending, return_to_normal_acks, inalarm, introuble, inalarm_by_command, operator_disabled, program_disabled, proofing, is_enhanced, print_alarms, enable_almcnt2 }</code>. [S]</p>
+<p><strong><code>enable_almcnt2</code> is not a display flag.</strong> A panel keeps <strong>two resident points
+that count how many of its points are in alarm</strong> — <code>ALMCNT</code>, the standard
+counter, and <code>ALMCT2</code>, a second one. Every point alarm increments <code>ALMCNT</code>; a
+point with this flag set increments <strong>both</strong>. The second counter exists so a
+site can count a functional subset separately — smoke-control points monitoring
+door alarms is the vendor's own example — and because they are ordinary
+panel-resident points, they can be read, trended, and referenced from PPCL like
+any other. A client that wants "how many alarms does this panel have" reads
+<code>ALMCNT</code> rather than counting reports. [D]</p>
+<p><strong>The alarm mode is selected by another point, and its values are fixed.</strong>
+Enhanced alarming does not carry a mode field; it carries a <strong>mode point</strong>, and
+that point's current value selects which mode's setpoint, levels, destinations
+and messages apply: [D]</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">Mode value</th>
+<th>Mode</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">0</td>
+<td>night</td>
+<td></td>
+</tr>
+<tr>
+<td style="text-align: right;">1</td>
+<td>day</td>
+<td></td>
+</tr>
+<tr>
+<td style="text-align: right;">2 … 5</td>
+<td>special modes</td>
+<td>e.g. warm-up, cool-down</td>
+</tr>
+</tbody>
+</table>
+<p>On pre-APOGEE firmware the mode point is a <strong>virtual LAO</strong> carrying 0–5; on
+APOGEE firmware it should be an <strong>LENUM or LDO</strong>, and in practice is often a
+zone-mode point or a TEC's day/night point. Anything that can command a point
+can therefore change an alarm mode — a time-of-day schedule, a PPCL program, or
+a physical switch. <strong>A mode must additionally be enabled</strong> before the panel will
+report alarms while in it; a configured mode that was never enabled is silent,
+which is not the same as a point that does not alarm. [D]</p>
 <h3 id="132-alarm-priority-is-distinct-from-command-priority">13.2 Alarm priority is distinct from command priority</h3>
 <p>An alarm carries an <strong>alarm priority</strong> that classifies the urgency of the <em>event</em>, which is a completely separate axis from the <strong>command priority</strong> (§12.4) that classifies the <em>ownership</em> of a command. An implementer must keep the two apart. [D] The <code>Alarm_priority</code> enumeration is <code>priority_0 … priority_6</code>; the operational severity bands these represent: [S/D]</p>
 <table>
 <thead>
 <tr>
-<th>Band</th>
+<th style="text-align: right;">Value</th>
 <th>Severity class</th>
 <th>Tag</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>highest</td>
-<td>Life Safety / Fire</td>
+<td style="text-align: right;">1</td>
+<td>Life Safety</td>
 <td>[D]</td>
 </tr>
 <tr>
-<td></td>
+<td style="text-align: right;">2</td>
+<td>Fire</td>
+<td>[D]</td>
+</tr>
+<tr>
+<td style="text-align: right;">3</td>
 <td>Critical</td>
 <td>[D]</td>
 </tr>
 <tr>
-<td></td>
+<td style="text-align: right;">4</td>
 <td>Security</td>
 <td>[D]</td>
 </tr>
 <tr>
-<td></td>
+<td style="text-align: right;">5</td>
 <td>Trouble</td>
 <td>[D]</td>
 </tr>
 <tr>
-<td>lowest</td>
+<td style="text-align: right;">6</td>
 <td>Maintenance</td>
 <td>[D]</td>
 </tr>
 </tbody>
 </table>
+<p><strong>Those six names are a site's configuration, not the protocol's.</strong> The labels
+are defined per system in a profile an engineer edits, and the wire carries only
+the number. The set above is the vendor's own example and the one almost
+everybody uses, which is exactly why it is worth stating that a decoder must
+<strong>not</strong> hard-code it: two sites can disagree about what <code>3</code> means, and both are
+correct. The same applies to the 4-character short labels an alarm report may
+carry (<code>URGT</code>, <code>MAIN</code>, <code>TROB</code>) — those are the site's abbreviations of its own
+band names. Render the number; render a label only if you have that site's
+profile. [D] An earlier revision of this table merged Life Safety and Fire into
+one row, which left five bands against six values and no way to tell which value
+was missing.</p>
 <p>The alarm report carries this priority as a 1-byte value (1–6) and may append a 4-character class label (e.g. <code>URGT</code>, <code>MAIN</code>, <code>TROB</code>). [W] The type system's <code>Alarm_priority_enum</code> has <strong>seven</strong> members, <code>priority_0</code> through <code>priority_6</code>, and the extra one reconciles cleanly: the control language's <code>ALMPRI</code> function — which reads a point's alarm priority from inside a program — is documented as returning <strong>1 through 6</strong>, the same range the report carries. <code>priority_0</code> is therefore the unassigned value, not a seventh severity, and a decoder should render it as "none" rather than inventing a band for it. [D][S] The point's runtime <code>alarm_state</code> (§12.3.1) is one of <code>normal / alarm / high_alarm / low_alarm / trouble</code>. [S]</p>
 <h3 id="133-analog-limits-transitions-and-deadband">13.3 Analog limits, transitions, and deadband</h3>
 <p>An analog or pulse point carries a <strong>high limit</strong> and a <strong>low limit</strong> in engineering units. A value crossing a limit asserts the alarm condition (and, for analog, distinguishes <code>high_alarm</code> vs <code>low_alarm</code>). [S/D] An <strong>alarm deadband</strong> equal to one COV limit (§12.5) is automatically applied at each limit to suppress nuisance re-alarming as the value dithers across the threshold. [D] The point-definition record carries both English and SI limit pairs alongside the dual scaling (<code>english_low_alarm</code> / <code>english_high_alarm</code> / <code>si_low_alarm</code> / <code>si_high_alarm</code>). [S]</p>
-<p>Alarm transitions follow the standard three-transition model — <strong>to-off-normal</strong>, <strong>to-fault</strong>, <strong>to-normal</strong> (the <code>BAC_Transitions</code> set: <code>to_offnormal</code>, <code>to_fault</code>, <code>to_normal</code>) — and a point may be configured to <strong>annunciate</strong> on each transition independently ("Annunciate to Normal / Off-Normal / Fault Transitions"). [S/D] A <code>level_delay</code> and a <code>mode_delay</code> (both u16, in the alarm-setup record) debounce the assertion so a brief excursion does not generate an alarm. [S]</p>
+<p>Alarm transitions follow the standard three-transition model — <strong>to-off-normal</strong>, <strong>to-fault</strong>, <strong>to-normal</strong> (the <code>BAC_Transitions</code> set: <code>to_offnormal</code>, <code>to_fault</code>, <code>to_normal</code>) — and a point may be configured to <strong>annunciate</strong> on each transition independently ("Annunciate to Normal / Off-Normal / Fault Transitions"). [S/D] The standard-alarm time delay is the BACnet one: the value must stay outside the high/low band for that long before a to-off-normal event, or back inside it <em>including the deadband</em> before a to-normal. [D]</p>
+<p><strong><code>level_delay</code> and <code>mode_delay</code> are both <code>u16</code> and they are not in the same
+unit.</strong> They are adjacent in the alarm-setup record and describe superficially
+similar waits, which makes this the easiest field pair in the section to get
+wrong: [D]</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Unit</th>
+<th>What it waits for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>level_delay</code></td>
+<td><strong>seconds</strong></td>
+<td>how long the value must stay inside an alarm level's range before the panel reports at that level — the anti-chatter delay for a door opening</td>
+</tr>
+<tr>
+<td><code>mode_delay</code></td>
+<td><strong>minutes</strong></td>
+<td>how long the system is given to <em>reach and stabilise at</em> a new setpoint after a mode change, before the panel starts checking it at all</td>
+</tr>
+</tbody>
+</table>
+<p>A decoder rendering both as seconds is wrong by 60× on one of them, and wrong in
+the forgiving direction — a 15-minute mode delay shown as 15 seconds looks like
+a plausible debounce rather than an obvious error. The two also differ in kind:
+<code>level_delay</code> suppresses a transient, <code>mode_delay</code> suppresses the <em>expected</em>
+excursion that a setpoint change itself causes.</p>
+<p><strong><code>differential</code> is a return-to-normal hysteresis, applied on one side only.</strong>
+It is not a symmetric band around the limit: a point in alarm stays in alarm
+until its value crosses back past the limit <em>by</em> the differential. A point that
+alarms at 74 °F with a differential of 2.0 does not report normal until it drops
+below 72 °F. This is distinct from the automatic one-COV-limit deadband of the
+paragraph above, which applies at the limit itself; a point can carry both. [D]</p>
 <p>An <strong>enhanced</strong> definition as it actually arrives on the wire — mode point,
 units, set point, and the level table with each level's offset, priority,
 category and message number — is decoded in §10.8 (<code>AP2_UPL_ALL_ALARM_MODE</code>
 response). [W]</p>
+<p><strong>What an <code>offset</code> in that level table means depends on the point type, and the
+two readings are not related.</strong> [D]</p>
+<ul>
+<li><strong>On an analog point</strong> it is a <em>displacement from the mode's setpoint</em>, above
+  or below, that the value must cross to enter that alarm level. The levels are
+  therefore concentric bands around a setpoint that itself changes with the
+  mode — which is the whole reason enhanced alarming exists, and why an analog
+  enhanced alarm cannot be flattened into a fixed high/low pair.</li>
+<li><strong>On an LENUM point</strong> it is a <em>state index</em> from that point's state-text
+  table (§11.5.3), and the levels partition the index range. <strong>A level's
+  priority applies from its own offset up to the next assigned one</strong>, so the
+  table is sparse by design: assigning <code>0</code>→normal, <code>2</code>→PRI1, <code>4</code>→PRI6 on a
+  six-state point means <code>0–1</code> normal, <code>2–3</code> PRI1, <code>4–5</code> PRI6. If the <em>lowest</em>
+  offset carries no priority, the first assigned priority reaches downward and
+  covers everything below it — so omitting the bottom entry does not create an
+  unalarmed floor, it extends the first alarm level over it. <strong>Up to 64 offsets
+  per LENUM point.</strong></li>
+</ul>
+<p>One operational consequence worth carrying into any tool that writes these:
+<strong>changing an LENUM point's state-text table resets every offset</strong>, because the
+offsets are indices into the table that is being replaced. [D]</p>
 <h3 id="134-alarm-destinations-and-routing">13.4 Alarm destinations and routing</h3>
 <p>An alarm-setup record (<code>AP2_Alarm_Setup_Request</code> / <code>_Modify</code> / <code>_Copy</code>) configures, per alarm point and per alarm mode: <code>mode_name</code> + <code>mode_suffix</code>, <code>normal_acks</code> (require ack on return-to-normal), <code>alarmcnt2</code> (second alarm count), <code>level_delay</code>, <code>mode_delay</code>, <code>differential</code> (f32 hysteresis), and <strong>four destination category bytes</strong> <code>category0 … category3</code>. [S] These four categories are the alarm's routing destinations; a system <strong>default destination (000)</strong> receives alarms not otherwise routed, so the effective routing is up to four configured destinations plus the default. [D] A destination is a category container that nodes append themselves to (<code>AP2_Category_Nodes_Append</code> / <code>_Remove</code>), so an alarm routed to a category reaches every node currently in that category. [S]</p>
 <p><strong>The category record itself, and a clean external check on it.</strong> The structure
@@ -16190,6 +16771,83 @@ using the selector-and-resume-key paging idiom of §10.2.3.</p>
 </ul>
 <p>This is what §6.2 means in calling the second channel the "announce + DB-sync"
 band: the announce carries the fact, the data channel carries the data. [W]</p>
+<h4 id="1613-upl_all_port-0x099f--the-panels-port-table-and-where-baud_rate-was-measured">16.1.3 <code>UPL_ALL_PORT</code> (0x099F) — the panel's port table, and where <code>Baud_rate</code> was measured</h4>
+<p>The sweep's first operation is also one of its most completely decoded. <code>0x099F</code>
+returns one record per port, and <strong>60 of 60 bodies in the corpus consume
+exactly</strong>: [W]</p>
+<pre><code>Port_log      port_number : Port_number            u8
+              port_status : Port_status
+Port_status   descriptor              TEXT_        (empty in all 60)
+              baud_rate               Baud_rate    u16 BE      &lt;- TWO bytes
+              highlight_enabled       BOOLEAN_
+              autobye_enabled         BOOLEAN_
+              alarm_printing_enabled  BOOLEAN_
+              report_printing_enabled BOOLEAN_
+              port_type               Port_type    u8
+              my_site_id              TEXT_
+              AdvancedPortString      TEXT_
+              AdvancedSystemString    TEXT_
+              DiagPortString          TEXT_
+              DiagSystemString        TEXT_
+              PortName                TEXT_
+</code></pre>
+<p>The request is three bare bytes — <code>begin_port_number</code>, <code>end_port_number</code>,
+<code>last_port_number</code>, all <code>UNSIGNED8</code> — which is a range plus the cursor of §6.7.
+That the request types a port number as <code>UNSIGNED8</code> is the independent
+corroboration that <code>Port_number</code> is one byte in the response too. [S]</p>
+<p><strong><code>Baud_rate</code> is two bytes, and this body is what settles it.</strong> At width 1 not a
+single body consumes exactly; at width 2 all 60 do. Better than that, the record
+carries its own oracle: <code>DiagPortString</code> is an ASCII settings string of the form
+<code>;bd=9600;pa=0;mk=0.</code>, and <strong>the decoded <code>Baud_rate</code> enum equals the <code>bd=</code> value
+in all 60 records</strong> — <code>6</code> decoding to <code>baud9600</code> against a literal <code>9600</code> in the
+same message. <code>pa=</code> likewise tracks the record's own port number. A width that
+is right about the byte count <em>and</em> right about the number is not a coincidence.
+[W] The consequence for the enum-width shortcut is in §10.9.</p>
+<p><strong>The ports a panel exposes.</strong> The five records repeat identically across the
+twelve sweeps captured: [W]</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">Port</th>
+<th><code>PortName</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">0</td>
+<td>USB Modem port</td>
+</tr>
+<tr>
+<td style="text-align: right;">1</td>
+<td>HMI port</td>
+</tr>
+<tr>
+<td style="text-align: right;">2</td>
+<td>Telnet port</td>
+</tr>
+<tr>
+<td style="text-align: right;">3</td>
+<td>USB Tool port</td>
+</tr>
+<tr>
+<td style="text-align: right;">4</td>
+<td>USB Printer port</td>
+</tr>
+</tbody>
+</table>
+<p><strong>What this body does <em>not</em> establish, stated plainly.</strong> Every one of the 60
+records carries <code>baud_rate</code> 9600, <code>port_type</code> 0, all four booleans clear, and an
+empty <code>descriptor</code>. So the <strong>widths</strong> are pinned by exact consumption but the
+<strong>value spaces</strong> are not exercised at all: <code>Port_type</code> has a second member that
+never appears, the booleans are never seen set, and no port on this panel runs
+at any other rate. A decoder built from this will walk any port record
+correctly and has been shown nothing about what the fields mean when they are
+non-zero. <strong>[OPEN]</strong> [W]</p>
+<p>One thing worth noting for §17: this is an <strong>unauthenticated read that
+enumerates a panel's console and management ports by name</strong> — the Telnet port
+among them — and returns the site identifier in <code>my_site_id</code> and again inside
+<code>DiagSystemString</code>. It is a small disclosure on its own and a useful one to an
+attacker enumerating a plant. [W]</p>
 <h3 id="162-on-disk-p2-panel-database-format">16.2 On-disk (.P2) panel-database format</h3>
 <p>A panel database serialized to disk (file extension <code>.P2</code>, e.g. <code>P2_Archive</code> snapshots) uses <strong>TLV record framing persisted to a file</strong> — broadly the same style of encoding the panel exchanges on the wire, written to disk. This subsection is observed from <strong>panel database exports and controller backups</strong> (not from wire traffic) and is included only to help an operator read their own database exports; treat it as indicative rather than exhaustive. [I]</p>
 <p>Record framing (observed across <strong>36 distinct panel databases</strong> — Insight <code>.P2</code> archives plus Desigo CC device backups, spanning MBC-10 / SCU / PXCC / PXCM platforms and 2018–2025 — <strong>31,823 records</strong>): [W]</p>
@@ -16850,7 +17508,63 @@ between models.</p>
 </tr>
 </tbody>
 </table>
-<p>The panel reports a <strong>firmware-revision string and a separate hardware string</strong>; together they form the firmware+hardware identity. That identity selects the wire <strong>STRING_TYPE</strong> — whether name/string fields are encoded in <strong>RAD-50</strong> (pre-IP / early platforms) or <strong>ASCII</strong> (P2/IP platforms) — per the per-platform <code>APOGEE_PANEL_REVISION_LIBRARY</code> (<code>firmware.rev.xml</code>): each platform class (RCU_P2, MEC, MBC, SCU, MODULAR, COMPACT, FLNC, MXL, …) carries <code>STRING_TYPE</code>, <code>REV_STRING</code>, <code>REV_LEVEL</code>, <code>CAB_TYPE</code>, and <code>CHECK_HW_STRING</code>. A client decoding name fields must therefore key its string codec on the reported revision/hardware, not assume a single encoding (cross-ref §8 — the RAD-50 vs ASCII string codec and the 40-character RAD-50 alphabet). [D/W]</p>
+<p>The panel reports a <strong>firmware-revision string and a separate hardware string</strong>; together they form the firmware+hardware identity. That identity selects the wire <strong>STRING_TYPE</strong> — whether name/string fields are encoded in <strong>RAD-50</strong> or <strong>ASCII</strong> (cross-ref §8 — the codec and the 40-character RAD-50 alphabet). A client decoding name fields must key its codec on the reported identity rather than assume one encoding. [D/W]</p>
+<p><strong>The rule is narrow, and it is matchable from the identity string itself.</strong> The
+revision library is a table of <code>(REV_STRING, CAB_TYPE, STRING_TYPE)</code> in two
+kinds — <strong>836 firmware-revision entries</strong> and <strong>52 hardware-revision entries</strong> —
+and across all 888 of them RAD-50 appears <strong>31 + 1 times</strong>. Everything else is
+ASCII. In full: [D]</p>
+<table>
+<thead>
+<tr>
+<th>Identity token</th>
+<th>Platform</th>
+<th>Codec</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>firmware <code>SCU0601</code> … <code>SCU129</code> (29 entries, SCU firmware <strong>6.1 – 12.9</strong>)</td>
+<td>SCU</td>
+<td><strong>RAD-50</strong></td>
+</tr>
+<tr>
+<td>firmware <code>INT02</code>, <code>INT03</code> (legacy supervisor 2.0 / 3.0)</td>
+<td>supervisor</td>
+<td><strong>RAD-50</strong></td>
+</tr>
+<tr>
+<td>hardware <code>SCU</code>, hardware <code>RCU</code></td>
+<td>SCU, RCU_P2</td>
+<td><strong>RAD-50</strong></td>
+</tr>
+<tr>
+<td>firmware <code>SV503</code> … <code>SV5111</code> (SCU firmware <strong>13.0 and later</strong>)</td>
+<td>SCU</td>
+<td>ASCII</td>
+</tr>
+<tr>
+<td>everything else — <code>COMPACT</code>, <code>MBC</code>, <code>MEC</code>, <code>MODULAR</code>, <code>MXL</code>, <code>MXL-IQ</code>, <code>NCC</code>, <code>PMI-G</code>, <code>SCT</code>, <code>XLS</code>, <code>FLNC</code>, and the supervisor from 2.1 on</td>
+<td>—</td>
+<td>ASCII</td>
+</tr>
+</tbody>
+</table>
+<p>So the decision procedure is: <strong>assume ASCII, and switch to RAD-50 only for an
+SCU below firmware 13.0, an RCU, or a pre-2.1 supervisor.</strong> The SCU is the one
+platform that crosses over, and it does so cleanly at a major-revision boundary
+— 12.9 is RAD-50 and 13.0 is ASCII, with no mixed revision. The identity string
+observed on the wire in this corpus carries a <code>PXME</code> hardware token, which is
+the MODULAR class and therefore ASCII, consistent with every name field in the
+capture set decoding as plain text. [D][W]</p>
+<p>Two smaller facts from the same table. A <code>CHECK_HW_STRING</code> flag says whether the
+hardware token must be validated as well as the firmware one; it is <code>NO</code> for 43
+entries, the supervisor's among them, which is consistent with a supervisor
+having no panel hardware to check. And <strong><code>REV_LEVEL</code> is a dotted revision that
+does not sort as a number</strong> — the SCU series runs <code>12.4</code>, <code>12.41</code>, <code>12.5</code>,
+<code>12.51</code> … <code>12.54</code>, <code>12.6</code>, so <code>12.41</code> is a revision <em>between</em> 12.4 and 12.5 and
+not "12.41 &gt; 12.6". Compare revisions component-wise as strings-of-digits, or a
+panel at 12.9 sorts below one at 12.41. [D]</p>
 <p><strong>Firmware-keyed compatibility knobs.</strong> Two legacy compatibility settings are gated by firmware identity: [D]</p>
 <ul>
 <li><strong>Legacy P2 Host ID field</strong> — an older host-identity field retained for back-compatibility with pre-IP supervisors.</li>
@@ -18872,6 +19586,28 @@ specific test that would confirm or falsify it.</p>
    shapes per polymorphic opcode and which operation each selects. <em>Test:</em> for
    each known-polymorphic opcode, capture every distinct body shape against a lab
    panel and label the operation produced.</p>
+</li>
+<li>
+<p><strong>CHOICE tag→arm assignment where declaration order is the only evidence.</strong>
+   <em>Known:</em> the type system lists a CHOICE's arms in a fixed order, and for most
+   CHOICEs the wire tag is that ordinal. But <strong>the <code>Physical_address_*</code> family
+   inverts it</strong> — there tag <code>0</code> is <code>real_addr</code>, the arm that carries data, and
+   the <code>NULL_</code> arm is <code>1</code> (§10.4.2). So declaration order is a hypothesis, not a
+   rule, and reading it the wrong way round parses cleanly whenever the two arms
+   are a <code>NULL_</code> and a fixed-width record: the decoder consumes the wrong number
+   of bytes only on the <em>other</em> tag value, which a single-valued corpus never
+   produces. <em>Missing:</em> the tag values for every CHOICE not exercised on the
+   wire. The sharpest case is <strong><code>scale_</code></strong> (§11.5.1), the virtual/physical
+   selector on a team member's analog scaling: declaration order says tag <code>0</code> is
+   the empty <code>virtual_pt</code> arm, which is the <em>opposite</em> pairing to
+   <code>Physical_address_*</code> for the same virtual/physical distinction. Its only
+   carrier, <code>AP2_MEMBER_DESC_ADD_ANALOG</code> (0x4002), does not appear in the corpus
+   at all, and <code>AP2_MEMBER_DESC_UPLOAD</code> (0x4010) appears as 19 requests with no
+   reply. <em>Test:</em> one <code>MEMBER_DESC_UPLOAD</code> response for a team containing both a
+   virtual and a physical analog member settles it — the physical member's arm is
+   20 bytes and the virtual member's is zero, so the tag that precedes the
+   20 bytes is the answer. A <code>POINT_ADD_*</code> for a virtual analog point read back
+   with <code>MEMBER_DESC_UPLOAD</code> would produce it deliberately.</p>
 </li>
 </ol>
 <h3 id="appendix-e--evidence-tag-legend-and-lineage-pointer">Appendix E — Evidence-tag legend and lineage pointer</h3>
