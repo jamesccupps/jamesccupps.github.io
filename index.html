@@ -10135,6 +10135,11 @@ field with nothing left over — <code>User_profile</code> + <code>Team_search</
   mean what they say, is that a <code>0x4200</code> naming a panel rather than a TEC returns
   something that is <em>not</em> a <code>TEC_body</code>, or fails. Nothing in this corpus has ever
   asked.</p>
+<p><em>Independently reproduced.</em> A later pass matched all 1,144 declared structures
+  against these bodies without reference to the opcode's name, and <code>Team_response
+  | TEC_body</code> was the <strong>only</strong> shape of the 1,144 that consumes all 60 responses,
+  with the request decoding as <code>user_profile | team_search | application_number</code>.
+  Two methods, one answer. [W]</p>
 <ul>
 <li>
 <p><strong>Some TEC requests use a fixed 220-byte zero-padded buffer.</strong> Form B above and
