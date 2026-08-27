@@ -3507,6 +3507,56 @@ carries a numeric code (§7.2.2) that maps onto them. [S]</p>
 </tr>
 </tbody>
 </table>
+<h4 id="721a-nothing-retries-a-failed-request">7.2.1a Nothing retries a failed request</h4>
+<p>There is <strong>no retry behaviour</strong> in the observed clients. A first look suggested
+the opposite — of 6,005 error responses paired to their requests, <strong>5,522 are
+followed by the same opcode on the same connection, at a median of 0.02 s</strong> —
+but that test cannot tell a retry from the next request in a poll cycle, and
+<code>POINT_LOG_VALUE</code> is issued constantly.</p>
+<p>The control settles it. Measuring how long until the <strong>identical</strong> request
+recurs — same opcode <em>and</em> same body length — split by whether the answer was an
+error or a success: [W]</p>
+<table>
+<thead>
+<tr>
+<th>Opcode</th>
+<th style="text-align: right;">recurs after <strong>error</strong></th>
+<th style="text-align: right;">after <strong>success</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0x0220 POINT_LOG_VALUE</code></td>
+<td style="text-align: right;">0.42 s (n=2,570)</td>
+<td style="text-align: right;"><strong>0.01 s</strong> (n=4,001)</td>
+</tr>
+<tr>
+<td><code>0x0271 COV_ENABLE</code></td>
+<td style="text-align: right;">0.68 s (n=1,319)</td>
+<td style="text-align: right;"><strong>0.10 s</strong> (n=5,120)</td>
+</tr>
+<tr>
+<td><code>0x0240 POINT_CMD_VALUE</code></td>
+<td style="text-align: right;">4.36 s (n=29)</td>
+<td style="text-align: right;"><strong>0.43 s</strong> (n=32,371)</td>
+</tr>
+<tr>
+<td><code>0x0986 UPL_ALL_TEC</code></td>
+<td style="text-align: right;">2.58 s (n=29)</td>
+<td style="text-align: right;"><strong>0.00 s</strong> (n=902)</td>
+</tr>
+</tbody>
+</table>
+<p>A retried request would recur <strong>faster</strong> after a failure. It recurs <em>slower</em> —
+42× slower for <code>POINT_LOG_VALUE</code>. So a client that receives an error moves on,
+and the request reappears only when its normal cycle comes round again.</p>
+<p>Two consequences for an implementer. A panel <strong>must not</strong> rely on a client
+re-asking; an error is final for that exchange. And a client gains nothing by
+implementing retry against these panels' behaviour — if a name is <code>not_found</code> it
+will still be <code>not_found</code>, which is what 97% of these errors are (§7.2.2).</p>
+<p><strong>Scope.</strong> Every client in this corpus is the same supervisor product, so this
+characterises <em>that implementation</em>, not a protocol requirement. Nothing in the
+wire format forbids a retry; nothing here performs one. [W]</p>
 <h4 id="722-observed-wire-error-codes">7.2.2 Observed wire error codes</h4>
 <p>These 2-byte codes appear as the <code>dir == 0x05</code> error tail in the corpus. Distribution across the
 621,268 trusted P2 frames, of which 6,006 are error responses: <code>0x0003</code> 5,805; <code>0x00AC</code> 127;
