@@ -10317,7 +10317,7 @@ field with nothing left over — <code>User_profile</code> + <code>Team_search</
 </tbody>
 </table>
 <p><strong>A caution that governs this whole section: a generated lookup fails
-plausibly, not loudly.</strong> Three independent properties of the protocol's type
+plausibly, not loudly.</strong> Four independent properties of the protocol's type
 system each produce, in a mechanically generated decoder, a <em>valid wrong answer</em>
 rather than an error — which is the hardest kind of defect to notice, because
 the output looks like a successful decode:</p>
@@ -10341,12 +10341,18 @@ the output looks like a successful decode:</p>
 <td><strong><code>Name_space_enum</code> is defined twice, with incompatible values</strong> — <code>0 system / 1 user / 65535 any</code>, and separately <code>1 LAO_actuator / 2 HOA</code></td>
 <td>whichever definition the generator loads last silently wins for every <code>Name_space</code> field</td>
 </tr>
+<tr>
+<td><strong>An enum's members can be bit positions, not values</strong> — <code>Schedule_days</code> has 14 members and a 4-byte field</td>
+<td>sizing the field from the enum's maximum gives one byte instead of four, and then decodes a mask as a value</td>
+</tr>
 </tbody>
 </table>
 <p>The first two have each already produced a wrong claim in an earlier edition of
 this document. The third has not, because §8.5 documents the first definition
 and every observed value (<code>0000</code>, <code>FFFF</code>) belongs to it — but a decoder built by
-scraping the enum dump has a one-in-two chance of the other.</p>
+scraping the enum dump has a one-in-two chance of the other. The fourth was
+found by trying to <em>use</em> an enum's value range as a constraint while solving for
+widths, and discovering that the constraint is unsound (§10.1, below).</p>
 <p><strong>The defensive rule:</strong> resolve every enum value through a lookup keyed by
 <em>value</em> within a namespace named by the <em>field</em>, never by position and never by
 enum name alone. Where a value is not in the table, fail — do not fall through
@@ -10442,8 +10448,57 @@ far: [W][S]</p>
 <td style="text-align: right;">1</td>
 <td>inside the totalizer arm, §10.4.5</td>
 </tr>
+<tr>
+<td><code>time_</code>, <code>trend_cov_</code></td>
+<td style="text-align: right;">4 each</td>
+<td>the two <code>Trend_type</code> arms; consumption across 5 and 2 opcodes (161 / 86 bodies)</td>
+</tr>
+<tr>
+<td><code>Occurrence</code></td>
+<td style="text-align: right;">1</td>
+<td><code>u8</code> in §15.3's <code>0x0989</code> decode; consumption narrows <code>0x5020</code>/<code>0x0979</code> to this or 4 and §15.3 chooses</td>
+</tr>
+<tr>
+<td><strong><code>Schedule_days</code></strong></td>
+<td style="text-align: right;"><strong>4</strong></td>
+<td>a <strong>bitmask</strong>, §15.3 — see the warning below</td>
+</tr>
+<tr>
+<td><code>loggerOn_</code></td>
+<td style="text-align: right;">1</td>
+<td>2 opcodes, 23 bodies</td>
+</tr>
+<tr>
+<td><code>Ssto_amd</code>, <code>Ssto_desop_value</code></td>
+<td style="text-align: right;">1 each</td>
+<td>2 opcodes, 6 bodies</td>
+</tr>
+<tr>
+<td><code>Grain_Type</code>, <code>Repl_Cmd_Type</code></td>
+<td style="text-align: right;">1 each</td>
+<td><strong>one opcode only</strong> (<code>0x4636</code>, 60 bodies) — unique for it, uncorroborated</td>
+</tr>
+<tr>
+<td><code>Baud_rate</code> + <code>Port_number</code> + <code>Port_type</code></td>
+<td style="text-align: right;"><strong>4 together</strong></td>
+<td>they occur only together, in <code>0x099f</code>; the group width is fixed, the split is <strong>[OPEN]</strong></td>
+</tr>
+<tr>
+<td><code>Ssto_zo_mod_cl</code>, <code>Ssto_zo_mod_ht</code></td>
+<td style="text-align: right;"><strong>[OPEN]</strong></td>
+<td><code>0x503b</code> and <code>0x097d</code> give 1, <code>0x098d</code> gives 2 — an unresolved contradiction, so one of those three parses is wrong</td>
+</tr>
 </tbody>
 </table>
+<p><strong>Do not size an enum field from its enum's value range.</strong> The obvious shortcut
+— <em>the largest member is 13, so one byte is enough</em> — is wrong, and
+<code>Schedule_days</code> is the counter-example. Its fourteen members are <code>Sunday</code> …
+<code>Saturday</code> and <code>Replacement1</code> … <code>Replacement7</code>, values 0–13, and the field is
+<strong>four bytes</strong>, because the members are <strong>bit positions in a mask</strong>, not values
+the field takes. A decoder sized that way reads one byte where four are
+required, and reads a value where a mask is meant. Both failures are silent, and
+this is the fourth member of the family in the caution at the head of this
+section. [W][S]</p>
 <p>The remainder are <strong>[OPEN]</strong>, and the honest scoping matters: a large share of
 them are BACnet-side object types (<code>analog_input_</code>, <code>binary_output_</code>,
 <code>multi_value_</code> and their siblings) belonging to the <code>BAC_*</code> structures, which
