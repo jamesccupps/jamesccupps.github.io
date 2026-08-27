@@ -17597,6 +17597,35 @@ does not sort as a number</strong> — the SCU series runs <code>12.4</code>, <c
 <code>12.51</code> … <code>12.54</code>, <code>12.6</code>, so <code>12.41</code> is a revision <em>between</em> 12.4 and 12.5 and
 not "12.41 &gt; 12.6". Compare revisions component-wise as strings-of-digits, or a
 panel at 12.9 sorts below one at 12.41. [D]</p>
+<h4 id="1651-what-a-panel-actually-runs">16.5.1 What a panel actually runs</h4>
+<p>Useful context for anyone modelling panel behaviour, and none of it is
+guessable from the wire: [F]</p>
+<ul>
+<li><strong>The control processor is a Motorola 68000, and the operating system is
+  pSOS+</strong> — the Integrated Systems real-time kernel, banner <code>PSOS+ S68000
+  V2.0.E</code>, copyright 1988–1992, with its configuration symbols (<code>KC_PSOSCODE</code>,
+  <code>KC_RN0SADR</code>) present in the image. Confirmed two ways: the banner appears in
+  26 of 42 shipped images, and <strong>28 of 42 disassemble coherently as 68000</strong> and
+  not at all as PowerPC.</li>
+<li><strong>Two images are PowerPC</strong>, and they are the large ones — the 3.2 MB <code>V1</code> and
+  the 2.5 MB French MEC. Under PowerPC they decode at 40% and 11% instruction
+  density with <code>blr</code> rates of 0.38 and 0.42; under 68000 they decode at 0.0%
+  and 0.1%. The lineage therefore spans two instruction sets, which is exactly
+  why §22.4's dispatch table being byte-identical across both is evidence that
+  it is protocol <em>data</em> rather than compiled code.</li>
+<li><strong>A third of the images are packed</strong> and decode as neither architecture. The
+  split is not by family but by revision: <code>FLNC2p5</code>/<code>MBC2p5</code> decode at 34%,
+  while <code>flnc2p5p2</code>/<code>MBC2p5p2</code> — the very next patch level, same size class —
+  decode at 5%.</li>
+</ul>
+<p>Why an implementer should care: a pSOS+ task model explains the panel's
+observed timing more honestly than a generic "it is busy" would. The <strong>10 s
+<code>EPing</code> cadence with a 0.00 s median absolute deviation</strong> (§5.0, §7.3.1) is a
+kernel timer tick, not a polling loop; the <strong>~600-request database sweep
+answered in ~8 seconds while heartbeats continue on other connections</strong> (§16.1.1)
+is separate tasks on separate priorities rather than one loop multiplexing. A
+virtual panel that services both from a single thread will pass a functional
+test and fail a timing one. [F][I]</p>
 <p><strong>Firmware-keyed compatibility knobs.</strong> Two legacy compatibility settings are gated by firmware identity: [D]</p>
 <ul>
 <li><strong>Legacy P2 Host ID field</strong> — an older host-identity field retained for back-compatibility with pre-IP supervisors.</li>
