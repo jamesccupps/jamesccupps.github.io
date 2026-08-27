@@ -17686,12 +17686,14 @@ guessable from the wire: [F]</p>
   <code>KC_RN0SADR</code>) present in the image. Confirmed two ways: the banner appears in
   26 of 42 shipped images, and <strong>28 of 42 disassemble coherently as 68000</strong> and
   not at all as PowerPC.</li>
-<li><strong>Two images are PowerPC</strong>, and they are the large ones — the 3.2 MB <code>V1</code> and
-  the 2.5 MB French MEC. Under PowerPC they decode at 40% and 11% instruction
-  density with <code>blr</code> rates of 0.38 and 0.42; under 68000 they decode at 0.0%
-  and 0.1%. The lineage therefore spans two instruction sets, which is exactly
-  why §22.4's dispatch table being byte-identical across both is evidence that
-  it is protocol <em>data</em> rather than compiled code.</li>
+<li><strong>The later generation is PowerPC.</strong> Two of the 42 shipped images are — the
+  3.2 MB <code>V1</code> and the 2.5 MB French MEC, decoding at 40% and 11% instruction
+  density with <code>blr</code> rates of 0.38 and 0.42 against 0.0% for 68000 — and so are
+  the <strong>PXC-class images (PPC, PXCC, PXCM)</strong>, which ship <em>inside</em> a supervisor
+  DLL rather than as standalone files and decode at 17–27% density with <code>blr</code>
+  rates of 0.30–0.39. So the lineage spans two instruction sets, which is
+  exactly why §22.4's dispatch table being byte-identical across both is
+  evidence that it is protocol <em>data</em> rather than compiled code.</li>
 <li><strong>A third of the images are packed</strong> and decode as neither architecture. The
   split is not by family but by revision: <code>FLNC2p5</code>/<code>MBC2p5</code> decode at 34%,
   while <code>flnc2p5p2</code>/<code>MBC2p5p2</code> — the very next patch level, same size class —
