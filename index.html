@@ -2470,7 +2470,9 @@ mechanism. [W]</p>
 <h4 id="536-the-ebln-diagnostic-reads-and-what-each-one-returns">5.3.6 The EBLN diagnostic reads, and what each one returns</h4>
 <p>The <code>0x464A</code>–<code>0x4650</code> block is the EBLN replication diagnostic set. None of
 these values appears in the supervisor-side <code>AP2_Function_Code</code> enum except
-<code>0x464C</code>, and none occurs in ordinary traffic — a supervisor never issues them.
+<code>0x464C</code>, and none occurs in ordinary traffic — <strong>this</strong> supervisor never
+issues them, across the whole corpus. Whether another supervisor product or a
+maintenance tool does is untested.
 They are nonetheless implemented: every one below answered <code>dir=0x01</code> <strong>success</strong>
 with a distinct structured body opening with the standard <code>SYST</code> scope preamble.</p>
 <table>
@@ -2645,7 +2647,7 @@ followed by an opcode-specific body. [W]</p>
 <td>4</td>
 <td><code>msg_type</code></td>
 <td>u32 BE</td>
-<td>High three bytes always <code>0x00 0x00 0x00</code>; low byte is the message-class discriminator (§6.2).</td>
+<td>High three bytes <code>0x00 0x00 0x00</code> in <strong>all 621,268 trusted frames, without exception</strong>; low byte is the message-class discriminator (§6.2).</td>
 <td>[W]</td>
 </tr>
 <tr>
@@ -3028,7 +3030,7 @@ for example <code>P2SCAN|5033</code> or <code>DCC-SVR|5034</code>. The <code>|PO
 string</em> — a <code>HOST|PORT</code> disambiguator that lets one host present distinct identities — and is <strong>not</strong>
 a network-layer port indicator and <strong>not</strong> a field delimiter. [W] Decisive evidence: a supervisor
 stamps <code>DCC-SVR|5034</code> into <code>slot[3]</code> in thousands of frames captured on a <strong>5033-only</strong> link,
-and the literal <code>5033</code> never appears in any slot. The same suffixed identity rides whatever TCP port
+and the literal <code>5033</code> appears in no slot of any frame in the corpus. The same suffixed identity rides whatever TCP port
 carried the frame. [W] Handling: when <strong>building</strong> a frame, emit the full literal identity including
 the suffix and do not split on <code>|</code>; when <strong>parsing</strong>, accept both the suffixed and bare forms —
 responses and routing-table entries frequently return the bare <code>NAME</code> without the suffix. [W]</p>
