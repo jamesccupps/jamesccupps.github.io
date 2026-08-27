@@ -10417,6 +10417,31 @@ far: [W][S]</p>
 <td style="text-align: right;"><strong>4</strong></td>
 <td>solved from the wire: 40 of 40 bodies parse with zero remainder at 4 bytes, <strong>0 of 40</strong> at 1 or 2</td>
 </tr>
+<tr>
+<td><code>Point_type</code></td>
+<td style="text-align: right;">1</td>
+<td>the <code>All_points</code> selector, §10.4.1</td>
+</tr>
+<tr>
+<td><strong><code>State_text_table</code></strong></td>
+<td style="text-align: right;"><strong>2, signed</strong></td>
+<td>§11.5 — every observed value is negative, and <code>Enum_type.type_id</code> is declared <code>SHORT_</code></td>
+</tr>
+<tr>
+<td><code>Representation</code></td>
+<td style="text-align: right;">1</td>
+<td>inside <code>Analog_format</code>, constant across analog points</td>
+</tr>
+<tr>
+<td><code>Proof_status</code></td>
+<td style="text-align: right;">1</td>
+<td>the only width that closes an <code>l2sl</code> body, §10.4.1</td>
+</tr>
+<tr>
+<td><code>Total_rate</code></td>
+<td style="text-align: right;">1</td>
+<td>inside the totalizer arm, §10.4.5</td>
+</tr>
 </tbody>
 </table>
 <p>The remainder are <strong>[OPEN]</strong>, and the honest scoping matters: a large share of
@@ -11481,8 +11506,13 @@ model consumes <strong>5,795 of 5,807 walked points (99.8%) with zero remainder<
 </tr>
 <tr>
 <td><code>Proof_status</code></td>
-<td>—</td>
-<td><strong>[OPEN]</strong>; inside <code>Point_proof_delay</code>, reached only through the <code>l2sl</code>/<code>l2sp</code>/<code>looa*</code>/<code>lfss*</code> arms</td>
+<td>1</td>
+<td>the only width that closes an <code>l2sl</code> body against the §10.4.4 anchor — 0, 2 and 3 all fail; the enum has two values</td>
+</tr>
+<tr>
+<td><code>enabled_</code></td>
+<td>43</td>
+<td>the <code>Point_totalizer</code> enabled arm — §10.4.5</td>
 </tr>
 </tbody>
 </table>
@@ -11798,6 +11828,24 @@ begin with two <code>u16</code> delays and contain two <code>f32</code>, consist
 record, but with three samples the field boundaries there are <strong>[OPEN]</strong>. [W]</p>
 <p><strong>Taken together with §10.4.1–§10.4.3 the point body is closed: 5,795 of 5,807
 walked points (99.8%) consume with zero remainder.</strong> [W]</p>
+<h4 id="1045-point_totalizer--the-accumulator-arm">10.4.5 <code>Point_totalizer</code> — the accumulator arm</h4>
+<p><code>Point_base</code>'s <code>point_totalizer</code> is the other CHOICE, and like <code>Alarm_object</code>
+its zero arm (<code>disabled</code>) is <code>NULL_</code>. The <code>enabled</code> arm is <strong>43 bytes</strong>: [W]</p>
+<pre><code>Total_rate                1 B     observed 1 and 2
+u16                       2 B     reads 2 in every sample -- a count: 3 + 2x20 = 43
+  f32 | f32 | f32 | DATE_TIME     20 B, twice
+</code></pre>
+<p>The running total is the second <code>f32</code> of the first record. <code>Total_rate</code> selects
+magnitude as well as units — points at rate 1 carry totals near 973,000 with a
+second value near 2,244, while rate-2 points carry 20,000–48,000 with a second
+near zero. Two same-shaped records behind a count is the protocol's ordinary
+counted-array convention (§10.1), and it matches the pair of accumulators the
+structure library implies with <code>includeInCount2</code> and <code>enable_almcnt2</code>.</p>
+<p>Both <code>DATE_TIME</code> positions are confirmed the cheap way: <strong>all 34 stamps across
+the two offsets carry the weekday their own date falls on, 34 of 34</strong> (§10.8).</p>
+<p><strong>[OPEN]</strong> — the count reads <code>2</code> in all 17 samples, so the array reading is a
+structural fit rather than a demonstrated one, and the three <code>f32</code> per record
+are not individually named. Every sample is a supply fan. [W]</p>
 <h3 id="105-cabinet_display--firmware--identity-block-0x010c">10.5 CABINET_DISPLAY — firmware / identity block (0x010C)</h3>
 <p><code>AP2_CABINET_DISPLAY</code> response (0x010C) is the panel's full firmware-and-identity block — the single richest unauthenticated read in the protocol (230/231 B on the wire; observed returning a firmware string such as <code>PME1252 / PXME V&lt;rev&gt; APOGEE / &lt;link date&gt;</code>). Field order is the wire order, and the layout below is now wire-confirmed — the on-wire field order matches the struct in this section exactly. [W]</p>
 <table>
@@ -12905,7 +12953,25 @@ different generations do not represent the same transfer function. [S]</p>
 </table>
 <p>An <code>intercept_adjustment</code> (f32) accompanies the sensor type for field trim of the linear transform (<code>Analog_sensor = { sensor_type, intercept_adjustment }</code>). [S]</p>
 <h4 id="1153-enumerated-and-digital-state-decoding">11.5.3 Enumerated and digital state decoding</h4>
-<p>For digital and enumerated points the wire/value field carries a small integer <strong>state index</strong>, not a string. The index is resolved for display against a named <strong>text group / state-text set</strong> (the <code>State_text_table</code>), stored once per panel as a shared catalog and referenced by name from the point or team member. [S/D] Example sets: 2000 = {Off, On}; 2001 = {Normal, Alarm}; generic sets like {Clean, Dirty}. [D] <strong>On the wire the id is a <em>signed</em> 16-bit integer and every observed value is negative</strong> — the per-type defaults <code>-1</code>/<code>-2</code> of §11.2, then two bands of named groups at <code>-1002</code>…<code>-1018</code> and <code>-2003</code>…<code>-2018</code>. A decoder that reads the field unsigned turns every one of them into a meaningless number in the 63,500s. The distribution is not a clean split by point type: LDI points draw exclusively from the <code>-20xx</code> band, LDO points predominantly from <code>-10xx</code> but from both, and enumerated points from both — so the bands are not "digital versus enumerated" and what separates them is <strong>[OPEN]</strong>. [W] The signedness is corroborated from a second direction: this id is the <code>enum_type_id</code> the <strong>ENUM family (0x0401–0x040E)</strong> creates and edits (§9.4), and every one of those bodies types it <code>i16</code> — <code>enum_type : { type_id:i16, type_name, nrOfelements:u16, elements:{ value:i16, value_text }[] }</code> is the state-text table itself, id and all its value→text pairs. A client that wants the display strings reads them with <code>AP2_ENUM_TYPE_DISPLAY</code> (0x0404) or <code>_LOOK</code> (0x0405) against the id the point carries. [S] A digital point's present value is encoded as the float <code>0.0</code> (OFF) or <code>1.0</code> (ON) in the value field (§12.3); an enumerated point's present value is the integer state index carried in that same float field. [D] An implementer renders the value by taking the index and looking it up in the referenced state-text group; the wire never carries the display string for a value. [D]</p>
+<p>For digital and enumerated points the wire/value field carries a small integer <strong>state index</strong>, not a string. The index is resolved for display against a named <strong>text group / state-text set</strong> (the <code>State_text_table</code>), stored once per panel as a shared catalog and referenced by name from the point or team member. [S/D] Example sets: 2000 = {Off, On}; 2001 = {Normal, Alarm}; generic sets like {Clean, Dirty}. [D] <strong>On the wire the id is a <em>signed</em> 16-bit integer and every observed value is negative</strong> — the per-type defaults <code>-1</code>/<code>-2</code> of §11.2, then two bands of named groups at <code>-1002</code>…<code>-1018</code> and <code>-2003</code>…<code>-2018</code>. A decoder that reads the field unsigned turns every one of them into a meaningless number in the 63,500s. The distribution is not a clean split by point type: LDI points draw exclusively from the <code>-20xx</code> band, LDO points predominantly from <code>-10xx</code> but from both, and enumerated points from both — so the bands are not "digital versus enumerated" and what separates them is <strong>[OPEN]</strong>. [W] The signedness is corroborated from a second direction: this id is the <code>enum_type_id</code> the <strong>ENUM family (0x0401–0x040E)</strong> creates and edits (§9.4), and every one of those bodies types it <code>i16</code> — <code>enum_type : { type_id:i16, type_name, nrOfelements:u16, elements:{ value:i16, value_text }[] }</code> is the state-text table itself, id and all its value→text pairs. A client that wants the display strings reads them with <code>AP2_ENUM_TYPE_DISPLAY</code> (0x0404) or <code>_LOOK</code> (0x0405) against the id the point carries. [S] A digital point's present value is encoded as the float <code>0.0</code> (OFF) or <code>1.0</code> (ON) in the value field (§12.3); an enumerated point's present value is the integer state index carried in that same float field. [D] An implementer renders the value by taking the index and looking it up in the referenced state-text group; the wire never carries the display string for <strong>a value</strong>. [D] <strong>It does carry the whole table, and a client can therefore render points without any vendor file.</strong> The ENUM family transfers them, and one of its opcodes is wire-observed: [W]</p>
+<pre><code>0x040A AP2_ENUM_TYPE_DB_GET
+  request   last_enum_type_id : SHORT_        &lt;- a resume key
+  response  enum_type : Enum_type
+            Enum_type : type_id : SHORT_ | type_name : TEXT_
+                      | nrOfelements : UNSIGNED_16
+                      | elements : (value : SHORT_, value_text : TEXT_)[]
+</code></pre>
+<p>All 28 exchanges in the corpus decode with zero remainder. Two distinct tables
+appear — a two-state occupancy group at id <code>-1005</code> and a twelve-state zone-mode
+group at <code>-2005</code> — and the resume keys presented (<code>-2006</code>, <code>-1006</code>) return
+<code>-2005</code> and <code>-1005</code>, so the catalogue walk is <strong>ascending in signed order</strong>. An
+unsigned reader also sees an ascending sequence and so appears to work, while
+ordering the catalogue wrongly the moment it crosses zero: the same
+plausible-wrong-answer failure as a sparse-enum lookup (§10.1). <code>0x0404
+ENUM_TYPE_DISPLAY</code> and <code>0x0405 ENUM_TYPE_LOOK</code> fetch a single table by pattern
+or by name. So the full render path for a digital or enumerated point is: read
+the point's <code>state_text_table</code> id (§10.4.1), fetch that table, index it with the
+value. [W][S]</p>
 <blockquote>
 <p>Implementation caution: the TEC-template "PTYPE" field is a <strong>template-local</strong> taxonomy, NOT the §11.2 <code>Point_type</code> L-codes and NOT priority values. The 1–4 alignment with LDI/LDO/LAI/LAO is coincidental for those four only. Do not cross-map PTYPE to L-codes. [D]</p>
 <p>Censused rather than sampled, because the value set depends on where you look and on the controller family: [W]</p>
