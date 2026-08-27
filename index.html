@@ -12492,7 +12492,48 @@ the cases where the two names differ in length. And <code>failed</code>, <code>r
 which makes the liveness heartbeat a complete health feed: a passive listener
 learns each node's readiness and replication state every interval without
 issuing a single request.</p>
-<p>The <code>bln_name</code> field here is the same value the access gate checks: a peer presenting the wrong BLN is rejected at the network layer; the node/site/bln triple is also echoed back in <code>CABINET_DISPLAY</code> (§10.5). [W][I]</p>
+<p>The <code>bln_name</code> field here is the same value the access gate checks: a peer presenting the wrong BLN is rejected at the network layer. [W]</p>
+<p><strong>The triple is not one identity — two thirds of it is shared and one third is
+the sender's.</strong> Measured across 60 <code>0x4640</code> requests, 60 responses and 60
+<code>CABINET_DISPLAY</code> responses: [W]</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>node name</th>
+<th>site name</th>
+<th>BLN name</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0x4640</code> <strong>request</strong> (supervisor → panel)</td>
+<td>the <strong>supervisor's</strong></td>
+<td>shared</td>
+<td>shared</td>
+</tr>
+<tr>
+<td><code>0x4640</code> <strong>response</strong> (panel → supervisor)</td>
+<td>the <strong>answering panel's</strong></td>
+<td>shared</td>
+<td>shared</td>
+</tr>
+<tr>
+<td><code>CABINET_DISPLAY</code> (§10.5)</td>
+<td>the <strong>responding panel's</strong></td>
+<td>shared</td>
+<td>shared</td>
+</tr>
+</tbody>
+</table>
+<p>The site and BLN names are identical in <strong>60 of 60</strong> bodies of all three kinds —
+they are properties of the BLN, so every node on it emits the same pair. The
+node name is not: the request's and the response's differ from each other, and
+the request's node name appears in <strong>0 of 60</strong> <code>CABINET_DISPLAY</code> bodies while the
+response's appears in exactly the ones that came from that panel.</p>
+<p>So an implementer must <strong>not</strong> read the session block's node name as "the peer's
+name". It names whoever <em>emitted</em> that frame, and direction decides who that is.
+Only the site and BLN names can be compared across nodes.</p>
 <h3 id="107-node--bln-management-bodies">10.7 Node / BLN management bodies</h3>
 <p><strong><code>Node_Choice</code></strong> (target selector for node-management ops) — CHOICE: <code>all_nodes : NULL_</code> or <code>single_node : UNSIGNED8</code> (node number). Used by the <code>SET_NODE_STATE</code> / cabinet online-offline family. [S]</p>
 <p><strong><code>Cov_data</code></strong> (BLN COV-share table entry) — <code>destination_panel : UNSIGNED16</code> + <code>cov_mask : Cov_mask</code>. Defines which panel receives which change classes (the cross-BLN COV share). [S]</p>
