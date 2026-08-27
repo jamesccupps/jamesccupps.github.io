@@ -10459,6 +10459,11 @@ far: [W][S]</p>
 <td><code>u8</code> in §15.3's <code>0x0989</code> decode; consumption narrows <code>0x5020</code>/<code>0x0979</code> to this or 4 and §15.3 chooses</td>
 </tr>
 <tr>
+<td><code>TEC_valid</code>, <code>Failed_status</code></td>
+<td style="text-align: right;">1 each</td>
+<td>the <code>0x0986 UPL_ALL_TEC</code> body, 59 of 60 consuming exactly once its absent trailing field is allowed for</td>
+</tr>
+<tr>
 <td><strong><code>Schedule_days</code></strong></td>
 <td style="text-align: right;"><strong>4</strong></td>
 <td>a <strong>bitmask</strong>, §15.3 — see the warning below</td>
@@ -10520,6 +10525,37 @@ a long tail of exotica: the single most-used undeclared type,
 <code>Point_extension2</code>, appears in <strong>89</strong> structures. Widths for the ones that
 matter are pinned from the wire in §10.4.2. Regenerate every count in this
 section with <code>s164_typecensus.py</code>. [S]</p>
+<p><strong>Three rules a decoder needs that the structure library does not state.</strong>
+Each was found by a body that would not consume, and together they take request
+bodies from 91% to <strong>99.2%</strong> decoded (2,494 of 2,515): [W]</p>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Evidence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>A trailing declared field may be absent.</strong> A body ending exactly on a field boundary with fields still to come is truncated, not malformed — the library describes a <strong>later firmware revision than a given panel emits</strong>. Report what was not received; do not reject the body.</td>
+<td><code>0x0986 UPL_ALL_TEC</code> omits its final <code>is_bacnet</code> in <strong>59 of 60</strong> bodies; <code>0x010C CABINET_DISPLAY</code> stops short in all 60</td>
+</tr>
+<tr>
+<td><strong>Request bodies are padded with zeros to a fixed size</strong> — <strong>220 bytes</strong> at this site. Content of 2 to 65 bytes pads to the same total.</td>
+<td>174 bodies across 8 opcodes; <code>0x040A</code>'s entire declared body is one <code>SHORT_</code> and the frame carries <code>f8 2a</code> then 218 zeros</td>
+</tr>
+<tr>
+<td><strong>Some responses carry one or two bytes the library does not declare</strong>, consistently per opcode.</td>
+<td>43 bodies: <code>0x0291</code> always +2, <code>0x0987</code> and <code>0x5038</code> always +1. <strong>[OPEN]</strong> — an undeclared trailing field, not padding</td>
+</tr>
+</tbody>
+</table>
+<p>On the second: <strong>[OPEN]</strong> whether the constant is the body or the whole frame.
+Every observed instance is one supervisor talking to one panel, so the routing
+slots are the same length throughout and the two readings cannot be told apart
+here. At a site with different node-name lengths a frame-sized buffer would give
+a different body size — so an implementer should treat 220 as <em>this site's</em>
+observation, not a protocol constant.</p>
 <p>Two structural conventions recur. <strong>CHOICE / tagged union:</strong> several structures begin with a <code>tag_ : UNSIGNED_8</code> followed by one alternative per possible type (e.g. <code>All_points</code>, <code>Alarm_object</code>, <code>Physical_address_Lenum</code>); the tag selects which one alternative is actually present on the wire. <strong>Counted array:</strong> a <code>nrOf&lt;x&gt; : UNSIGNED_16</code> immediately precedes its <code>&lt;x&gt; : &lt;T&gt;[]</code> array. [S]</p>
 <h3 id="102-shared-sub-types">10.2 Shared sub-types</h3>
 <p>These sub-types appear inside many request/response bodies and are defined once here. Field order is the wire order.</p>
