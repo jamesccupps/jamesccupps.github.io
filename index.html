@@ -3149,10 +3149,48 @@ in the first time it reaches a peer:</p>
    IP/APOGEE revisions = <strong>ASCII</strong> (above) — via the vendor's per-revision <code>STRING_TYPE</code>. [S][D]</li>
 <li><strong>Select dialect.</strong> The generation selects the message-class dialect — <strong>modern <code>0x34</code>/<code>0x2F</code></strong> for
    the newer-firmware generation, <strong>legacy <code>0x33</code>/<code>0x2E</code></strong> otherwise (§6.2). The selector reduces to a
-   single bit driven by the stored per-peer generation, not by anything on the wire. [W][I]</li>
-<li><strong>Cache and reuse.</strong> The record is stored against the peer and reused for every subsequent frame;
-   it is refreshed only when the peer's firmware identity changes. [I]</li>
+   single bit driven by the stored per-peer generation, not by anything on the wire. <strong>Measured across
+   the corpus, and it holds:</strong> [W]</li>
 </ol>
+<table>
+<thead>
+<tr>
+<th></th>
+<th style="text-align: right;">pairs</th>
+<th style="text-align: right;">mixing the two dialects</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>source→destination pairs carrying a data dialect</td>
+<td style="text-align: right;">762</td>
+<td style="text-align: right;"><strong>34</strong></td>
+</tr>
+<tr>
+<td>…carrying a second-channel frame</td>
+<td style="text-align: right;">362</td>
+<td style="text-align: right;"><strong>0</strong></td>
+</tr>
+<tr>
+<td>…carrying a peer carrier <code>0x29</code>/<code>0x2A</code></td>
+<td style="text-align: right;">857</td>
+<td style="text-align: right;"><strong>0</strong></td>
+</tr>
+</tbody>
+</table>
+<p>The 34 are not counter-examples. <strong>Twenty-nine mix by exactly one frame</strong>, the
+   rest by two to five, and the largest — eighteen — is in a capture named for a
+   supervisor enumeration test: they are our own scanner probing both dialects,
+   not a peer alternating. <strong>728 of 762 pairs never mix at all.</strong></p>
+<p>The generations also agree between the two channels: of the nodes emitting
+   exactly one data dialect and exactly one second-channel class, <strong>263 of 263</strong>
+   pair <code>0x33</code> with <code>0x2E</code> and <code>0x34</code> with <code>0x2F</code>, with <strong>zero</strong> disagreements.</p>
+<p>Note the unit. A <em>node</em> may well emit both <code>0x33</code> and <code>0x34</code> — 34 of 461
+   sources do — because a supervisor speaking to a mixed fleet uses each peer's
+   dialect. Group by the <strong>pair</strong>, never by the sender, or the mixed-fleet
+   supervisor looks like a protocol violation. [W]
+5. <strong>Cache and reuse.</strong> The record is stored against the peer and reused for every subsequent frame;
+   it is refreshed only when the peer's firmware identity changes. [I]</p>
 <p>The practical consequence for an implementer: you do <strong>not</strong> blind-probe <code>{0x33, 0x34}</code> or guess the
 encoding. You issue one <code>CABINET_DISPLAY</code>, classify the generation from the returned revision, and from
 that one read you know both how to encode names (RAD-50 vs ASCII) and which dialect to frame in — for
