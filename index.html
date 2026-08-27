@@ -3824,14 +3824,14 @@ wire format forbids a retry; nothing here performs one. [W]</p>
 <tr>
 <td><code>0x00AC</code></td>
 <td><strong>not supported</strong> — the function code is unused on this panel, <strong>or is specific to a different firmware revision</strong></td>
-<td>wire behaviour and the vendor catalog agree; the revision case is documentary only</td>
-<td>[W][D]</td>
+<td>wire behaviour and the vendor catalog agree, <strong>and the revision case is now firmware-attested</strong> — see below</td>
+<td>[W][D][F]</td>
 </tr>
 <tr>
 <td><code>0x0002</code></td>
-<td><strong>invalid command</strong> — the command is not valid for the addressed object (seen on <code>POINT_CMD_ALARM 0x0244</code> and on <code>CMD_ALARM_DISABLE 0x0247</code> addressed to a point name that does not exist; the documented example is commanding a non-virtual LDI or LAI point)</td>
-<td>wire behaviour and the vendor catalog agree</td>
-<td>[W][D]</td>
+<td><strong>invalid command</strong> — the command is not valid for the addressed object (seen on <code>POINT_CMD_ALARM 0x0244</code> and on <code>CMD_ALARM_DISABLE 0x0247</code> addressed to a point name that does not exist; the documented example is commanding a non-virtual LDI or LAI point). <strong>Also returned for an over-length <code>0x0136 P2_ROUTE</code></strong>, see below</td>
+<td>wire behaviour and the vendor catalog agree, plus firmware</td>
+<td>[W][D][F]</td>
 </tr>
 <tr>
 <td><code>0x0009</code></td>
@@ -3851,14 +3851,23 @@ wire format forbids a retry; nothing here performs one. [W]</p>
 <td>vendor catalog</td>
 <td>[D][W]</td>
 </tr>
-<tr>
-<td><code>0x0E15</code></td>
-<td><strong>physical point not commandable</strong> — the point cannot process commands (seen on <code>POINT_CMD_VALUE</code>)</td>
-<td>wire behaviour and the vendor catalog agree</td>
-<td>[W][D]</td>
-</tr>
 </tbody>
 </table>
+<p><strong>Where <code>0x00AC</code> comes from, read off the panel.</strong> A controller does not hold
+one opcode table. It holds <strong>at least eight</strong>, each a list of
+<code>{u16 internal_code, u16 ap2_opcode}</code> records with its own count, and it picks
+between them at dispatch time on a per-peer selector value. An incoming opcode
+is matched against the <strong>second</strong> field of each record; when the selected table
+has no matching entry, the panel writes <code>0x00AC</code> into the response and stops.
+So "not supported" is not a single global judgement about the function code —
+<strong>it is the answer from one particular translation table</strong>, which is exactly why
+the same opcode can be refused by one panel and answered by another. The
+revision reading of this error was documentary until now; it is the structure
+the firmware actually implements. [F]</p>
+<p>The same function special-cases <code>0x0136 AP2_P2_ROUTE</code> ahead of any table lookup
+and enforces its length bound inline — payload ≤ 249 bytes, total ≤ 253 (§6.8) —
+writing <strong><code>0x0002</code></strong> if the frame exceeds it. [F]
+| <code>0x0E15</code> | <strong>physical point not commandable</strong> — the point cannot process commands (seen on <code>POINT_CMD_VALUE</code>) | wire behaviour and the vendor catalog agree | [W][D] |</p>
 <p><strong><code>0x0E10</code>–<code>0x0E17</code> is the FLN error band.</strong> Every code in it reports a fault in
 the field-level network, the device, or the physical point — invalid FLN number,
 invalid drop number, device failed, invalid point number, physical point failed,
