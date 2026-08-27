@@ -4878,6 +4878,85 @@ descriptive (<code>__RpcRegisterCOVxx</code>, <code>__RpcCancelCOVxx</code>, <co
 <code>__RpcMakeNodeOffline</code>, <code>__RpcBACnetWhoIs</code>, <code>__RpcBPing</code>), which makes the CPI
 tier the most legible statement of <em>what operations exist</em> that this protocol
 has. [S]</p>
+<p><strong>The receive path is narrower than the send path, and by how much is
+measurable.</strong> <code>BLN2CPI</code> dispatches an inbound frame through a chain of <strong>twelve
+range switches</strong>, each of which states its own first opcode and its own length.
+Together they reach <strong>700 opcode values</strong>; <strong>97 of those have a dedicated
+handler</strong> and the remaining 603 fall through to a single shared default. [S]</p>
+<table>
+<thead>
+<tr>
+<th>band</th>
+<th>opcodes</th>
+<th style="text-align: right;">cases</th>
+<th>band</th>
+<th>opcodes</th>
+<th style="text-align: right;">cases</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><code>0x0030</code>–<code>0x0042</code></td>
+<td style="text-align: right;">19</td>
+<td>7</td>
+<td><code>0x0601</code>–<code>0x0606</code></td>
+<td style="text-align: right;">6</td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>0x0051</code>–<code>0x0136</code></td>
+<td style="text-align: right;">230</td>
+<td>8</td>
+<td><code>0x0611</code>–<code>0x0615</code></td>
+<td style="text-align: right;">5</td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>0x0240</code>–<code>0x0334</code></td>
+<td style="text-align: right;">245</td>
+<td>9</td>
+<td><code>0x095B</code>–<code>0x09A4</code></td>
+<td style="text-align: right;">74</td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>0x0337</code>–<code>0x0368</code></td>
+<td style="text-align: right;">50</td>
+<td>10</td>
+<td><code>0x09B0</code>–<code>0x09BC</code></td>
+<td style="text-align: right;">13</td>
+</tr>
+<tr>
+<td>5</td>
+<td><code>0x0402</code>–<code>0x040E</code></td>
+<td style="text-align: right;">13</td>
+<td>11</td>
+<td><code>0x462D</code>–<code>0x4640</code></td>
+<td style="text-align: right;">20</td>
+</tr>
+<tr>
+<td>6</td>
+<td><code>0x0544</code>–<code>0x054D</code></td>
+<td style="text-align: right;">10</td>
+<td>12</td>
+<td><code>0x4821</code>–<code>0x482F</code></td>
+<td style="text-align: right;">15</td>
+</tr>
+</tbody>
+</table>
+<p>Two properties of this make it usable rather than trivia. <strong>An opcode outside
+every band cannot be dispatched at all</strong> by this receive path — 700 of the
+catalog's values are reachable and the rest are not, which bounds what a peer
+can meaningfully send <em>to a supervisor</em>. And <strong>falling inside a band is not the
+same as being handled</strong>: the 603 defaulted opcodes reach a single address that
+sets an error rather than decoding a body, so a client that receives a success
+for one of them is talking to something other than this codec. [S][I]</p>
+<p>The map is checked against an artifact that did not produce it: <strong>all 97
+opcodes with a dedicated handler carry a name in the AP2 function-code
+enumeration — 97 of 97</strong>, against 29% for the defaulted ones. If any band's
+base or length were off by one, its dedicated set would slide onto neighbouring
+values and that agreement would collapse toward the background rate. [S]</p>
 <h4 id="the-opcode-carries-an-operand-which-is-why-the-catalog-is-so-large">The opcode carries an operand, which is why the catalog is so large</h4>
 <p>The obvious model — one operation, one wire opcode — is wrong, and the way it is
 wrong is useful. <strong>The wire opcode is selected while the request is being
