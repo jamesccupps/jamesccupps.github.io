@@ -845,6 +845,14 @@
 <td><strong>Struct/metadata-derived.</strong> From the protocol's own type system — the function-code enumeration, the ASDU body-structure definitions, and the value enums (priorities, point types, COV masks, native types, node states, etc.). Definitional truth for names, field order, and constant values.</td>
 </tr>
 <tr>
+<td><strong>[F]</strong></td>
+<td><strong>Firmware-attested.</strong> The value or behavior is carried in a controller firmware image itself, rather than in a supervisor-side binary. Stronger than [S] for the question <em>does a panel actually implement this</em>, because [S] describes only what a supervisor knows how to ask for.</td>
+</tr>
+<tr>
+<td><strong>[C]</strong></td>
+<td><strong>Codec-attested.</strong> Read out of the vendor's own compiled P2 codec — the encoder or decoder that lays bytes down, supervisor side. Definitive for field width, byte order, padding and string encoding, because the arithmetic is in the instruction stream. Weaker than [F] for <em>does a panel implement this</em>, and weaker than [W] because a link the codec serves may never have been captured.</td>
+</tr>
+<tr>
 <td><strong>[D]</strong></td>
 <td><strong>Doc-sourced.</strong> Taken from vendor help text, manuals, or templates. Reliable for behavior, topology, timing, and semantics — but <strong>not</strong> for byte-level wire layout.</td>
 </tr>
@@ -1929,7 +1937,7 @@ listener that accepts only one or two peers is not conformant.</p>
 <p>A panel may alternatively host a BACnet MS/TP field bus in place of P1 (<code>Fln_type_enum</code>: <code>P1</code> = 0, <code>MSTP</code> = 1) [S]. Which one is available tracks the panel's <strong>firmware track</strong>, not the hardware: proprietary-P2/APOGEE firmware (the subject of this spec) drives a <strong>P1 FLN only</strong>, while the separate BACnet firmware build of the same hardware adds the MS/TP option. MS/TP is a different protocol stack and is out of scope for this P2 specification; only the P1/FLN bus is treated here. [D]</p>
 <h3 id="45-open-items--serial-and-field-bus-framing">4.5 Open items — serial and field-bus framing</h3>
 <blockquote>
-<p><strong>[OPEN, PARTLY ANSWERED] Serial-BLN P2 link framing bytes.</strong> Only the line parameters (8/N/1, baud tiers, trunk numbering) were established for the dedicated serial BLN. <strong>The message layer above the framing is now recovered from controller firmware — see §6.8</strong> — giving the address byte and its position, a compact operation encoding, a 253-byte cap, and the forwarding rule for a message addressed elsewhere. What is still unobserved is the <strong>link</strong> layer beneath it: start/sync delimiting, CRC/checksum, and the medium's segmentation, all of which a lower layer has already stripped before the code in §6.8 sees the message. An AEM Channel-1 capture (TCP/3001) would expose those bytes, since the AEM tunnels the serial stream verbatim.</p>
+<p><strong>[OPEN, PARTLY ANSWERED] Serial-BLN P2 link framing bytes.</strong> Only the line parameters (8/N/1, baud tiers, trunk numbering) were established for the dedicated serial BLN. <strong>The message layer above the framing is now recovered from controller firmware — see §6.8</strong> — giving the address byte and its position, a compact operation encoding, a 253-byte cap, and the forwarding rule for a message addressed elsewhere. <strong>The message layer is now attested from the supervisor end as well</strong> — a supervisor-side codec builds the same encoding, agreeing with the panel on the group/ordinal pair and adding the ordinal's byte order (§6.8). [C] What is still unobserved is the <strong>link</strong> layer beneath it: start/sync delimiting, CRC/checksum, and the medium's segmentation, all of which a lower layer has already stripped before the code in §6.8 sees the message. The supervisor's link-layer component was examined for them and does not carry them: it is a transport — ports, partners, sequence numbers, a socket path and a modem path — and it hands the codec's output down without prefixing a P2 header, so the three bytes preceding the group byte are added below it or supplied by the medium. [C] An AEM Channel-1 capture (TCP/3001) remains the way to see them, since the AEM tunnels the serial stream verbatim.</p>
 <p><strong>[OPEN] FLN/P1 frame bytes.</strong> The P1 fieldbus discovery transaction (P1WhoAreYou), addressing (drop + application number), physical layer (RS-485 2-wire), and baud are documented, but the P1 frame byte layout itself is unobserved. The on-wire P1 frame structure, the WhoAreYou request/response bytes, and the per-poll cadence/retry behavior require a P1-bus capture or a route-through capture from the BLN. <strong>The route-through opcode is now named: <code>0x0313 AP2_P1_ROUTE</code>, with <code>0x0314</code> alongside it</strong> (§9.1.1). Sixteen distinct field-device operations tunnel through <code>0x0313</code>, so a capture containing it carries P1 payloads inside a P2 frame — which is the cheapest route to these bytes, and needs no access to the RS-485 segment itself. Neither opcode occurs in any capture in the present corpus.</p>
 <p><strong>[OPEN, LARGELY ANSWERED] P2 segmentation thresholds and reassembly rules.</strong> The ~256-byte figure from vendor connection-test material is a <em>connection-test ping</em> size, <strong>not</strong> a maximum P2 data-packet cap — single P2 frames are observed with <code>total_len</code> up to ≈1,587 bytes (a ~1,530-byte body of packed records plus header+slots) in one response [W]. <strong>The ceiling and the reassembly rule are now recovered from the supervisor's AP2 codec.</strong> A segment buffer is <strong>16,384 bytes</strong>, of which the encoder is handed <code>buf+2</code> with a capacity of <strong>16,382 bytes</strong>; the two reserved bytes at <code>buf[0]</code> are the <code>u16</code> function code, which is why the wire carries the opcode immediately before the body and why <code>total_length</code> includes it. Reassembly is a cursor against a declared total: each mapped segment copies <code>n</code> bytes and advances the cursor, except the last, whose length is <code>total - cursor</code>; the sender therefore knows the total before it begins. The command object carries an explicit <strong>more-follows</strong> field, set on the segmenting path and cleared on the direct one. [S] <strong>What is still open is the wire behaviour at the threshold.</strong> No body in the corpus exceeds 16,382 B — the largest complete body is 1,570 B and the largest <em>declared</em> is 12,073 B — so the corpus is consistent with the ceiling without exercising it. Whether a result larger than one segment appears as two P2 frames, and what marks the continuation on the wire, needs a capture of an upload large enough to segment. [W][OPEN]</p>
 </blockquote>
@@ -3475,7 +3483,18 @@ puts them back on the link. A multi-drop link forwarding P2 between nodes. [F][S
 function code, and §9.4.1 gives the tables that translate between the two, in
 both directions. The ordinal's width is fixed by the firmware's 2-byte read
 primitive and independently by group <code>0xE0</code>, whose ordinals run 256–259 and could
-not fit in a byte.</p>
+not fit in a byte. <strong>The ordinal is big-endian</strong>, and the group byte precedes it
+directly. [C]</p>
+<p><strong>The pairing is attested from both ends.</strong> Everything above is the panel's side.
+A supervisor-side codec builds the same encoding, and for group <code>0xE0</code> it emits
+ordinals 256, 257, 258 and 259 — the same four the panel's <code>0xE0</code> table holds,
+plus a fifth, 260, that this panel generation does not implement. Two
+independent implementations for two different processors agreeing on four exact
+values in a 16-bit space is what makes the group/ordinal reading safe to build
+on. [C][F] The same codec shows that not every leading byte is a group selector:
+some classes are followed by an ordinal, others by a fixed addressing prefix of
+their own, so a decoder must switch on the class byte before assuming an ordinal
+follows it. [C]</p>
 <p>Set against the TCP framing of §6.1 — <code>u32 total_len | u32 msg_type | u32 seq |
 u8 dir | four NUL-terminated slots | u16 opcode</code> — the difference is stark: one
 address byte where TCP carries four variable-length name slots, and a
@@ -4773,8 +4792,9 @@ char:   &quot; ABCDEFGHIJKLMNOPQRSTUVWXYZ$.?0123456789&quot;
 <p>Three characters <code>c0 c1 c2</code> (each mapped to its index 0–39) pack into one unsigned 16-bit word: [S]</p>
 <pre><code>word = ((c0 * 40) + c1) * 40 + c2
 </code></pre>
-<p>The maximum packed word is <code>39*40*40 + 39*40 + 39 = 63999</code> (<code>0xF9FF</code>), so every RAD-50 word fits a <code>u16</code>. To unpack, decode <code>c2 = word % 40</code>, <code>c1 = (word / 40) % 40</code>, <code>c0 = (word / 40 / 40) % 40</code>, then map each index back through the alphabet. Names whose character count is not a multiple of 3 are padded with the space character (index 0) in the trailing position(s). The packing word is stored in the platform's native word order; RAD-50 appears only on pre-IP field-controller and supervisor revisions, so an implementer targeting P2-over-TCP normally encounters ASCII (§8.4.2) and treats a RAD-50-packed peer as an out-of-scope legacy revision. [S][I]</p>
+<p>The maximum packed word is <code>39*40*40 + 39*40 + 39 = 63999</code> (<code>0xF9FF</code>), so every RAD-50 word fits a <code>u16</code>. To unpack, decode <code>c2 = word % 40</code>, <code>c1 = (word / 40) % 40</code>, <code>c0 = (word / 40 / 40) % 40</code>, then map each index back through the alphabet. Names whose character count is not a multiple of 3 are padded with the space character (index 0) in the trailing position(s) — the packer leaves unused positions at index 0 and zero-fills whole trailing words, which is the same thing. [C] <strong>Each packed word goes on the wire big-endian</strong>: the codec builds the word natively and then writes it through its 2-byte primitive with the byte-reversal flag set, exactly as it does for every other multi-byte field (§8.3). [C] An n-character field therefore occupies <strong>2 × ceil(n / 3) bytes</strong>, so a 6-character name is 4 bytes and a 12-character name is 8. [C] RAD-50 appears only on pre-IP field-controller and supervisor revisions, so an implementer targeting P2-over-TCP normally encounters ASCII (§8.4.2) and treats a RAD-50-packed peer as an out-of-scope legacy revision. [S][I]</p>
 <p>Only the 40 alphabet characters are representable: uppercase letters, digits, space, and the three symbols <code>$ . ?</code>. Lowercase and other punctuation cannot be RAD-50-encoded, which is consistent with the uppercase-only, restricted character sets of legacy name fields. [S][I]</p>
+<p><strong>Two encoder rules that a decoder-only reading of the alphabet misses.</strong> The packer <strong>uppercases its input first</strong> — a lowercase name is silently folded to uppercase, not rejected — so an implementer must uppercase before comparing a round-tripped name with the original. And <strong><code>?</code> (index 29) is refused on encode</strong>: the packer returns an error for it exactly as it does for a character outside the alphabet, which makes <code>?</code> a decode-only symbol. An over-length source is rejected before a single byte is written, rather than truncated. [C]</p>
 <h4 id="842-ascii-wd">8.4.2 ASCII [W][D]</h4>
 <p>All P2/IP revisions carry plain ASCII in both the length-prefixed TLVs (§8.1) and the NUL-terminated routing slots (§6). This is the encoding observed throughout the TCP/5033 wire traffic. A TCP/5033 implementation is ASCII end-to-end; it does not need a RAD-50 codec to interoperate with current panels. [W][D]</p>
 <h4 id="843-field-length-budgets-by-encoding-d">8.4.3 Field length budgets by encoding [D]</h4>
@@ -19808,6 +19828,10 @@ reader can weigh provenance. The tags are:</p>
 <tr>
 <td><strong>[F]</strong></td>
 <td>Firmware-attested — the value or behavior is carried in the controller firmware itself, in a panel image rather than in a supervisor-side binary. Stronger than [S] for the question <em>does a panel actually implement this</em>, because [S] describes only what a supervisor knows how to ask for.</td>
+</tr>
+<tr>
+<td><strong>[C]</strong></td>
+<td>Codec-attested — read out of the vendor's own compiled P2 codec, the encoder or decoder that lays the bytes down, supervisor side. Definitive for field width, byte order, padding and string encoding, because the arithmetic is in the instruction stream. Weaker than [F] for <em>does a panel implement this</em>; weaker than [W] because a link the codec serves may never have been captured.</td>
 </tr>
 <tr>
 <td><strong>[D]</strong></td>
