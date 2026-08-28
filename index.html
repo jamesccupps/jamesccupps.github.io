@@ -12620,11 +12620,53 @@ against it</strong>. [W] The trend responses are the exception. <code>0x0294</co
 carry 42 <code>lao</code> bodies between them, and reading the two bytes there stops the
 walk dead a few bytes into the trend block, where the count that should follow
 reads as zero and the next field lands mid-timestamp; skipping them instead
-walks the whole body to within 1–3 bytes of its end. So the two bytes are
-<strong>real where they are documented and absent in the trend responses</strong>, and a
-decoder must key them to the operation rather than to the arm. What occupies
-the last 1–3 bytes of a trend response is <strong>[OPEN]</strong>, and it is a small,
-located gap rather than a general doubt about arm interiors. [W][OPEN]</p>
+walks the body. So the two bytes are <strong>real where they are documented and absent
+in the trend responses</strong>, and a decoder must key them to the operation rather
+than to the arm. [W]</p>
+<p><strong>How far the trend walk actually gets, measured.</strong> An earlier edition said
+"within 1–3 bytes of its end" and left the residue <code>[OPEN]</code>. That predates the
+field-level walker, and it does not reproduce:</p>
+<table>
+<thead>
+<tr>
+<th>opcode</th>
+<th>side</th>
+<th style="text-align: right;">bodies</th>
+<th style="text-align: right;">consume to zero</th>
+<th>what is left over</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0x0294 TREND_SETUP_LOG</code></td>
+<td>response</td>
+<td style="text-align: right;">52</td>
+<td style="text-align: right;"><strong>48</strong></td>
+<td>17 bytes on 4</td>
+</tr>
+<tr>
+<td><code>0x0295 TREND_DATA_DISPLAY</code></td>
+<td>request</td>
+<td style="text-align: right;">60</td>
+<td style="text-align: right;"><strong>60</strong></td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>0x0295</code></td>
+<td>response</td>
+<td style="text-align: right;">60</td>
+<td style="text-align: right;">34</td>
+<td>233, 458/459, 1410/1411 bytes</td>
+</tr>
+</tbody>
+</table>
+<p>The <code>0x0294</code> response is in better shape than the document claimed. The <code>0x0295</code>
+response is in worse, and its residue is <strong>not unknown content</strong>: 458 − 10 =
+28 × 16 and 1410 − 10 = 28 × 50, and <code>Trend_data</code> sizes to 28 bytes. That is the
+signature of a declared count being read short — the records are there and the
+walk stops before them — not of an undocumented trailer. Naming it as such is
+as far as this section goes; running it down belongs to the capture re-mine,
+where every operation gets the same treatment rather than this one. [W]</p>
 <p>The mapping is corroborated by an authority independent of both the structure
 definition and the enum — the <strong>point descriptors</strong>, free text written by
 whoever commissioned the site. Across all 71 <code>0x0508 ALARM_PRINT</code> request
@@ -12919,8 +12961,12 @@ silent. Two of the fifteen are now settled anyway, by other means:</p>
   <strong>8 bytes</strong> — <code>Rectangle {height, width}</code>, <code>Circle {pad, diameter}</code>,
   <code>Oval {height, diameter}</code>, two <code>f32</code> each — so the tag cannot change the
   framing, only the labels on the two floats. Of 60 <code>0x0986</code> TEC responses, 59
-  carry <code>no_duct</code> and one carries a duct, tagged <code>1</code>. The <em>labels</em> stay
-  <strong>[OPEN]</strong> on a single observation; the <em>walk</em> does not depend on them. [S][W]</li>
+  carry <code>no_duct</code> and one carries a duct, tagged <code>1</code>. An earlier edition left the
+  <em>labels</em> open on that single observation; the tag map is read from the codec's
+  own jump table (§10.4.6) and <code>Duct_type</code> is <code>0</code> <code>Rectangle</code>, <code>1</code> <code>Circle</code>,
+  <code>2</code> <code>Oval</code>, so the one duct in this corpus is a <strong><code>Circle</code></strong> and its two floats
+  are <code>pad</code> and <code>diameter</code>. One observation was never the evidence that
+  mattered. [S][C][W]</li>
 </ul>
 <blockquote>
 <p>A single transcription discrepancy causes both failures at once. The arm
@@ -13481,10 +13527,76 @@ enhanced_analog_  55 = Alarm_object_data 37 + 18
 </code></pre>
 <p>The analog pair reads as the alarm band §13.3 describes: a chilled-water
 temperature at 150 / 35, a discharge-air point at 120 / 35, mixed-air at 75 / 45,
-supply-air sensors at 85 / 40 and 85 / 50. The enhanced arm's extra 18 bytes
-begin with two <code>u16</code> delays and contain two <code>f32</code>, consistent with the
-<code>level_delay</code> / <code>mode_delay</code> / <code>differential</code> set §10.8 names for the alarm-mode
-record, but with three samples the field boundaries there are <strong>[OPEN]</strong>. [W]</p>
+supply-air sensors at 85 / 40 and 85 / 50.</p>
+<p><strong>Every arm's interior, named.</strong> An earlier edition left the enhanced arm's extra
+18 bytes open and guessed from three samples that they "begin with two <code>u16</code>
+delays and contain two <code>f32</code>". They do not: they begin with a one-byte priority,
+and there is one <code>f32</code>. The catalog names all of them, and the same read supplies
+the six arms this corpus never produced. Offsets are from the start of the arm;
+the seven arms above the rule open with <code>Alarm_object_data</code> (0–36) and the two
+BACnet arms do not carry it at all: [S]</p>
+<table>
+<thead>
+<tr>
+<th>arm</th>
+<th style="text-align: right;">total</th>
+<th>fields after <code>Alarm_object_data</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>std_digital_</code></td>
+<td style="text-align: right;">38</td>
+<td>+37 <code>alarm_priority</code></td>
+</tr>
+<tr>
+<td><code>std_single_analog_</code></td>
+<td style="text-align: right;">42</td>
+<td>+37 <code>alarm_priority</code>, +38 <code>high_limit</code> f32</td>
+</tr>
+<tr>
+<td><code>std_analog_</code></td>
+<td style="text-align: right;">47</td>
+<td>+37 <code>alarm_priority</code>, +38 <code>high_limit</code> f32, +42 <code>low_limit</code> f32, +46 <code>high_alarm_if_in_alarm</code></td>
+</tr>
+<tr>
+<td><code>enhanced_digital_</code></td>
+<td style="text-align: right;">48</td>
+<td>+37 <code>alarm_priority</code>, +38 <code>mode_delay</code> u16, +40 <code>level_delay</code> u16, +42 <code>alarm_mode_type</code>, +43…+47 <code>category0</code>–<code>category3</code> and <code>extracategory</code></td>
+</tr>
+<tr>
+<td><code>enhanced_lenum_</code></td>
+<td style="text-align: right;">50</td>
+<td>as <code>enhanced_digital_</code>, then +48 <code>current_level</code> u16</td>
+</tr>
+<tr>
+<td><code>enhanced_analog_</code></td>
+<td style="text-align: right;">55</td>
+<td>as <code>enhanced_lenum_</code>, then +50 <code>differential</code> f32, +54 <code>above_setpoint</code></td>
+</tr>
+<tr>
+<td><code>bacnet_alarm_analog_</code></td>
+<td style="text-align: right;">16</td>
+<td><strong>no <code>Alarm_object_data</code></strong> — +0 <code>inalarm</code>, <code>introuble</code>, <code>inalarm_by_command</code>, <code>proofing</code>, +4 <code>high_limit</code> f32, +8 <code>low_limit</code> f32, +12 <code>alarm_priority</code>, +13 <code>msg_no</code> u16, +15 <code>high_alarm</code></td>
+</tr>
+<tr>
+<td><code>bacnet_alarm_digital_</code></td>
+<td style="text-align: right;">7</td>
+<td><strong>no <code>Alarm_object_data</code></strong> — +0 <code>inalarm</code>, <code>introuble</code>, <code>inalarm_by_command</code>, <code>proofing</code>, +4 <code>alarm_priority</code>, +5 <code>msg_no</code> u16</td>
+</tr>
+</tbody>
+</table>
+<p>Three of these were measured from the wire before the catalog was read —
+<code>std_digital_</code> 38, <code>std_analog_</code> 47, <code>enhanced_analog_</code> 55 — and the catalog
+computes the same three, field by field, with the decomposition this section
+already published: <code>47 = 37 + 1 + f32 + f32 + 1</code> is exactly <code>alarm_priority</code>,
+<code>high_limit</code>, <code>low_limit</code>, <code>high_alarm_if_in_alarm</code>. Three agreements out of
+three, from sources that could have disagreed. [W][S]</p>
+<p>The family also reads as a progression rather than a list: every non-BACnet arm
+opens with <code>alarm_priority</code>; the analog arms add limits; the enhanced arms drop
+the limits for the alarm-mode machinery (<code>mode_delay</code>, <code>level_delay</code>,
+<code>alarm_mode_type</code>, five category bytes), and <code>enhanced_lenum_</code> and
+<code>enhanced_analog_</code> extend that by two and seven bytes respectively. [S]</p>
 <p><strong>Taken together with §10.4.1–§10.4.3 the point body is closed: 5,795 of 5,807
 walked points (99.8%) consume with zero remainder.</strong> [W]</p>
 <h4 id="1045-point_totalizer--the-accumulator-arm">10.4.5 <code>Point_totalizer</code> — the accumulator arm</h4>
@@ -13502,9 +13614,32 @@ counted-array convention (§10.1), and it matches the pair of accumulators the
 structure library implies with <code>includeInCount2</code> and <code>enable_almcnt2</code>.</p>
 <p>Both <code>DATE_TIME</code> positions are confirmed the cheap way: <strong>all 34 stamps across
 the two offsets carry the weekday their own date falls on, 34 of 34</strong> (§10.8).</p>
-<p><strong>[OPEN]</strong> — the count reads <code>2</code> in all 17 samples, so the array reading is a
-structural fit rather than a demonstrated one, and the three <code>f32</code> per record
-are not individually named. Every sample is a supply fan. [W]</p>
+<p><strong>The record is declared, and the array is not a fit.</strong> An earlier edition left
+this open because the count reads <code>2</code> in all 17 samples, which cannot demonstrate
+a counted array, and because the three <code>f32</code> per record had no names. The catalog
+supplies both: [S]</p>
+<pre><code>Point_totalizer.enabled_
+    total_rate              : Total_rate            1
+    nrOfstage_totalization  : UNSIGNED_16           2
+    stage_totalization      : Stage_totalization[]  20 each
+
+Stage_totalization
+    stage       : FLOAT_       4
+    total_value : FLOAT_       4
+    reset_value : FLOAT_       4
+    reset_time  : DATE_TIME    8
+</code></pre>
+<p><code>nrOfstage_totalization</code> is a declared u16 count in front of a declared array,
+which is §10.1's counted-array convention stated rather than inferred, and
+<code>1 + 2 + 2 × 20 = 43</code> is the arm width independently derived elsewhere. The three
+<code>f32</code> are <code>stage</code>, <code>total_value</code> and <code>reset_value</code>, which names the reading this
+section already had — the running total is the second — and adds the two it did
+not: the first is the stage the accumulator belongs to, and the value near 2,244
+on rate-1 points is <code>reset_value</code>, the total at the last reset. The 8 bytes after
+them are a <code>DATE_TIME</code>, <code>reset_time</code>. [S][W]</p>
+<p>What the corpus still cannot show is a totalizer with a count other than 2, or
+any point type other than a supply fan. Neither is needed to read the record.
+[W]</p>
 <h4 id="1046-choice-tags-in-general--the-rule-and-its-exceptions">10.4.6 CHOICE tags in general — the rule and its exceptions</h4>
 <p>§10.4.1 shows that <code>All_points</code>' tag is an enum value and not a position. The
 obvious next question is whether that is peculiar to point types or true of every
