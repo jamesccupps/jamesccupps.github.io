@@ -11852,7 +11852,116 @@ model applied them and the shipped walker did not, so 342 bodies this document
 reports as fully decoded stopped one or two bytes short for anyone using the
 package — a gap between what the document measured and what it shipped. Model
 and walker now both consume <strong>3,803 of 4,063</strong> bodies to exactly zero. [W]</p>
-<p><strong><code>0x010C CABINET_DISPLAY</code> is the opposite case, and worth separating from it.</strong> It does not run out of body — it runs out of <em>structure</em>. All 60 responses walk <strong>224 of 230 bytes</strong> and stop at the tag of <code>BACnet_MSTP_LAN_Settings</code>, and the six bytes left over are <code>21 00 03 00 03 00</code> — <strong>byte-identical in every one of the sixty</strong>. A constant remainder is a fixed block, not data, so this is not truncation and not a short read: either one of the three BACnet CHOICEs in the declared tail is not positional, or the panel emits six bytes the type system does not declare. Everything before that point decodes, including both MAC addresses and <code>bacnetSettings.tag_ = 0</code> — this site has BACnet off — so <strong>a <code>CABINET_DISPLAY</code> from a panel with BACnet actually configured is what would settle it</strong>, by making those arms non-empty. [W][OPEN]</p>
+<p><strong><code>0x010C CABINET_DISPLAY</code> was the opposite case, and it is now one byte.</strong> It never ran out of body — it ran out of <em>structure</em>: the walk reached the tag of <code>BACnet_MSTP_LAN_Settings</code> after 224 of 230 bytes, and the six left over are <code>21 00 03 00 03 00</code>, <strong>byte-identical in every one of the sixty responses</strong>. An earlier edition left the cause open between "one of the three BACnet CHOICEs is not what the library says" and other readings. Neither is right. The declared tail from that point is</p>
+<pre><code>BACnetMSTPLANSettings : BACnet_MSTP_LAN_Settings   tag + arm
+bacnet_ip_aln_choice  : BOOLEAN_                    1
+ip_network_number     : UNSIGNED16                  2
+BACnetMSTPALNSettings : BACnet_MSTP_ALN_Settings   tag + arm
+</code></pre>
+<p>which is <strong>five</strong> bytes with both CHOICEs on their zero-length arm — one short. So one byte is undeclared, and there are five places it could be. Testing all five: [W]</p>
+<table>
+<thead>
+<tr>
+<th>an undeclared byte placed before …</th>
+<th style="text-align: right;">responses that then consume exactly</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong><code>BACnetMSTPLANSettings</code></strong></td>
+<td style="text-align: right;"><strong>60 of 60</strong></td>
+</tr>
+<tr>
+<td><code>bacnet_ip_aln_choice</code></td>
+<td style="text-align: right;">0 of 60</td>
+</tr>
+<tr>
+<td><code>ip_network_number</code></td>
+<td style="text-align: right;">0 of 60</td>
+</tr>
+<tr>
+<td><code>BACnetMSTPALNSettings</code></td>
+<td style="text-align: right;">0 of 60</td>
+</tr>
+<tr>
+<td>at the very end</td>
+<td style="text-align: right;">0 of 60</td>
+</tr>
+</tbody>
+</table>
+<p>One position fits and it fits everything, so the six bytes read:</p>
+<pre><code>21        &lt;- ONE undeclared byte, constant across all 60
+00        BACnetMSTPLANSettings  tag 0 = noMSTPLAN
+03        bacnet_ip_aln_choice
+00 03     ip_network_number = 3
+00        BACnetMSTPALNSettings  tag 0 = noMSTPALN
+</code></pre>
+<p><strong>The BACnet CHOICEs were never the problem.</strong> What remains open is only what the one byte <em>means</em>; its position and its constancy are measured, and a decoder that skips one byte there reads the response completely. <code>p2_asdu.STRUCT_SKIPS</code> carries it and <code>p2_body.py</code> applies it, emitting it as a named <code>&lt;undeclared&gt;</code> field rather than stepping over it silently — all 60 now decode to 230 of 230. One caution while reading the result: <code>bacnet_ip_aln_choice</code> is declared <code>BOOLEAN_</code> and carries <code>3</code>, so this codec does not constrain a boolean to 0/1. [W][OPEN]</p>
+<p><strong>Where the whole corpus stands, with nothing hand-waved.</strong> Four categories, and every body is in one of them: [W]</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th style="text-align: right;">bodies</th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>consume to <strong>exactly</strong> zero remainder</td>
+<td style="text-align: right;"><strong>3,863</strong></td>
+<td>95.1%</td>
+</tr>
+<tr>
+<td>requests <strong>zero-padded</strong> to 220 bytes</td>
+<td style="text-align: right;">174</td>
+<td>the rule two rows above</td>
+</tr>
+<tr>
+<td>a <strong>non-zero</strong> remainder</td>
+<td style="text-align: right;">21</td>
+<td>four operations, below</td>
+</tr>
+<tr>
+<td>fail outright</td>
+<td style="text-align: right;">5</td>
+<td>malformed <code>user_profile</code> — all five are this project's own probe frames, not supervisor or panel traffic (§9.7)</td>
+</tr>
+</tbody>
+</table>
+<p>That is <strong>4,037 of 4,063 fully accounted for, 99.4%</strong>, against 3,359 at the start of the pass that produced §10.4.2's <code>Point_extension2</code> correction. The twenty-one are:</p>
+<table>
+<thead>
+<tr>
+<th>operation</th>
+<th style="text-align: right;">bodies</th>
+<th>remainder</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0x0964 UPL_DEL_TREND</code> response</td>
+<td style="text-align: right;">12</td>
+<td>a constant 6 bytes, the first three of which read as an empty string TLV</td>
+</tr>
+<tr>
+<td><code>0x0291 TREND_SETUP_DELETE</code> request</td>
+<td style="text-align: right;">6</td>
+<td>a 4-byte <code>f32</code>, reading 60.0 on four and 3.0 on two</td>
+</tr>
+<tr>
+<td><code>0x0541 CATEGORY_REMOVE</code> request</td>
+<td style="text-align: right;">2</td>
+<td>a <strong>length byte followed by that many characters of a node name</strong> — <code>0x0F</code> and fifteen, which is §3.3.2's RAD-50 node-name limit. Not a string TLV: one length byte, not three</td>
+</tr>
+<tr>
+<td><code>0x4208 TEC_DEFINITION</code> request</td>
+<td style="text-align: right;">1</td>
+<td><code>ff ff</code>, which is how <code>application_number = -1</code> reads on the sibling <code>0x4200</code> (§9.5.1)</td>
+</tr>
+</tbody>
+</table>
+<p>None of the four is a decoding hazard — each is a trailing field on one operation, and the body before it reads completely — but each is a field the library does not declare, and the last two have a plausible name that is not yet confirmed. [W][OPEN]</p>
 <p>On the trailing-byte rule above: <strong>[OPEN]</strong> whether the constant is the body or the whole frame.
 Every observed instance is one supervisor talking to one panel, so the routing
 slots are the same length throughout and the two readings cannot be told apart
@@ -14673,15 +14782,17 @@ part, and every case falls into one of two kinds:</p>
   the operation declares. All 33 such frames originate from two research hosts
   and none from a supervisor or panel. They say nothing about the document.</li>
 </ul>
-<p><strong>A "blocked" verdict is about the whole body, and that can mislead.</strong> The
+<p><strong>A "blocked" verdict was about the whole body, and that could mislead.</strong> The
 register asks whether <em>every</em> field of an operation can be turned into named
-bytes; it cannot express "the part you need is fine." <code>CABINET_DISPLAY</code>
-(<code>0x010C</code>) is the clearest case — its response is listed as blocked, and the
-fields responsible are BACnet and port-configuration sub-blocks near the end,
-while <code>revstring</code> is <strong>field 1</strong> and the whole point of the read for most
-clients (§7.3.1, §10.5). Read a blocked verdict as "do not assume you can walk
-this body generically", not as "this operation is undocumented"; where a section
-of §10 describes an opcode in prose, that description is the authority.</p>
+bytes; it could not express "the part you need is fine." <code>CABINET_DISPLAY</code>
+(<code>0x010C</code>) was the clearest case — its response was listed as blocked on BACnet
+and port-configuration sub-blocks near the end, while <code>revstring</code> is <strong>field 1</strong>
+and the whole point of the read for most clients (§7.3.1, §10.5). Nothing is
+blocked now, so the caution is historical for this register — but keep it for
+any register built the same way: read a blocked verdict as "do not assume you
+can walk this body generically", not as "this operation is undocumented", and
+where a section of §10 describes an opcode in prose, that description is the
+authority.</p>
 <p><strong>Do not guess a width from an enum's value range.</strong> This is the one shortcut
 that looks safe and is not, and it is recorded here because it very nearly went
 into this document as a rule. Twenty-one enum widths had been measured
