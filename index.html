@@ -11109,8 +11109,8 @@ the output looks like a successful decode:</p>
 <td>an array-index lookup returns a different, valid name past the first gap</td>
 </tr>
 <tr>
-<td><strong>A CHOICE <code>tag_</code> is an enum value, not an ordinal</strong> (§10.4.1)</td>
-<td>positional arm selection is right for the first few values and wrong after</td>
+<td><strong>A CHOICE <code>tag_</code> is sometimes an enum value, not an ordinal</strong> (§10.4.1, §10.4.3)</td>
+<td>positional arm selection is right for 49 of the 53 CHOICEs whose numbering could be recovered, and silently wrong for the four where the arms mirror an external enumeration — <code>All_points</code>, the two BACnet point CHOICEs, and one 1-based case</td>
 </tr>
 <tr>
 <td><strong><code>Name_space_enum</code> is defined twice, with incompatible values</strong> — <code>0 system / 1 user / 65535 any</code>, and separately <code>1 LAO_actuator / 2 HOA</code></td>
@@ -12613,6 +12613,70 @@ value, <strong>9 of 9</strong>. That enum happens to be contiguous from 0, so th
 <em>does</em> coincide with arm position. The lesson is that the coincidence is a
 property of the enum, not of the protocol: read the enum, and only then note
 whether it happens to be dense. [S]</p>
+<h4 id="1043-choice-tags-in-general--the-rule-and-its-exceptions">10.4.3 CHOICE tags in general — the rule and its exceptions</h4>
+<p>§10.4.1 shows that <code>All_points</code>' tag is an enum value and not a position. The
+obvious next question is whether that is peculiar to point types or true of every
+CHOICE in the protocol, and it is answerable: the vendor's codec selects an arm
+by branching on the tag, so the numbering is stated in the code for every CHOICE
+it codes. <strong>53 of the 87 CHOICE types yield a map.</strong> [C]</p>
+<p><strong>The rule: the tag is the position in the declared arm list — unless the arm set
+mirrors an external enumeration, in which case it carries that enumeration's
+values.</strong> Forty-nine of the fifty-three are positional. Four are not, and each of
+the four is a case where the arms are really something else's type codes: [C]</p>
+<table>
+<thead>
+<tr>
+<th>CHOICE</th>
+<th>tag values</th>
+<th>the numbering</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>All_points</code></td>
+<td>1, 2, 3, 4, 6, 7, 11, 12, 13, 14, 15, 20, 21, 22, 23, 24</td>
+<td>the <code>Point_type</code> enum (§10.4.1)</td>
+</tr>
+<tr>
+<td><code>BAC_Point_Base</code></td>
+<td>0, 1, 2, 3, 4, 5, 13, 14</td>
+<td>the <strong>BACnet object-type</strong> enumeration</td>
+</tr>
+<tr>
+<td><code>BAC_propertystatetype_Choice</code></td>
+<td>3, 5, 13, 19</td>
+<td>the same</td>
+</tr>
+<tr>
+<td><code>Pdl_display_data</code></td>
+<td>1, 2</td>
+<td>positional but <strong>1-based</strong></td>
+</tr>
+</tbody>
+</table>
+<p>The two BACnet cases can be checked against a public standard rather than taken
+on trust, and they hold exactly: 0 analog-input, 1 analog-output, 2 analog-value,
+3 binary-input, 4 binary-output, 5 binary-value, 13 multi-state-input, 14
+multi-state-output, 19 multi-state-value — with the arm names matching
+one-for-one. An implementer decoding a BACnet-side CHOICE should treat the tag as
+a BACnet object type and not count arms. [C][I]</p>
+<p><code>BAC_Point_Base</code>'s ninth arm, <code>multi_value</code>, has no tag in the recovered table.
+By the pattern it is <strong>19</strong>, the BACnet multi-state-value code, which is also the
+tag <code>BAC_propertystatetype_Choice</code> uses for its own <code>multistate_value</code> arm. That
+is an inference from two consistent sources rather than a read value, and it is
+the one place in this section where the distinction matters. [I]</p>
+<p><strong>A trap worth naming, because it nearly went into this document.</strong> The tag is
+not the index into the arm list as the codec writes it: the generated selector
+switches on <code>tag - base</code>, with <code>base</code> the lowest tag value, so a reader that
+takes the jump-table index for the tag is off by <code>base</code> for the whole type.
+<code>All_points</code> has base 1, and read naively its sixteen tags all came back one too
+low — a self-consistent, entirely wrong map that only failed against the
+independently wire-derived values of §10.4.1. Where a decoder derives arm
+selection from any generated artifact, it must account for that offset. [C]</p>
+<p><strong>Two CHOICEs have no map at all</strong>, because the vendor codec never codes them —
+<code>localStateText_</code> and <code>event_parameter_Tag_</code> carry a constructor and nothing
+else. Neither appears in any capture in this corpus. They are the last two
+entries in §10.9's blocked list and are marked <code>[OPEN]</code> rather than guessed. [OPEN]</p>
 <h4 id="1042-the-physical-address-and-how-a-tec-subpoint-differs-from-a-panel-point">10.4.2 The physical address, and how a TEC subpoint differs from a panel point</h4>
 <p>Every point arm ends with a <code>Physical_address_*</code> field, and it is a CHOICE with
 two arms that answer a question an implementer has to get right: [S][W]</p>
@@ -13774,84 +13838,57 @@ described.</p>
 </thead>
 <tbody>
 <tr>
-<td><strong>Decodable</strong> from widths this document pins</td>
-<td style="text-align: right;"><strong>433 (95%)</strong></td>
+<td><strong>Decodable</strong> from widths and tag maps this document pins</td>
+<td style="text-align: right;"><strong>444 (98%)</strong></td>
 </tr>
 <tr>
 <td>Blocked on an unpinned CHOICE</td>
-<td style="text-align: right;">22</td>
+<td style="text-align: right;">11</td>
 </tr>
 <tr>
 <td>distinct blocking types</td>
-<td style="text-align: right;"><strong>8</strong></td>
+<td style="text-align: right;"><strong>3</strong></td>
 </tr>
 </tbody>
 </table>
-<p><strong>Every remaining blocker is a CHOICE, and not one of them is a width.</strong> A
-CHOICE blocks because a reader cannot tell which arm is present, not because an
-arm's length is unknown — §10.4.1 shows why the tag cannot be read as an
-ordinal in general. "Blocks" counts operations the type appears in; "alone"
-counts operations for which it is the only thing missing:</p>
+<p><strong>Nothing is blocked on a width.</strong> The three that remain are CHOICEs, which
+block for a different reason — a reader cannot tell which arm is present — and
+they need tag values, which §10.4.3 supplies for every CHOICE where they could
+be recovered. These three are what is left:</p>
 <table>
 <thead>
 <tr>
 <th>blocker</th>
 <th style="text-align: right;">blocks</th>
 <th style="text-align: right;">alone</th>
-<th>what it is</th>
+<th>why it is still open</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>Duct_type</code></td>
-<td style="text-align: right;">8</td>
-<td style="text-align: right;"><strong>8</strong></td>
-<td>3 arms, all 8 B — so this blocks the <em>labels</em>, not the walk (§10.4.1)</td>
-</tr>
-<tr>
 <td><code>localStateText_</code></td>
 <td style="text-align: right;">7</td>
-<td style="text-align: right;">0</td>
-<td>point state text</td>
-</tr>
-<tr>
-<td><code>Extended_team_member</code></td>
-<td style="text-align: right;">7</td>
-<td style="text-align: right;">0</td>
-<td>team-member description, which travels with the above</td>
-</tr>
-<tr>
-<td><code>Extended_team_desc</code></td>
-<td style="text-align: right;">3</td>
-<td style="text-align: right;"><strong>3</strong></td>
-<td>the same family's descriptor</td>
-</tr>
-<tr>
-<td><code>Team_Member_Upload</code></td>
-<td style="text-align: right;">2</td>
-<td style="text-align: right;">0</td>
-<td>team upload</td>
+<td style="text-align: right;"><strong>7</strong></td>
+<td>arms <code>no_text</code> / <code>binary_pts</code> / <code>enum_pt</code>; the vendor codec never codes this type, and no body in the corpus carries it</td>
 </tr>
 <tr>
 <td><code>BAC_Point_Base</code></td>
 <td style="text-align: right;">2</td>
 <td style="text-align: right;"><strong>2</strong></td>
-<td>the BACnet point base</td>
-</tr>
-<tr>
-<td><code>BAC_propertystatetype_Choice</code></td>
-<td style="text-align: right;">2</td>
-<td style="text-align: right;">0</td>
-<td>BACnet property state</td>
+<td>eight of nine arms recovered; <code>multi_value</code> has no tag in the table — almost certainly <strong>19</strong>, see §10.4.3, but inferred rather than read</td>
 </tr>
 <tr>
 <td><code>event_parameter_Tag_</code></td>
 <td style="text-align: right;">2</td>
-<td style="text-align: right;">0</td>
-<td>event parameters</td>
+<td style="text-align: right;"><strong>2</strong></td>
+<td>as <code>localStateText_</code>; needs a BACnet event-enrollment object</td>
 </tr>
 </tbody>
 </table>
+<p><code>localStateText_</code> is reached from <code>AP2_Member_Desc_Upload_Response</code>, so <strong>one
+<code>MEMBER_DESC_UPLOAD</code> response closes it</strong> — and the same capture settles the
+<code>scale_</code> CHOICE of §11.5.1, which is a separate open question asking for exactly
+that operation.</p>
 <p><strong>A claim this section used to make, withdrawn.</strong> Earlier editions reported
 forty blockers, of which thirty-one were enum widths, and said of them: <em>"the
 rest cannot be closed by looking harder at this capture set, only by a capture
