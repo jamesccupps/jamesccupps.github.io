@@ -3885,6 +3885,12 @@ wire format forbids a retry; nothing here performs one. [W]</p>
 <td>vendor catalog</td>
 <td>[D][W]</td>
 </tr>
+<tr>
+<td><code>0x0E15</code></td>
+<td><strong>physical point not commandable</strong> — the point cannot process commands (seen on <code>POINT_CMD_VALUE</code>)</td>
+<td>wire behaviour and the vendor catalog agree</td>
+<td>[W][D]</td>
+</tr>
 </tbody>
 </table>
 <p><strong>Where <code>0x00AC</code> comes from, read off the panel.</strong> A controller does not hold
@@ -3900,8 +3906,7 @@ revision reading of this error was documentary until now; it is the structure
 the firmware actually implements. [F]</p>
 <p>The same function special-cases <code>0x0136 AP2_P2_ROUTE</code> ahead of any table lookup
 and enforces its length bound inline — payload ≤ 249 bytes, total ≤ 253 (§6.8) —
-writing <strong><code>0x0002</code></strong> if the frame exceeds it. [F]
-| <code>0x0E15</code> | <strong>physical point not commandable</strong> — the point cannot process commands (seen on <code>POINT_CMD_VALUE</code>) | wire behaviour and the vendor catalog agree | [W][D] |</p>
+writing <strong><code>0x0002</code></strong> if the frame exceeds it. [F]</p>
 <p><strong><code>0x0E10</code>–<code>0x0E17</code> is the FLN error band.</strong> Every code in it reports a fault in
 the field-level network, the device, or the physical point — invalid FLN number,
 invalid drop number, device failed, invalid point number, physical point failed,
@@ -3923,11 +3928,331 @@ out of range</em> one code early. One consequence was behavioural rather than
 cosmetic: the released scanner treated <code>0x0E11</code> as a <strong>success</strong>, so a failed
 FLN point-add was reported as having worked. The whole table is regenerated and
 fixed in the tools and here. [D]</p>
-<p><strong>Still [OPEN].</strong> The correspondence above is between a wire code and a <em>named
-error</em>, which is what an implementer needs. What remains unmapped is the code↔
-<strong>AP2 error class</strong> pairing — the per-operation <code>*_Error_enum</code> types of the type
-system — which needs either a codec-level decode or controlled captures eliciting
-each class with a known stimulus. [OPEN]</p>
+<p><strong>The full catalog.</strong></p>
+<p>Seven codes is what this corpus produced; it is not what a panel can return. The
+complete set is <strong>42 codes</strong>, and a decoder needs all of them — a code this site
+never elicited is not a rare code, it is a code for a condition this site never
+hit. The <code>E</code>-number column is the vendor's own label for each error and is simply
+the decimal of the code, which is worth knowing because vendor material and panel
+displays cite errors that way (<code>E172</code>, not <code>0x00AC</code>). [D]</p>
+<table>
+<thead>
+<tr>
+<th>Code</th>
+<th style="text-align: right;"><code>E</code>-number</th>
+<th>Name</th>
+<th style="text-align: right;">Seen here</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0x0001</code></td>
+<td style="text-align: right;">E1</td>
+<td><code>no_memory_available</code></td>
+<td style="text-align: right;">—</td>
+</tr>
+<tr>
+<td><code>0x0002</code></td>
+<td style="text-align: right;">E2</td>
+<td><code>invalid_command</code></td>
+<td style="text-align: right;"><strong>28</strong></td>
+</tr>
+<tr>
+<td><code>0x0003</code></td>
+<td style="text-align: right;">E3</td>
+<td><code>not_found</code></td>
+<td style="text-align: right;"><strong>5,805</strong></td>
+</tr>
+<tr>
+<td><code>0x0004</code></td>
+<td style="text-align: right;">E4</td>
+<td><code>priority_too_low</code></td>
+<td style="text-align: right;">—</td>
+</tr>
+<tr>
+<td><code>0x0005</code></td>
+<td style="text-align: right;">E5</td>
+<td><code>no_change</code></td>
+<td style="text-align: right;">—</td>
+</tr>
+<tr>
+<td><code>0x0007</code></td>
+<td style="text-align: right;">E7</td>
+<td><code>point_failed</code></td>
+<td style="text-align: right;">—</td>
+</tr>
+<tr>
+<td><code>0x0008</code></td>
+<td style="text-align: right;">E8</td>
+<td><code>out_of_service</code></td>
+<td style="text-align: right;">—</td>
+</tr>
+<tr>
+<td><code>0x0009</code></td>
+<td style="text-align: right;">E9</td>
+<td><code>already_exists</code></td>
+<td style="text-align: right;"><strong>1</strong></td>
+</tr>
+<tr>
+<td><code>0x000A</code></td>
+<td style="text-align: right;">E10</td>
+<td><code>trend_already_exists</code></td>
+<td style="text-align: right;">—</td>
+</tr>
+<tr>
+<td><code>0x000B</code></td>
+<td style="text-align: right;">E11</td>
+<td><code>value_unchanged</code></td>
+<td style="text-align: right;">—</td>
+</tr>
+<tr>
+<td><code>0x000C</code></td>
+<td style="text-align: right;">E12</td>
+<td><code>value_out_of_range</code></td>
+<td style="text-align: right;">—</td>
+</tr>
+<tr>
+<td><code>0x000D</code></td>
+<td style="text-align: right;">E13</td>
+<td><code>not_hostcaller_node</code></td>
+<td style="text-align: right;">—</td>
+</tr>
+<tr>
+<td><code>0x0016</code></td>
+<td style="text-align: right;">E22</td>
+<td><code>line_not_traced</code></td>
+<td style="text-align: right;">—</td>
+</tr>
+<tr>
+<td><code>0x0028</code></td>
+<td style="text-align: right;">E40</td>
+<td><code>invalid_dst_pair</code></td>
+<td style="text-align: right;">—</td>
+</tr>
+<tr>
+<td><code>0x0040</code></td>
+<td style="text-align: right;">E64</td>
+<td><code>invalid_report_id</code></td>
+<td style="text-align: right;">—</td>
+</tr>
+<tr>
+<td><code>0x0065</code></td>
+<td style="text-align: right;">E101</td>
+<td><code>command_not_supported</code></td>
+<td style="text-align: right;">—</td>
+</tr>
+<tr>
+<td><code>0x0080</code></td>
+<td style="text-align: right;">E128</td>
+<td><code>invalid_user_id</code></td>
+<td style="text-align: right;">—</td>
+</tr>
+<tr>
+<td><code>0x0081</code></td>
+<td style="text-align: right;">E129</td>
+<td><code>invalid_password</code></td>
+<td style="text-align: right;">—</td>
+</tr>
+<tr>
+<td><code>0x0082</code></td>
+<td style="text-align: right;">E130</td>
+<td><code>user_accounts_database_full</code></td>
+<td style="text-align: right;">—</td>
+</tr>
+<tr>
+<td><code>0x00AB</code></td>
+<td style="text-align: right;">E171</td>
+<td><code>coldstart_required</code></td>
+<td style="text-align: right;">—</td>
+</tr>
+<tr>
+<td><code>0x00AC</code></td>
+<td style="text-align: right;">E172</td>
+<td><code>not_supported</code></td>
+<td style="text-align: right;"><strong>127</strong></td>
+</tr>
+<tr>
+<td><code>0x00B7</code></td>
+<td style="text-align: right;">E183</td>
+<td><code>too_many_framing_errors</code></td>
+<td style="text-align: right;">—</td>
+</tr>
+<tr>
+<td><code>0x00B8</code></td>
+<td style="text-align: right;">E184</td>
+<td><code>scu_no_answer</code></td>
+<td style="text-align: right;">—</td>
+</tr>
+<tr>
+<td><code>0x00F9</code></td>
+<td style="text-align: right;">E249</td>
+<td><code>invalid_point_address</code></td>
+<td style="text-align: right;">—</td>
+</tr>
+<tr>
+<td><code>0x00FA</code></td>
+<td style="text-align: right;">E250</td>
+<td><code>failed_io_device</code></td>
+<td style="text-align: right;">—</td>
+</tr>
+<tr>
+<td><code>0x00FE</code></td>
+<td style="text-align: right;">E254</td>
+<td><code>io_timeout</code></td>
+<td style="text-align: right;">—</td>
+</tr>
+<tr>
+<td><code>0x0200</code></td>
+<td style="text-align: right;">E512</td>
+<td><code>monitor_list_full</code></td>
+<td style="text-align: right;">—</td>
+</tr>
+<tr>
+<td><code>0x0202</code></td>
+<td style="text-align: right;">E514</td>
+<td><code>flt_transfer_in_progress</code></td>
+<td style="text-align: right;">—</td>
+</tr>
+<tr>
+<td><code>0x0203</code></td>
+<td style="text-align: right;">E515</td>
+<td><code>flt_transfer_killed</code></td>
+<td style="text-align: right;">—</td>
+</tr>
+<tr>
+<td><code>0x0205</code></td>
+<td style="text-align: right;">E517</td>
+<td><code>tec_not_added</code></td>
+<td style="text-align: right;">—</td>
+</tr>
+<tr>
+<td><code>0x0206</code></td>
+<td style="text-align: right;">E518</td>
+<td><code>connection_lost</code></td>
+<td style="text-align: right;">—</td>
+</tr>
+<tr>
+<td><code>0x0207</code></td>
+<td style="text-align: right;">E519</td>
+<td><code>warm_started</code></td>
+<td style="text-align: right;">—</td>
+</tr>
+<tr>
+<td><code>0x0209</code></td>
+<td style="text-align: right;">E521</td>
+<td><code>protocol_error</code></td>
+<td style="text-align: right;">—</td>
+</tr>
+<tr>
+<td><code>0x0210</code></td>
+<td style="text-align: right;">E528</td>
+<td><code>timeout</code></td>
+<td style="text-align: right;">—</td>
+</tr>
+<tr>
+<td><code>0x0E10</code></td>
+<td style="text-align: right;">E3600</td>
+<td><code>fln_invalid_fln_number</code></td>
+<td style="text-align: right;">—</td>
+</tr>
+<tr>
+<td><code>0x0E11</code></td>
+<td style="text-align: right;">E3601</td>
+<td><code>fln_invalid_drop_number</code></td>
+<td style="text-align: right;"><strong>4</strong></td>
+</tr>
+<tr>
+<td><code>0x0E12</code></td>
+<td style="text-align: right;">E3602</td>
+<td><code>fln_device_failed</code></td>
+<td style="text-align: right;"><strong>3</strong></td>
+</tr>
+<tr>
+<td><code>0x0E13</code></td>
+<td style="text-align: right;">E3603</td>
+<td><code>fln_invalid_point_number</code></td>
+<td style="text-align: right;">—</td>
+</tr>
+<tr>
+<td><code>0x0E14</code></td>
+<td style="text-align: right;">E3604</td>
+<td><code>fln_physical_point_failed</code></td>
+<td style="text-align: right;">—</td>
+</tr>
+<tr>
+<td><code>0x0E15</code></td>
+<td style="text-align: right;">E3605</td>
+<td><code>physical_point_not_commandable</code></td>
+<td style="text-align: right;"><strong>38</strong></td>
+</tr>
+<tr>
+<td><code>0x0E16</code></td>
+<td style="text-align: right;">E3606</td>
+<td><code>fln_value_out_of_range</code></td>
+<td style="text-align: right;">—</td>
+</tr>
+<tr>
+<td><code>0x0E17</code></td>
+<td style="text-align: right;">E3607</td>
+<td><code>fln_application_invalid_for_device</code></td>
+<td style="text-align: right;">—</td>
+</tr>
+</tbody>
+</table>
+<p>Three properties an implementer should read off it. The catalog is <strong>sparse and
+irregular</strong> — 42 codes over a range of 3,600 — so a decoder must use a lookup and
+not an array index. The <strong>bands are meaningful</strong>: <code>0x0001</code>–<code>0x0210</code> are panel and
+record errors, <code>0x0080</code>–<code>0x0082</code> are the user-account band, and <code>0x0E10</code>–<code>0x0E17</code>
+is the FLN band described below. And <strong>the observed distribution is nothing like
+the catalog</strong> — one code is 97% of every error this corpus contains, while 35 of
+the 42 never appeared at all. A decoder tested only against a capture is a
+decoder tested against one row. [W][D]</p>
+<p><strong>On the code↔AP2 error class pairing, which an earlier edition left open.</strong> The
+question was whether the type system's per-operation <code>*_Error_enum</code> types define
+a second, per-operation error namespace that would have to be mapped onto the
+wire codes. <strong>They do not, and there are far fewer of them than the question
+assumed</strong> — 16 in the whole type system, fifteen of those RACS partner and port
+operations. Where they carry a value it is the <em>same</em> value the global catalog
+uses:</p>
+<table>
+<thead>
+<tr>
+<th><code>*_Error_enum</code> member</th>
+<th style="text-align: right;">value</th>
+<th>the global code it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>invalid_partner_number</code></td>
+<td style="text-align: right;">2</td>
+<td><code>0x0002</code> <code>invalid_command</code></td>
+</tr>
+<tr>
+<td><code>partner_not_found</code> (11 enums)</td>
+<td style="text-align: right;">3</td>
+<td><code>0x0003</code> <code>not_found</code></td>
+</tr>
+<tr>
+<td><code>partner_already_here</code></td>
+<td style="text-align: right;">9</td>
+<td><code>0x0009</code> <code>already_exists</code></td>
+</tr>
+</tbody>
+</table>
+<p>So a per-operation error enum is a <strong>named subset</strong> — it says which of the global
+codes that operation can return, and gives each a name in that operation's terms.
+There is no translation to perform. [S]</p>
+<p>Two members do not fit, and are reported rather than smoothed over:
+<code>no_ram_available</code> / <code>no_ram</code> = <strong>0</strong> in the two RACS partner add/modify enums,
+and <code>port_not_found</code> = <strong>0</strong> in the three RACS port enums. The global catalog
+defines no code 0 — its memory error is <code>0x0001</code> and its not-found is <code>0x0003</code>.
+Both are the first-declared member of their enum, which would suggest a generator
+default, except that <code>AP2_Racs_Partner_Delete_Error_enum</code> has exactly one member
+and it is <code>partner_not_found</code> = 3, so the first member is not auto-zeroed. Either
+0 is a real code the catalog omits, or those five enums number from a different
+base. That is a narrow open item: it affects five RACS operations and no code
+this corpus has seen. [S][OPEN]</p>
 <h4 id="723-implementation-guidance">7.2.3 Implementation guidance</h4>
 <p>A parser MUST inspect <code>dir</code> before interpreting any post-slot bytes. An error tail and a value block
 can both begin <code>00 03</code>: read as a value block, <code>0x0003</code> ("not found") would fabricate a phantom value
@@ -11167,7 +11492,11 @@ the output looks like a successful decode:</p>
 </tr>
 <tr>
 <td><strong>A CHOICE <code>tag_</code> is sometimes an enum value, not an ordinal</strong> (§10.4.1, §10.4.6)</td>
-<td>positional arm selection is right for 24 of the 29 CHOICEs whose numbering is fully recovered, and silently wrong for the five where the arms mirror an external enumeration — <code>All_points</code>, the two BACnet point CHOICEs, the BACnet event-parameter CHOICE, and one 1-based case</td>
+<td>positional arm selection is right for 66 of the 71 CHOICEs whose numbering is fully recovered, and silently wrong for the five where the arms mirror an external enumeration — <code>All_points</code>, the two BACnet point CHOICEs, the BACnet event-parameter CHOICE, and one 1-based case</td>
+</tr>
+<tr>
+<td><strong>A two-armed CHOICE looks safe and is not</strong> (§10.4.6)</td>
+<td>"only two arms, so an ordinal reading cannot diverge" is the reasoning that put an assumption into §10.9's register; <code>Pdl_display_data</code> numbers its two arms 1 and 2, and two other CHOICEs have two <code>NULL_</code> arms that no body can tell apart</td>
 </tr>
 <tr>
 <td><strong><code>Name_space_enum</code> is defined twice, with incompatible values</strong> — <code>0 system / 1 user / 65535 any</code>, and separately <code>1 LAO_actuator / 2 HOA</code></td>
@@ -13181,21 +13510,52 @@ are not individually named. Every sample is a supply fan. [W]</p>
 obvious next question is whether that is peculiar to point types or true of every
 CHOICE in the protocol, and it is answerable: the vendor's codec selects an arm
 by branching on the tag, so the numbering is stated in the code for every CHOICE
-it codes. Three places in the codec state it, and it took all three to finish the
-job: a CHOICE's own decoder; the decoder of the <strong>parent</strong> that holds it, for a
-CHOICE the compiler inlined into its only user; and the <strong>encoder</strong>, which writes
-the tag the decoder reads and is the sole place three of them compile the
-selection at all. <strong>68 of the 73 CHOICE types yield a map, and 29 of those cover
-every declared arm</strong> — which is the only kind a reader can use, since a map
-missing an arm cannot select the arm it is missing. [C]</p>
-<p>The encoder route was checked before being believed. On the twelve CHOICEs where
-both an encoder map and a decoder map exist it reproduced the decoder map
-<strong>twelve times out of twelve with no contradiction</strong>, and the single difference
-is a superset: <code>BAC_Point_Base</code>'s ninth arm, which its <code>Decode</code> never lays
-out. [C]</p>
+it codes. It states it in four different shapes, and it took all four to finish
+the job:</p>
+<table>
+<thead>
+<tr>
+<th>where the selection is compiled</th>
+<th style="text-align: right;">complete maps</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>the CHOICE's own decoder, as a jump table</td>
+<td style="text-align: right;">13</td>
+</tr>
+<tr>
+<td>the decoder of the <strong>parent</strong> that holds it — for a CHOICE the compiler inlined into its only user</td>
+<td style="text-align: right;">11</td>
+</tr>
+<tr>
+<td>an <strong>encoder</strong> — which writes the tag its decoder reads, and is the only place three CHOICEs compile the selection at all</td>
+<td style="text-align: right;">4</td>
+</tr>
+<tr>
+<td>a <strong>compare chain</strong> rather than a jump table, in the CHOICE's own decoder or its parent's</td>
+<td style="text-align: right;">43</td>
+</tr>
+</tbody>
+</table>
+<p><strong>72 of the 73 CHOICE types yield a map and 71 are complete</strong> — complete meaning
+every declared arm has a tag, which is the only kind a reader can use, since a
+map missing an arm cannot select the arm it is missing. The two without a
+complete map, <code>NetworkVariable_</code> and <code>Point_extension2_type</code>, are named as a
+field type by <strong>no structure in the catalog</strong>: nothing can reach them, so nothing
+is blocked by them. [C]</p>
+<p>Each reader was checked against the ones already known before being believed. The
+encoder route reproduced the decoder map on <strong>twelve of twelve</strong> CHOICEs where
+both exist, with no contradiction and one superset (<code>BAC_Point_Base</code>'s ninth arm,
+which its <code>Decode</code> never lays out). The compare-chain route agreed <strong>twenty</strong>
+times with no contradiction, and its 38 new two-armed maps agree with the 38
+partial maps the jump-table reader had already produced — <strong>38 of 38 on the tag
+they share</strong>. And one of the 38 is checkable against the wire rather than against
+the codec: <code>Physical_address_AI</code> comes back <code>0</code> = <code>real_addr</code>, which §10.4.2
+established from captured bytes long before. [C][W]</p>
 <p><strong>The rule: the tag is the position in the declared arm list — unless the arm set
 mirrors an external enumeration, in which case it carries that enumeration's
-values.</strong> Twenty-four of the twenty-nine complete maps are positional. Five are
+values.</strong> Sixty-six of the seventy-one complete maps are positional. Five are
 not, and every one of the five is a case where the arms are really something
 else's type codes: [C]</p>
 <table>
@@ -13267,9 +13627,34 @@ none needed a capture. [C]</p>
 <code>BAC_EEO_Object</code> holds two — and a reader that looks for "a switch preceded by a
 load of <code>tag_</code>" will attribute the first one it finds to whichever CHOICE it was
 asked about. Done that way this document would have carried a five-tag map for a
-two-arm CHOICE with every tag selecting the same arm. The load pair to match is
-<code>&lt;field&gt;</code> then <code>tag_</code>, and a map that sends two tags to one arm should be
-discarded rather than published. [C]</p>
+two-arm CHOICE with every tag selecting the same arm. Two guards: match the load
+pair <code>&lt;field&gt;</code> then <code>tag_</code>, and discard any map that sends two tags to one arm
+rather than publishing it. The same two guards catch the mirror-image error
+inside a CHOICE's own decoder, where <strong>decoding an arm loads that arm's own
+sub-CHOICE tag</strong> — take the last <code>tag_</code> in the method and you read a nested
+selection as the outer one. [C]</p>
+<p><strong>Two-armed CHOICEs, and why an earlier edition of §10.9 assumed instead of
+reading.</strong> Fifty-six of the seventy-three CHOICEs have exactly two arms, and for
+those the compiler emits no jump table — a compare and a branch is enough:</p>
+<pre><code>ldfld tag_
+brfalse  L0            &lt;- tag == 0, and NO constant is emitted for it
+ldc.i4.1 ; beq  L1     &lt;- tag == 1
+  ...fall-through is the default/error path...
+L0: &lt;first declared arm&gt;
+L1: &lt;second declared arm&gt;
+</code></pre>
+<p>A reader keyed on "a constant, then a branch" sees the <code>tag == 1</code> arm and is
+blind to the <code>tag == 0</code> arm, which is why 38 of these came back half-read and
+§10.9 covered the gap with a modelling assumption. The other half of the problem
+is that an arm of type <code>NULL_</code> <strong>emits no code at all</strong>, so the search for its
+arm name runs past its empty body into the next arm's — bound the search at the
+next branch target, and with two arms one resolved arm determines the other.</p>
+<p>Read properly, <strong>all 38 are <code>0</code> = first declared arm, <code>1</code> = second</strong>. So a
+two-armed CHOICE is positional, with one exception in the whole type system:
+<code>Pdl_display_data</code> numbers its two arms 1 and 2. That exception matters more than
+it looks — it is the counterexample to the reasoning the register used to justify
+the assumption, which was that with only two arms an ordinal reading cannot go
+wrong. It can. [C]</p>
 <h3 id="105-cabinet_display--firmware--identity-block-0x010c">10.5 CABINET_DISPLAY — firmware / identity block (0x010C)</h3>
 <p><code>AP2_CABINET_DISPLAY</code> response (0x010C) is the panel's full firmware-and-identity block — the single richest unauthenticated read in the protocol (230/231 B on the wire; observed returning a firmware string such as <code>PME1252 / PXME V&lt;rev&gt; APOGEE / &lt;link date&gt;</code>). Field order is the wire order, and the layout below is now wire-confirmed — the on-wire field order matches the struct in this section exactly. [W]</p>
 <table>
@@ -13975,13 +14360,23 @@ of claim about the enum widths. <strong>Twice now a "needs new evidence" verdict
 this register has fallen to evidence already in hand</strong>, and in both cases what
 was missing was not data but a place in the existing material that nothing had
 read.</p>
-<p>One qualification the figure needs. Forty-four CHOICEs still have no complete tag
-map, and the register counts a <strong>two-armed</strong> CHOICE decodable without one: with
-two arms the body that follows determines which was sent, since the arms differ
-in length or in the first field's type. That is a stated modelling assumption,
-not a read value. It is the only assumption between this register and the wire,
-and a CHOICE where both arms are the same width would falsify it — none is
-known.</p>
+<p><strong>And the figure now rests on no assumption, which it did not when it first
+reached 455.</strong> The first version of this paragraph said so honestly: forty-four
+two-armed CHOICEs had no tag map, and the register counted them decodable on the
+reasoning that with only two arms the body distinguishes them. Testing that
+sentence broke it twice over. <code>Set_point_type</code> and <code>Setpoint_type</code> have <strong>two
+<code>NULL_</code> arms</strong> — zero bytes either way, so no body distinguishes anything. And
+<code>Pdl_display_data</code> numbers its two arms <strong>1 and 2</strong>, so the ordinal reading the
+assumption relied on is wrong for it.</p>
+<p>The fix was not to qualify the assumption but to remove it. Two-armed selections
+are compiled as a compare and a branch rather than a jump table, and the reader
+that could not see them was looking for a constant before the branch — which the
+compiler does not emit for <code>tag == 0</code> (§10.4.6). Handling that closes 38 of the
+39, and the register reaches the same 455 with the two-arm fallback deleted from
+its code. <strong>Every CHOICE reachable from an operation now has a tag map read from
+the codec.</strong> Two CHOICEs still have no complete map, <code>NetworkVariable_</code> and
+<code>Point_extension2_type</code>, and no structure in the catalog names either as a field
+type.</p>
 <p><strong>A claim this section used to make, withdrawn.</strong> Earlier editions reported
 forty blockers, of which thirty-one were enum widths, and said of them: <em>"the
 rest cannot be closed by looking harder at this capture set, only by a capture
@@ -15610,8 +16005,32 @@ AP2_COV_Disable_Request =  name_response : Name_response ,  cov_mask : Cov_mask
 </code></pre>
 <p>Worked examples (sanitized): a normal sensor <code>OATEMP.BN</code>, value <code>42 9b 62 3a</code> (≈ 77.69), block all-zero at NONE priority; a normal analog point with <code>control_status</code> (+1) = <code>0x04</code> and everything else zero; a point <strong>commanded at OPER</strong> shows the block opening <code>23 02 …</code> — <code>point_priority</code> (+0) = <code>0x23</code> (OPER) and <code>control_status</code> (+1) = <code>0x02</code>; and a <strong>failed sensor</strong> (<code>…RET AIR TEMP</code>, value <code>c2 79 ff ff</code> ≈ −62.5) shows non-zero bytes deeper in the block (a flag byte in the +7..+8 region asserted). A reader needing only the present value takes the <code>f32</code> and may ignore the block. [W]</p>
 <blockquote>
-<p><strong>[W/F — values now partly pinned; alarm-band still OPEN]</strong> The 10-byte trailing block's <strong>position, size, and field order are established</strong> (the <code>Annunciate_request</code> ASDU defines fields #3–#12, exactly ten one-byte fields follow the value, and that fits the wire bit-for-bit). <strong>The controller's own encoder confirms it independently:</strong> the function that serialises this body emits <code>u16 | TEXT_ | TEXT_ | f32 |</code> and then <strong>exactly ten calls to the one-byte write primitive</strong>, consecutively, with nothing between them — so "ten one-byte fields after the value" is not an inference reconciling a schema against a byte count, it is what the panel is compiled to write. [F] Newer command/abnormal-state captures confirm the <strong>first two bytes' asserted values</strong>: <code>point_priority</code> (+0) ∈ {<code>0x00</code> NONE, <code>0x20</code> EMER, <code>0x23</code> OPER} tracking who holds the point (<code>0x20</code>/emer seen on BACnet-integration points commanded to 1.0), and <code>control_status</code> (+1) observed taking <code>{0x00, 0x02, 0x03, 0x04, 0x06}</code> (e.g. <code>0x02</code> when the point is under an active operator command, <code>0x04</code> on a normal analog input). A failed sensor asserts a flag byte in the OOS/failed region (+2..+8). [W] What remains [OPEN] is the <strong><code>alarm_state</code> (+8) / <code>alarm_priority</code> (+9)</strong> encoding: no point in the captures was in a true hi/lo-limit alarm, so those two bytes never left zero. A single <code>0x0274</code> push from a point sitting in a limit alarm closes the last gap.</p>
+<p><strong>[W/F — values pinned; the alarm band is declared but unobserved here]</strong> The 10-byte trailing block's <strong>position, size, and field order are established</strong> (the <code>Annunciate_request</code> ASDU defines fields #3–#12, exactly ten one-byte fields follow the value, and that fits the wire bit-for-bit). <strong>The controller's own encoder confirms it independently:</strong> the function that serialises this body emits <code>u16 | TEXT_ | TEXT_ | f32 |</code> and then <strong>exactly ten calls to the one-byte write primitive</strong>, consecutively, with nothing between them — so "ten one-byte fields after the value" is not an inference reconciling a schema against a byte count, it is what the panel is compiled to write. [F] Newer command/abnormal-state captures confirm the <strong>first two bytes' asserted values</strong>: <code>point_priority</code> (+0) ∈ {<code>0x00</code> NONE, <code>0x20</code> EMER, <code>0x23</code> OPER} tracking who holds the point (<code>0x20</code>/emer seen on BACnet-integration points commanded to 1.0), and <code>control_status</code> (+1) observed taking <code>{0x00, 0x02, 0x03, 0x04, 0x06}</code> (e.g. <code>0x02</code> when the point is under an active operator command, <code>0x04</code> on a normal analog input). A failed sensor asserts a flag byte in the OOS/failed region (+2..+8). [W]</p>
 </blockquote>
+<p><strong><code>control_status</code> (+1) can be read, and the reading checks itself.</strong> The type system names this byte's enumeration <code>0 remote / 1 tool_override / 2 by_priority / 3 config_only / 4 input_only / 5 manual_override / 6 undefined</code> (Appendix A; §11.3.1 for what <code>manual_override</code> means to an operator). Set that against the two values this corpus characterises <em>from the wire alone</em> — <code>0x02</code> on a point under an active operator command, <code>0x04</code> on a normal analog input — and both land on the name that describes exactly that condition: <code>by_priority</code> for a point held by a command priority, <code>input_only</code> for an input. The wire reading and the vendor's name for it were arrived at separately and agree, which is worth more than either alone. The other three observed values follow: <code>0x00</code> <code>remote</code> on a normal panel-controlled output, <code>0x03</code> <code>config_only</code>, <code>0x06</code> <code>undefined</code>. [W][S]</p>
+<p><strong><code>alarm_state</code> (+8) and <code>alarm_priority</code> (+9) are declared, and this corpus does not exercise them.</strong> Those are two different statements and an earlier edition of this section ran them together, calling the <em>encoding</em> open when only the <em>observation</em> was missing:</p>
+<table>
+<thead>
+<tr>
+<th>byte</th>
+<th>enumeration</th>
+<th>values</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>+8 <code>alarm_state</code></td>
+<td><code>Alarm_state</code></td>
+<td><code>0</code> normal, <code>1</code> alarm, <code>2</code> high_alarm, <code>3</code> low_alarm, <code>4</code> trouble</td>
+</tr>
+<tr>
+<td>+9 <code>alarm_priority</code></td>
+<td><code>Alarm_priority</code></td>
+<td><code>0</code>–<code>6</code> = <code>priority_0</code>–<code>priority_6</code>; §13.2 shows <code>priority_0</code> is <em>unassigned</em>, not a seventh band, so render it as none</td>
+</tr>
+</tbody>
+</table>
+<p>Both are tabulated in full in Appendix A. What is still open is narrower than it was: <strong>no point in this corpus was in a true hi/lo-limit alarm, so neither byte has been seen non-zero on the wire.</strong> A single <code>0x0274</code> push from a point sitting in a limit alarm would confirm the mapping; nothing about it is unknown in the meantime. [S][OPEN]</p>
 <h3 id="124-command-priority-carried-in-the-cov-payload">12.4 Command priority (carried in the COV payload)</h3>
 <p><code>point_priority</code> is the command-ownership holder — which class of command source last successfully commanded the point. The <code>Point_priority</code> / <code>User_command_priority</code> ladder, lowest to highest acceptance, with the byte value that encodes it on the wire: [S]</p>
 <table>
@@ -21617,10 +22036,11 @@ specific test that would confirm or falsify it.</p>
    tag value, which a single-valued corpus never produces. The sharpest case was
    <code>scale_</code> (§11.5.1), whose only carrier appears nowhere in the corpus, and the
    test asked for was a <code>MEMBER_DESC_UPLOAD</code> response.
-   <em>Now:</em> the numbering is read directly for <strong>68 of the 73 CHOICEs</strong>, complete
-   for <strong>29</strong>, and complete for <strong>every CHOICE a decode depends on</strong> — §10.9's
-   register is at 455 of 455 with nothing blocked (§10.4.6). Twenty-four of the
-   twenty-nine are positional; five are not, and each of the five numbers its
+   <em>Now:</em> the numbering is read directly for <strong>72 of the 73 CHOICEs</strong>, complete
+   for <strong>71</strong>, and complete for <strong>every CHOICE a decode depends on</strong> — §10.9's
+   register is at 455 of 455 with nothing blocked and no modelling assumption
+   left in it (§10.4.6). Sixty-six of the seventy-one are positional; five are
+   not, and each of the five numbers its
    arms by an external enumeration — the <code>Point_type</code> enum for <code>All_points</code>, the
    BACnet object-type enumeration for the two BACnet point CHOICEs, and the
    BACnet event-type enumeration for <code>event_parameter_Tag_</code>, which check against
@@ -21637,11 +22057,11 @@ specific test that would confirm or falsify it.</p>
    earlier passes had not looked at. <code>BAC_Point_Base</code>'s ninth arm went the same
    way: <code>multi_value</code> = <strong>19</strong> is now read rather than inferred from the
    pattern.
-   <em>What is left:</em> forty-four CHOICEs have no complete map. Every one is either
-   two-armed — where §10.9 counts the operation decodable on the stated
-   assumption that the body distinguishes the arms — or unreachable from any
-   operation in the catalog. Neither blocks a decode, and neither is worth a
-   capture.</p>
+   <em>What is left:</em> two CHOICEs have no complete map — <code>NetworkVariable_</code>, which
+   has no decoder and no encoder, and <code>Point_extension2_type</code>, whose three-armed
+   compare chain yields only its middle arm. <strong>No structure in the catalog names
+   either one as a field type</strong>, so nothing can reach them and nothing is
+   blocked. Neither is worth a capture.</p>
 </li>
 </ol>
 <h3 id="appendix-e--evidence-tag-legend-and-lineage-pointer">Appendix E — Evidence-tag legend and lineage pointer</h3>
