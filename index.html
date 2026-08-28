@@ -4869,8 +4869,50 @@ char:   &quot; ABCDEFGHIJKLMNOPQRSTUVWXYZ$.?0123456789&quot;
 </code></pre>
 <p>On the wire this serializes as the sub-structure's fields, then the name TLV(s), then the <code>f32</code> value, then the priority field — in that order, positionally. The command priority here is the same ladder value that a scoped request carries in its <code>scope_byte</code> (§8.2.1); whether the priority rides as a scope-tag selector byte or as a trailing typed field depends on the specific opcode's structure, but the value space is identical. [S][I]</p>
 <blockquote>
-<p><strong>Layout-precision note.</strong> ASDU field <em>order and type</em> are definitional truth from the vendor type system ([S]). For the <strong>COV annunciate condition/priority block specifically</strong>, the offsets are now pinned: the <code>Annunciate_request</code> defines exactly ten status fields after the value and the wire block is exactly ten bytes, so the mapping is <strong>one byte per field in schema order</strong> (§12.3.3) — position/size/order are [W]/[S], and only the <em>asserted values</em> of the alarm/flag/priority bytes remain to be confirmed from an alarmed capture. For other composite blocks (e.g. the per-type value arms of <code>All_points</code>, and the replication change-record framing), the exact interior byte offsets are still <strong>[OPEN]</strong> pending a labeled capture or codec confirmation; treat byte-offset claims for those as inferred until then.</p>
+<p><strong>Layout-precision note.</strong> ASDU field <em>order and type</em> are definitional truth from the vendor type system ([S]). For the <strong>COV annunciate condition/priority block specifically</strong>, the offsets are now pinned: the <code>Annunciate_request</code> defines exactly ten status fields after the value and the wire block is exactly ten bytes, so the mapping is <strong>one byte per field in schema order</strong> (§12.3.3) — position/size/order are [W]/[S], and only the <em>asserted values</em> of the alarm/flag/priority bytes remain to be confirmed from an alarmed capture. For the <strong>per-type value arms of <code>All_points</code></strong> the position is now measured rather than open, and it splits by arm. An arm's interior layout is confirmed the moment a body carrying it consumes to the byte, because a wrong interior offset displaces everything after it — so the corpus settles the arms it exercises and says nothing about the rest: [W]</p>
 </blockquote>
+<table>
+<thead>
+<tr>
+<th>arm</th>
+<th style="text-align: right;">bodies reaching it</th>
+<th style="text-align: right;">of those, consuming exactly</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ldi</code></td>
+<td style="text-align: right;">28</td>
+<td style="text-align: right;">28</td>
+</tr>
+<tr>
+<td><code>ldo</code></td>
+<td style="text-align: right;">128</td>
+<td style="text-align: right;">128</td>
+</tr>
+<tr>
+<td><code>lai</code></td>
+<td style="text-align: right;">112</td>
+<td style="text-align: right;">112</td>
+</tr>
+<tr>
+<td><code>lao</code></td>
+<td style="text-align: right;">148</td>
+<td style="text-align: right;">106 — the 42 are the trend responses of §10.4.1</td>
+</tr>
+<tr>
+<td><code>l2sl</code></td>
+<td style="text-align: right;">13</td>
+<td style="text-align: right;">13</td>
+</tr>
+<tr>
+<td><code>lenum</code></td>
+<td style="text-align: right;">7</td>
+<td style="text-align: right;">7</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Six of the sixteen arms are confirmed; the other ten are never exercised here and stay <code>[OPEN]</code></strong> — <code>looap</code>, <code>lpaci</code>, <code>l2sp</code>, <code>looal</code>, <code>lfssl</code>, <code>lfssp</code>, <code>ldao</code>, <code>lfmsl</code>, <code>lfmsp</code>, <code>ppcl_lai</code>. That is the same ceiling §10.9 describes: this site runs six point types, and no amount of further reading of this capture set will produce a seventh. [W][OPEN] For the replication change-record framing the interior offsets remain <strong>[OPEN]</strong>; treat byte-offset claims there as inferred.</p>
 <p>For the byte-level grammar of each opcode's request and response ASDU, see §9; for the point-model structures (value blocks, multistate enum tables, FLN-device subpoints, slope/intercept scaling) these primitives compose into, see §11.</p>
 <h2 id="9-function-code-opcode-catalog">9. Function-Code (Opcode) Catalog</h2>
 <p>Every P2 request, panel-originated push, and response is dispatched on a single 2-byte field, the <strong>AP2 function code</strong> (the wire opcode). This section catalogs that field. §10 then gives the body (ASDU) structures that follow each opcode.</p>
@@ -12225,6 +12267,19 @@ is what breaks the arm-resolution rule below for those two arms. [S]</p>
 four point types correctly and <strong>mislabel the other twelve</strong> — silently, because
 each arm still parses, just as the wrong type. The arm list is written in enum
 order, which is exactly what makes the mistake easy.</p>
+<p><strong>The <code>lao</code> arm carries two bytes the structure does not declare — but not
+everywhere.</strong> Five operations require them, and in those the body consumes to
+the byte only with the two bytes counted: <code>0x4221</code> (42 bodies), <code>0x0981</code> (30),
+<code>0x0271</code> (28), <code>0x0220</code> (2), <code>0x0971</code> (2) — <strong>104 bodies for the rule and none
+against it</strong>. [W] The trend responses are the exception. <code>0x0294</code> and <code>0x0295</code>
+carry 42 <code>lao</code> bodies between them, and reading the two bytes there stops the
+walk dead a few bytes into the trend block, where the count that should follow
+reads as zero and the next field lands mid-timestamp; skipping them instead
+walks the whole body to within 1–3 bytes of its end. So the two bytes are
+<strong>real where they are documented and absent in the trend responses</strong>, and a
+decoder must key them to the operation rather than to the arm. What occupies
+the last 1–3 bytes of a trend response is <strong>[OPEN]</strong>, and it is a small,
+located gap rather than a general doubt about arm interiors. [W][OPEN]</p>
 <p>The mapping is corroborated by an authority independent of both the structure
 definition and the enum — the <strong>point descriptors</strong>, free text written by
 whoever commissioned the site. Across all 71 <code>0x0508 ALARM_PRINT</code> request
