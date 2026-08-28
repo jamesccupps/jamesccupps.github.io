@@ -3507,6 +3507,21 @@ modem path, and both may use this same encoding.</p>
 <p><strong>And the framing beneath it is [OPEN].</strong> The firmware receives the four header
 bytes already parsed into fields, so start/sync delimiting and any CRC are
 stripped by a lower layer this code does not contain.</p>
+<p><strong>Two layers above the wire have been checked and neither adds the three bytes
+that precede the group selector.</strong> The supervisor's protocol adapter builds the
+request object, points it at a 600-byte buffer, calls the encoder — which writes
+the group byte at offset 0 — and hands <em>that same buffer and the encoder's own
+length</em> to the transmit call, with nothing prepended. The link component beneath
+it is a transport: ports, partners, sequence numbers, a socket path and a modem
+path, and no P2 header assembly. [C] So on the supervisor's send path a message
+begins at the group byte, and the <code>node | ? | ?</code> prefix is either added below
+both of them or is not present on that path at all.</p>
+<p>That second possibility is worth stating because it is testable and would
+explain the shape: the panel-side header is described by code that <strong>forwards a
+message whose address byte is not its own</strong> (<code>0x0136</code>), which is a routing
+concern. A directly-addressed message may simply not carry it. This document
+does not choose between the two — it records that the two layers where the
+prefix would most naturally be added do not add it. [C][OPEN]</p>
 <blockquote>
 <p><strong>A note on the ~256-byte figure.</strong> §6.7 records, correctly, that the ~256-byte
 number in vendor connection-test material is a <em>ping</em> size and not a maximum
@@ -21193,7 +21208,7 @@ them up in two places is how they get combined wrongly. [S]</p>
 </tbody>
 </table>
 <h4 id="license_error--license_error_enum">license_error  <code>license_error_enum</code></h4>
-<p><strong>2 bytes on the wire.</strong> The failure reasons the licence-manager operations return. [S]</p>
+<p><strong>2 bytes on the wire.</strong> The failure reasons the licence-manager operations return. The five <code>LM_MV_*</code> members are 0xFFD6-0xFFFE - small negative numbers as they would be written in source, stored and matched as unsigned; a decoder compares the bytes, not the sign. [S]</p>
 <table>
 <thead>
 <tr>
