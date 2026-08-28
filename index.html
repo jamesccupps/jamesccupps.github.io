@@ -11776,10 +11776,82 @@ bodies from 91% to <strong>99.2%</strong> decoded (2,494 of 2,515): [W]</p>
 </tr>
 <tr>
 <td><strong>Some responses carry one or two bytes the library does not declare</strong>, consistently per opcode.</td>
-<td>43 bodies: <code>0x0291</code> always +2, <code>0x0987</code> and <code>0x5038</code> always +1. <strong>[OPEN]</strong> — an undeclared trailing field, not padding</td>
+<td><strong>402 bodies across 9 operations</strong>, tabulated below — an undeclared trailing field, not padding</td>
 </tr>
 </tbody>
 </table>
+<p><strong>The undeclared tails, recounted.</strong> An earlier edition of the row above said
+"43 bodies: <code>0x0291</code> always +2, <code>0x0987</code> and <code>0x5038</code> always +1". Walked
+field-by-field there are nine operations and 402 bodies, and they are two
+different things that should not be counted together: [W]</p>
+<table>
+<thead>
+<tr>
+<th>operation</th>
+<th style="text-align: right;">bodies</th>
+<th>tail</th>
+<th>what it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0x0291</code> <code>TREND_SETUP_DELETE</code></td>
+<td style="text-align: right;">14</td>
+<td>2 B, always <code>00 00</code></td>
+<td>an <strong>empty <code>Point_extension2</code></strong> — entry count zero (§10.4.2)</td>
+</tr>
+<tr>
+<td><code>0x02A8</code> <code>TREND_EVENT_ARC_SETUP</code></td>
+<td style="text-align: right;">8</td>
+<td>2 B, always <code>00 00</code></td>
+<td>the same</td>
+</tr>
+<tr>
+<td><code>0x0987</code> <code>UPL_ALL_EQS_ZONE</code></td>
+<td style="text-align: right;">60</td>
+<td>1 B</td>
+<td>a boolean: <code>1</code> on 59, <code>0</code> on 1</td>
+</tr>
+<tr>
+<td><code>0x5038</code> <code>EQS_ZONE_LOG</code></td>
+<td style="text-align: right;">20</td>
+<td>1 B</td>
+<td>a boolean: <code>0</code> on all 20</td>
+</tr>
+<tr>
+<td><code>0x0989</code> <code>UPL_ALL_EQS_MODE_SCHED</code></td>
+<td style="text-align: right;">60</td>
+<td>2 B</td>
+<td>a <strong>state-text table id</strong>: <code>-1005</code> on 36, <code>-2005</code> on 24</td>
+</tr>
+<tr>
+<td><code>0x098C</code>–<code>0x098F</code> <code>UPL_ALL_SSTO_*</code></td>
+<td style="text-align: right;">60 each</td>
+<td>2 B</td>
+<td>the same two ids, <code>-1005</code> on 45 and <code>-2005</code> on 15 in each</td>
+</tr>
+</tbody>
+</table>
+<p>The last five are not really undeclared. <code>-1005</code> and <code>-2005</code> are the two
+state-text tables this site defines, and a <strong>sibling structure in the same
+library declares the field</strong>: <code>AP2_Upl_Added_SSTO_Start_Response</code> carries
+<code>state_text_id : SHORT_</code> where <code>AP2_Upl_All_SSTO_Start_Response</code> declares
+nothing. The wire carries it in both. So this is the same <em>"a trailing declared
+field may be absent"</em> asymmetry as the first rule, seen from the other side — the
+library is inconsistent between an operation and its <code>_Added_</code> variant, not
+silent about a field. [S][W]</p>
+<p>The first four are genuinely undeclared, and two of those four are now explained:
+an empty <code>Point_extension2</code> is exactly two bytes, so <code>0x0291</code> and <code>0x02A8</code> carry
+a field the library forgot on a structure that its neighbours all have. What
+remains open is narrow — <strong>the meaning of the two single-byte booleans</strong> on
+<code>0x0987</code> and <code>0x5038</code>. Their width and position are not in doubt. [W][OPEN]</p>
+<p><strong>These are in the published package.</strong> <code>p2_asdu.OP_TAILS</code> carries all nine and
+<code>p2_body.py</code> applies them after the declared structure, naming them so a reader
+can see they are observed rather than declared. Until this pass the reference
+model applied them and the shipped walker did not, so 342 bodies this document
+reports as fully decoded stopped one or two bytes short for anyone using the
+package — a gap between what the document measured and what it shipped. Model
+and walker now both consume <strong>3,803 of 4,063</strong> bodies to exactly zero. [W]</p>
 <p><strong><code>0x010C CABINET_DISPLAY</code> is the opposite case, and worth separating from it.</strong> It does not run out of body — it runs out of <em>structure</em>. All 60 responses walk <strong>224 of 230 bytes</strong> and stop at the tag of <code>BACnet_MSTP_LAN_Settings</code>, and the six bytes left over are <code>21 00 03 00 03 00</code> — <strong>byte-identical in every one of the sixty</strong>. A constant remainder is a fixed block, not data, so this is not truncation and not a short read: either one of the three BACnet CHOICEs in the declared tail is not positional, or the panel emits six bytes the type system does not declare. Everything before that point decodes, including both MAC addresses and <code>bacnetSettings.tag_ = 0</code> — this site has BACnet off — so <strong>a <code>CABINET_DISPLAY</code> from a panel with BACnet actually configured is what would settle it</strong>, by making those arms non-empty. [W][OPEN]</p>
 <p>On the trailing-byte rule above: <strong>[OPEN]</strong> whether the constant is the body or the whole frame.
 Every observed instance is one supervisor talking to one panel, so the routing
