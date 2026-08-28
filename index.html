@@ -13967,9 +13967,10 @@ be recovered. These three are what is left:</p>
 </tbody>
 </table>
 <p><code>localStateText_</code> is reached from <code>AP2_Member_Desc_Upload_Response</code>, so <strong>one
-<code>MEMBER_DESC_UPLOAD</code> response closes it</strong> — and the same capture settles the
-<code>scale_</code> CHOICE of §11.5.1, which is a separate open question asking for exactly
-that operation.</p>
+<code>MEMBER_DESC_UPLOAD</code> response closes it</strong>. That capture was until recently worth
+taking for two reasons — the <code>scale_</code> CHOICE of §11.5.1 rode on the same
+response — but <code>scale_</code> has since been settled from the vendor codec without a
+capture, so <code>localStateText_</code> is now the whole of the case for it.</p>
 <p><strong>A claim this section used to make, withdrawn.</strong> Earlier editions reported
 forty blockers, of which thirty-one were enum widths, and said of them: <em>"the
 rest cannot be closed by looking harder at this capture set, only by a capture
