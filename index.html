@@ -5238,7 +5238,7 @@ char:   &quot; ABCDEFGHIJKLMNOPQRSTUVWXYZ$.?0123456789&quot;
 <tr>
 <td><code>lao</code></td>
 <td style="text-align: right;">148</td>
-<td style="text-align: right;">106 — the 42 are the trend responses of §10.4.1</td>
+<td style="text-align: right;">148</td>
 </tr>
 <tr>
 <td><code>l2sl</code></td>
@@ -12612,61 +12612,54 @@ is what breaks the arm-resolution rule below for those two arms. [S]</p>
 four point types correctly and <strong>mislabel the other twelve</strong> — silently, because
 each arm still parses, just as the wrong type. The arm list is written in enum
 order, which is exactly what makes the mistake easy.</p>
-<p><strong>The <code>lao</code> arm carries two bytes the structure does not declare — but not
-everywhere.</strong> Five operations require them, and in those the body consumes to
-the byte only with the two bytes counted: <code>0x4221</code> (42 bodies), <code>0x0981</code> (30),
-<code>0x0271</code> (28), <code>0x0220</code> (2), <code>0x0971</code> (2) — <strong>104 bodies for the rule and none
-against it</strong>. [W] The trend responses are the exception. <code>0x0294</code> and <code>0x0295</code>
-carry 42 <code>lao</code> bodies between them, and reading the two bytes there stops the
-walk dead a few bytes into the trend block, where the count that should follow
-reads as zero and the next field lands mid-timestamp; skipping them instead
-walks the body. So the two bytes are <strong>real where they are documented and absent
-in the trend responses</strong>, and a decoder must key them to the operation rather
-than to the arm. [W]</p>
-<p><strong>How far the trend walk actually gets, measured.</strong> An earlier edition said
-"within 1–3 bytes of its end" and left the residue <code>[OPEN]</code>. That predates the
-field-level walker, and it does not reproduce:</p>
+<p><strong>The <code>lao</code> arm carries no undeclared bytes, and three editions of this section
+said it did.</strong> The retraction is worth the space, because the error was not a
+misread byte — it was a <em>second</em> rule invented to absorb the shortfall of a
+first one, and each hid the other.</p>
+<p>Earlier editions recorded: "the <code>lao</code> arm carries two bytes the structure does
+not declare", holding on <code>0x4221</code> (42 bodies), <code>0x0981</code> (30), <code>0x0271</code> (28),
+<code>0x0220</code> (2), <code>0x0971</code> (2) — <strong>104 bodies for the rule and none against it</strong>.
+That measurement was correct. What it measured was not the <code>lao</code> arm.</p>
+<p><code>Point_extension2</code> was being read as a u16 <strong>byte length</strong> followed by that many
+bytes. It is a u16 <strong>entry count</strong> followed by that many self-describing entries
+(§10.4.2), so the length reading falls short by 3 bytes of header per entry —
+and the <code>lao</code> points are precisely the ones whose extension is non-empty. Two
+bytes of the shortfall were being made up in the arm, which put the walk back on
+track for the operations above and derailed it for the trend responses, whose
+extension sits elsewhere in the body.</p>
+<p>The 2×2, over all 4,063 bodies, counting only those that consume to <strong>exactly</strong>
+zero remainder: [W]</p>
 <table>
 <thead>
 <tr>
-<th>opcode</th>
-<th>side</th>
-<th style="text-align: right;">bodies</th>
-<th style="text-align: right;">consume to zero</th>
-<th>what is left over</th>
+<th></th>
+<th style="text-align: right;"><code>Point_extension2</code> as a length</th>
+<th style="text-align: right;">as an entry count</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>0x0294 TREND_SETUP_LOG</code></td>
-<td>response</td>
-<td style="text-align: right;">52</td>
-<td style="text-align: right;"><strong>48</strong></td>
-<td>17 bytes on 4</td>
+<td><code>lao</code> +2 applied</td>
+<td style="text-align: right;">3,359</td>
+<td style="text-align: right;">3,255</td>
 </tr>
 <tr>
-<td><code>0x0295 TREND_DATA_DISPLAY</code></td>
-<td>request</td>
-<td style="text-align: right;">60</td>
-<td style="text-align: right;"><strong>60</strong></td>
-<td>—</td>
-</tr>
-<tr>
-<td><code>0x0295</code></td>
-<td>response</td>
-<td style="text-align: right;">60</td>
-<td style="text-align: right;">34</td>
-<td>233, 458/459, 1410/1411 bytes</td>
+<td><strong>no <code>lao</code> +2</strong></td>
+<td style="text-align: right;">3,255</td>
+<td style="text-align: right;"><strong>3,401</strong></td>
 </tr>
 </tbody>
 </table>
-<p>The <code>0x0294</code> response is in better shape than the document claimed. The <code>0x0295</code>
-response is in worse, and its residue is <strong>not unknown content</strong>: 458 − 10 =
-28 × 16 and 1410 − 10 = 28 × 50, and <code>Trend_data</code> sizes to 28 bytes. That is the
-signature of a declared count being read short — the records are there and the
-walk stops before them — not of an undocumented trailer. Naming it as such is
-as far as this section goes; running it down belongs to the capture re-mine,
-where every operation gets the same treatment rather than this one. [W]</p>
+<p>Per body rather than in total: <strong>42 bodies for the count-and-no-<code>+2</code> reading and
+zero against it.</strong> The 42 are the <code>0x0294</code>/<code>0x0295</code> trend responses, which now
+consume to zero on <strong>every</strong> body — 52 of 52 and 60 of 60 — and with them the
+last two <code>All_points</code> arms reach 100%: <code>lao</code> is 148 of 148 (§8.5).</p>
+<p>Two lessons, both general. <strong>A rule with "104 for and none against" can still be
+false</strong> if what it corrects for is an error upstream of it; the earlier test held
+the extension reading fixed, so it could only ever confirm the pair. And <strong>a
+compensating error is easiest to find where the compensation does not apply</strong> —
+here, in the one family of responses that carries the extension somewhere else.
+[W]</p>
 <p>The mapping is corroborated by an authority independent of both the structure
 definition and the enum — the <strong>point descriptors</strong>, free text written by
 whoever commissioned the site. Across all 71 <code>0x0508 ALARM_PRINT</code> request
@@ -12870,7 +12863,7 @@ fixed at 20 bytes across 139 responses: [W]</p>
 FC 13         state_text_table = -1005      &lt;- LENUM_type, SIGNED (the arm ends here)
 01            lenum_address tag 1 = present  &lt;- the ENCLOSING structure
 01            present_
-00 00         point_extension2, length 0
+00 00         point_extension2, entry count 0
 </code></pre>
 <p>Note where the point stops. <code>state_text_table</code> is the last byte of the arm; the
 three fields after it belong to the <strong>enclosing response</strong>, which declares
@@ -13020,7 +13013,7 @@ model consumes <strong>5,795 of 5,807 walked points (99.8%) with zero remainder<
 </tr>
 <tr>
 <td><code>Point_extension2</code></td>
-<td><strong>u16 length + payload</strong></td>
+<td><strong>u16 entry count + self-describing entries</strong></td>
 <td>§10.4.2</td>
 </tr>
 <tr>
@@ -13289,33 +13282,59 @@ decoder that assumes tag 0 means "has an address" is wrong here.</p>
 family suggests: measured across all 73 CHOICEs (§10.4.1), <code>NULL_</code>-first is the
 <strong>majority</strong> convention at 34 of 42, and <code>Physical_address_Lenum</code> follows it. It
 is <code>_AI</code>, <code>_AO</code>, <code>_DI</code>, <code>_DO</code> and <code>_PA</code> that are unusual. [S]</p>
-<p><code>Point_extension2</code> is <strong>not a fixed-width field</strong>. It is a counted block: [W]</p>
-<pre><code>Point_extension2 :  u16 BE length │ &lt;length&gt; bytes
+<p><code>Point_extension2</code> is <strong>not a fixed-width field</strong>, and it is not a length-
+prefixed blob either. It is a <strong>counted array of self-describing entries</strong>,
+exactly as the type system declares it: [S][W]</p>
+<pre><code>Point_extension2
+    nrOftypes         : u16 BE          &lt;- a COUNT of entries, not a byte length
+    types             : Point_extension2_type[]
+
+Point_extension2_type
+    tag_              : 1 byte          &lt;- Extension2_actuator
+    size_of_extension : u16 BE          &lt;- bytes of payload that follow
+    payload           : &lt;size_of_extension&gt; bytes
 </code></pre>
+<p>Three readings, measured over the whole body corpus by the only figure that
+settles it — bodies that consume to <strong>exactly</strong> zero remainder: [W]</p>
 <table>
 <thead>
 <tr>
 <th>reading</th>
-<th style="text-align: right;">walked points consumed with zero remainder</th>
+<th style="text-align: right;">bodies consuming exactly</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>fixed 2 bytes</td>
-<td style="text-align: right;">1,959 of 5,734 (34.2%)</td>
+<td style="text-align: right;">far short; desynchronises on every non-empty extension</td>
 </tr>
 <tr>
-<td><strong>u16 length + payload</strong></td>
-<td style="text-align: right;"><strong>5,722 of 5,734 (99.8%)</strong></td>
+<td>u16 byte length + payload</td>
+<td style="text-align: right;">3,359 of 4,063</td>
+</tr>
+<tr>
+<td><strong>u16 entry count + entries</strong></td>
+<td style="text-align: right;"><strong>3,401 of 4,063</strong></td>
 </tr>
 </tbody>
 </table>
-<p>At this site every point type carries length <code>0</code> — so the two bytes <em>are</em> the
-count, and the fixed reading is accidentally right — <strong>except <code>lao</code>, which
-carries a 1- or 2-byte payload and is what exposes the difference</strong>. This is
-also why the structure library declares the type with no fields: there are none
-to declare. <strong>89 structures carry one</strong>, so a decoder that hard-codes two bytes
-desynchronises on any body whose extension is non-empty. [S][W]</p>
+<p>The count reading wins <strong>42 bodies and loses none</strong>. The two coincide whenever
+the count is zero, which it is on 290 of the 396 extensions in this corpus, and
+that is why the wrong one survived three editions — together with a second rule
+invented to absorb its shortfall, retracted in §10.4.1.</p>
+<p><strong>What is actually in one.</strong> Every non-empty extension here carries exactly one
+entry with <code>tag_</code> = <code>1</code>, which <code>Point_extension2_type</code> names
+<code>LAO_actuator_type_extension</code>, and a payload of 1 or 2 bytes. They appear on
+<code>lao</code> points and on no other type — which is what the names say: an <em>actuator</em>
+extension on an analog output. Two of the six distinct blocks observed:</p>
+<pre><code>00 01 │ 01 00 02 │ 00 06      count 1 │ tag 1, size 2 │ payload
+00 01 │ 01 00 01 │ 01         count 1 │ tag 1, size 1 │ payload
+</code></pre>
+<p><strong>A decoder does not need to know what the payload means.</strong> <code>size_of_extension</code>
+is on the wire in front of it, so an unknown extension type is skippable — which
+is why this is the one CHOICE in the type system that blocks nothing despite
+having no complete tag map (§10.9). <strong>89 structures carry a <code>Point_extension2</code></strong>,
+so getting this wrong desynchronises a large part of the catalog. [S][W]</p>
 <h4 id="1043-do-not-read-the-supervisors-point-object-as-the-wire-model">10.4.3 Do not read the supervisor's point object as the wire model</h4>
 <p>The supervisor keeps its own logical-point class, and it is much larger than
 <code>Point_base</code> — on the order of 200 accessors against the twelve fields above.
