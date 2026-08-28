@@ -12859,12 +12859,22 @@ if (tag == 0) {                    //  &lt;-- tag 0 IS the real_addr arm
 }
 </code></pre>
 <p>So for this CHOICE family <strong>tag <code>0</code> selects the arm that <em>has</em> an address</strong>, and
-the empty <code>virtual_addr</code> arm is <code>1</code> — the inverse of the ordinary convention.
-That was inferred here from arm order and wire widths; it is now read off the
-code. It is also the reason §11.5.1's <code>scale_</code> tag assignment stays <strong>[OPEN]</strong>:
-<code>scale_</code> pairs the same virtual/physical concepts in the <em>opposite</em> declaration
-order, and this section proves the declaration order is not the thing to trust.
-[F]</p>
+the empty <code>virtual_addr</code> arm is <code>1</code>. That was inferred here from arm order and
+wire widths; it is now read off the code, on both sides — the panel's encoder
+above, and the supervisor's decoder, which compares against <code>1</code> and takes
+<code>virtual_addr</code>. [F][C]</p>
+<p><strong>And it is declaration order after all</strong>, which is worth saying because an
+earlier edition of this section drew the opposite conclusion. <code>Physical_address_*</code>
+declares <code>real_addr</code> first, so tag <code>0</code> being the address arm <em>is</em> the ordinal
+reading; what makes it look inverted is only that most other optional-presence
+CHOICEs declare the empty arm first. §11.5.1's <code>scale_</code> does exactly that — it
+declares <code>virtual_pt</code> first — and its tags follow <strong>its</strong> declaration order in
+turn: tag <code>0</code> empty, tag <code>1</code> the 20-byte scaling arm (§11.5.1, now settled from
+the same source). Two CHOICEs covering the same virtual/physical distinction
+number their tags oppositely because they <em>declare</em> them oppositely, not because
+either departs from a convention. What an implementer must not do is carry a tag
+assignment from one CHOICE to another that "means the same thing" — read each
+one's own arm order, or its entry in §10.4.3. [C][S]</p>
 <p>The distinction the flattening destroyed is also semantic and worth keeping: the
 digital-output boolean is <code>inverted</code> and the digital-input one is
 <code>normally_closed</code>. Same width, same position, different meaning — a decoder that
