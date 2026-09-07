@@ -642,7 +642,7 @@
 <li><a href="#41-ethernetip-transport-the-canonical-p2-transport">4.1 Ethernet/IP transport (the canonical P2 transport)</a></li>
 <li><a href="#42-aem-serial-to-tcp-tunnel-a-second-observable-p2-bearing-tcp-port">4.2 AEM serial-to-TCP tunnel (a second observable P2-bearing TCP port)</a></li>
 <li><a href="#43-serial-bln-datalink-dedicated-rs-485-trunk">4.3 Serial BLN datalink (dedicated RS-485 trunk)</a></li>
-<li><a href="#44-fln--p1-field-bus-rs-485-two-wire">4.4 FLN / P1 field bus (RS-485 two-wire)</a></li>
+<li><a href="#44-fln--p1-fieldbus-rs-485-two-wire">4.4 FLN / P1 fieldbus (RS-485 two-wire)</a></li>
 <li><a href="#45-open-items--serial-and-field-bus-framing">4.5 Open items — serial and field-bus framing</a></li>
 <li><a href="#46-the-serial-trunk-is-token-passing-and-its-parameters-are-named">4.6 The serial trunk is token-passing, and its parameters are named</a></li>
 <li><a href="#50-documented-timer-defaults-and-how-they-scale">5.0 Documented timer defaults, and how they scale</a></li>
@@ -958,6 +958,51 @@ dissector at his own site and saw a seventh value on his first frame.</p>
 </ul>
 <p>Both levels MUST NOT depend on a multicast discovery beacon — none exists (§5.2) — and MUST treat the BLN-name slot as the only admission gate (§3.4, §6.4).</p>
 <hr>
+<h3 id="17-what-this-document-does-not-give-you">1.7 What this document does not give you</h3>
+<p>§10.9 reports every catalogued operation as decodable and §10.1 accounts for
+99.4% of the corpus. Both are true, and neither means the document is complete.
+The edges are collected here so a reader meets them before building rather than
+after, grouped by <strong>what would close them</strong> — the only grouping that is
+actionable.</p>
+<p><strong>Needs a second site.</strong> This corpus is one BLN (§1.4.1.1), and anything
+constant across it cannot be told from a protocol constant by it.</p>
+<ul>
+<li>Whether slots 0 and 2 differ on a <strong>cross-BLN frame</strong>. The <code>(trunk, node)</code>
+  pair reading is what two vendor binaries model (§6.4, §3.2.4) and no frame
+  here can test it.</li>
+<li>How a <strong>cross-trunk point is named</strong> in PPCL. §3.5 has the behaviour; the
+  reference syntax is unrecorded and the form Pass F expected does not occur
+  (§14.2).</li>
+<li>What the <strong><code>.BN</code></strong> name suffix marks — one stem, no counterpart (§11.6).</li>
+<li>Whether <code>msg_type</code> values outside this site's six behave identically. They
+  should, the field being a length, but that is inference (§6.2).</li>
+</ul>
+<p><strong>Needs a lab panel you can provoke.</strong> Read-only capture cannot reach these.</p>
+<ul>
+<li>The <strong>rule</strong> by which a panel accepts or drops a frame whose <code>msg_type</code> is
+  wrong. It is checked but is not a plain equality test (Appendix D item 8).</li>
+<li>The <strong>asserted values</strong> of the alarm/flag bytes in a COV push — this site's
+  alarms were quiet throughout (§12.3.3).</li>
+<li>The <strong>ten <code>All_points</code> arms</strong> this site does not run (§8.5). A decoder built
+  to this document will meet them at a site that does.</li>
+<li><strong>Sub-opcode</strong> semantics, and the <strong>heartbeat-miss count</strong> that declares a
+  peer failed (Appendix D items 5, 2).</li>
+</ul>
+<p><strong>Out of scope by design, and stated so you do not go looking.</strong> The <strong>FLN/P1
+fieldbus frame bytes</strong>, the <strong>serial-AEM encapsulation</strong>, and the <strong>BACnet
+stack</strong> itself. §11.7 documents where P2 and BACnet objects meet, because those
+are P2 operations a client will see; it does not document BACnet.</p>
+<p><strong>Nobody has it.</strong> The supervisor's P2/IP <strong>frame builder</strong> is not present in any
+binary examined, and the ASDU catalog contains no transport-header structure. The
+<code>msg_type</code> rule of §6.2 therefore rests on wire evidence alone — 620,532 frames
+of 621,268 — with no <code>[S]</code>, <code>[C]</code> or <code>[F]</code> corroboration available to add.</p>
+<p><strong>What you <em>can</em> rely on.</strong> Everything tagged <code>[S]</code> comes from the vendor's own
+type system and does not depend on this corpus at all: field order, field types,
+1,077 pinned widths, 71 of 73 complete CHOICE tag maps, and the operation
+catalog. Where a claim is <code>[W]</code> <strong>and</strong> the alternatives are shown to fail — "60
+of 60 bodies consume at width 2, 0 of 60 at width 1" — a second site cannot
+overturn it either. The claims to treat carefully are the <code>[W]</code> ones asserting
+that a value is <em>stable</em>; §1.4.1.1 says why.</p>
 <h2 id="2-architecture--layering">2. Architecture &amp; Layering</h2>
 <h3 id="21-the-layered-stack">2.1 The layered stack</h3>
 <p>A P2/IP node is best understood as a small stack of layers. From bottom to top:</p>
@@ -1769,7 +1814,7 @@ every other node on its BLN to hold an open session simultaneously</strong>, so 
 listener that accepts only one or two peers is not conformant.</p>
 <p>These figures derive from vendor topology documentation; treat them as the <em>documented</em> ceiling, not a guarantee that a given firmware enforces each one identically. Where a finding or operation depends on a limit (e.g. the cross-BLN COV cap), the dependency is called out at the relevant section. [D][I]</p>
 <h2 id="4-physical--datalink-layer">4. Physical &amp; Datalink Layer</h2>
-<p>P2 (Protocol II) is a logical application protocol that has been carried over several physical media across its lineage. The dominant modern transport is Ethernet/IP (the <strong>Ethernet BLN</strong>, or EBLN); the original and still-supported transport is a serial RS-485 multidrop trunk (the <strong>dedicated serial BLN</strong>). Below P2's BLN tier sits the field bus, <strong>P1 (Protocol I)</strong> over RS-485, addressed by route-through from the BLN. This section defines what is known about each medium at the physical and datalink layers. The byte-level frame grammar (length prefix, routing slots, opcode, ASDU body) is medium-independent and is specified in the framing section (see §6); on the serial media that same logical frame is carried inside a medium-specific link framing whose exact bytes are not established here.</p>
+<p>P2 (Protocol II) is a logical application protocol that has been carried over several physical media across its lineage. The dominant modern transport is Ethernet/IP (the <strong>Ethernet BLN</strong>, or EBLN); the original and still-supported transport is a serial RS-485 multidrop trunk (the <strong>dedicated serial BLN</strong>). Below P2's BLN tier sits the fieldbus, <strong>P1 (Protocol I)</strong> over RS-485, addressed by route-through from the BLN. This section defines what is known about each medium at the physical and datalink layers. The byte-level frame grammar (length prefix, routing slots, opcode, ASDU body) is medium-independent and is specified in the framing section (see §6); on the serial media that same logical frame is carried inside a medium-specific link framing whose exact bytes are not established here.</p>
 <h3 id="41-ethernetip-transport-the-canonical-p2-transport">4.1 Ethernet/IP transport (the canonical P2 transport)</h3>
 <p>Native P2 over IP runs on <strong>TCP</strong>. Every BLN member — the supervisor and every field panel — listens for inbound P2 connections on a single configurable unicast <strong>Transport Server Port</strong>, default <strong>TCP/5033</strong> [W][D]. The BLN is therefore a full mesh at the transport layer: any node may open a TCP connection to any other node's listener (see §7). The port is observed carrying P2 in the capture corpus on 5033 and (at sites with a second supervisor listener) 5034 [W].</p>
 <table>
@@ -1964,7 +2009,7 @@ listener that accepts only one or two peers is not conformant.</p>
 </tbody>
 </table>
 <p>Observed operator-terminal (MMI/HyperTerminal) capture of a legacy panel shows the LAN bus speed reported as <code>4800 baud</code> for LAN #1–#3 on that panel, confirming the serial-BLN baud is a per-panel configurable parameter at the operator layer [W][D]. The firmware-tiered default (19200 legacy / 38400 modern) is the documented network-wide rule; individual panels may be configured otherwise.</p>
-<h3 id="44-fln--p1-field-bus-rs-485-two-wire">4.4 FLN / P1 field bus (RS-485 two-wire)</h3>
+<h3 id="44-fln--p1-fieldbus-rs-485-two-wire">4.4 FLN / P1 fieldbus (RS-485 two-wire)</h3>
 <p>Beneath each panel sits the Field Level Network (FLN), running <strong>P1 (Powers Protocol I)</strong> over a two-wire differential RS-485 trunk. FLN device points live in a separate namespace from BLN points and are reached by route-through from the hosting panel (§5.5); the panel is the gateway/master polling its FLN devices.</p>
 <table>
 <thead>
@@ -2013,7 +2058,7 @@ listener that accepts only one or two peers is not conformant.</p>
 </tbody>
 </table>
 <p>On a modular panel the RS-485 FLN trunks are provided either by built-in ports or by an add-on <strong>RS-485 FLN expansion module</strong> — Siemens' <code>PXX-485.3</code> carries "three RS-485 P1 FLN connections OR one MS/TP FLN connection" per the public <em>PXC Modular Series</em> datasheet. This module sits on the panel's downstream (field) bus and is wholly separate from the upstream ALN/supervisor link that carries P2 — it has no bearing on the P2 wire framing (§6.2). [D]</p>
-<p>A panel may alternatively host a BACnet MS/TP field bus in place of P1 (<code>Fln_type_enum</code>: <code>P1</code> = 0, <code>MSTP</code> = 1) [S]. Which one is available tracks the panel's <strong>firmware track</strong>, not the hardware: proprietary-P2/APOGEE firmware (the subject of this spec) drives a <strong>P1 FLN only</strong>, while the separate BACnet firmware build of the same hardware adds the MS/TP option. MS/TP is a different protocol stack and is out of scope for this P2 specification; only the P1/FLN bus is treated here. [D]</p>
+<p>A panel may alternatively host a BACnet MS/TP fieldbus in place of P1 (<code>Fln_type_enum</code>: <code>P1</code> = 0, <code>MSTP</code> = 1) [S]. Which one is available tracks the panel's <strong>firmware track</strong>, not the hardware: proprietary-P2/APOGEE firmware (the subject of this spec) drives a <strong>P1 FLN only</strong>, while the separate BACnet firmware build of the same hardware adds the MS/TP option. MS/TP is a different protocol stack and is out of scope for this P2 specification; only the P1/FLN bus is treated here. [D]</p>
 <h3 id="45-open-items--serial-and-field-bus-framing">4.5 Open items — serial and field-bus framing</h3>
 <blockquote>
 <p><strong>[OPEN, PARTLY ANSWERED] Serial-BLN P2 link framing bytes.</strong> Only the line parameters (8/N/1, baud tiers, trunk numbering) were established for the dedicated serial BLN. <strong>The message layer above the framing is now recovered from controller firmware — see §6.8</strong> — giving the address byte and its position, a compact operation encoding, a 253-byte cap, and the forwarding rule for a message addressed elsewhere. <strong>The message layer is now attested from the supervisor end as well</strong> — a supervisor-side codec builds the same encoding, agreeing with the panel on the group/ordinal pair and adding the ordinal's byte order (§6.8). [C] What is still unobserved is the <strong>link</strong> layer beneath it: start/sync delimiting, CRC/checksum, and the medium's segmentation, all of which a lower layer has already stripped before the code in §6.8 sees the message. The supervisor's link-layer component was examined for them and does not carry them: it is a transport — ports, partners, sequence numbers, a socket path and a modem path — and it hands the codec's output down without prefixing a P2 header, so the three bytes preceding the group byte are added below it or supplied by the medium. [C] An AEM Channel-1 capture (TCP/3001) remains the way to see them, since the AEM tunnels the serial stream verbatim.</p>
@@ -4583,7 +4628,7 @@ client must size its expectations accordingly: [W]</p>
 </tbody>
 </table>
 <p>The <code>LOCAL</code> / <code>REMOTE</code> distinction in the <code>0x422x</code> names is exactly this: local
-reads the panel's copy, remote crosses the field bus. The remote form's p99 is
+reads the panel's copy, remote crosses the fieldbus. The remote form's p99 is
 3.7 s, which sits well inside the 30-second <code>ClientTrnxTimeout</code> of §4.6 — so a
 client should not treat a multi-second reply to an FLN-crossing opcode as a
 fault, and should not apply one timeout to every opcode.</p>
@@ -19157,7 +19202,7 @@ capture on the path reads point values, point names, node names, firmware
 strings, control-program text, and routing tables directly. [W] Anyone who can
 send TCP to a node's P2 port can speak the protocol.</p>
 <p>The protocol's framing predates IP and carries the trust model of an isolated,
-physically-secured field bus forward onto Ethernet unchanged. Treat a P2 segment
+physically-secured fieldbus forward onto Ethernet unchanged. Treat a P2 segment
 exactly as you would treat an unswitched serial trunk in a locked mechanical
 room: every device on it is implicitly trusted, and the only real boundary is the
 wire itself.</p>
@@ -19436,7 +19481,7 @@ their own hardware. [I]</p>
 <p><strong>For owners:</strong></p>
 <ol start="6">
 <li><strong>P2 is not safe to expose to any untrusted network.</strong> It carries the trust
-   model of an isolated field bus. Do not route it to the Internet, to tenant
+   model of an isolated fieldbus. Do not route it to the Internet, to tenant
    VLANs, to guest Wi-Fi, or to any segment an attacker might reach.</li>
 <li><strong>Segment P2 networks.</strong> Place panels and supervisors on a dedicated,
    firewalled automation VLAN. Permit TCP/5033 (and 5034 where used) only between
