@@ -5251,6 +5251,16 @@ range-and-resume idiom, and <code>|</code> is the port separator of §3.3. A nam
 either would be ambiguous with a wildcard or with an address. The remaining five
 are presumably further pattern syntax; nothing in this corpus exercises them, so
 that is inference, not observation. [D][W][I]</p>
+<p><strong>A third separator, excluded by a different mechanism.</strong> The colon is not on
+the vendor's blocklist above, and it is not a name character either: it never
+appears inside any of 368 distinct wire <code>name</code>/<code>suffix</code> values, and it appears
+135 times <em>between</em> them in PPCL source text, where <code>"&lt;name&gt;:&lt;suffix&gt;"</code> is the
+textual form of the wire's two TLVs (§14.2). It is excluded by the <strong>other</strong>
+mechanism — the vendor permits six delimiters inside a point name (period,
+apostrophe, comma, dash, underscore, space) and the colon is not one of them.
+Two rules therefore govern what a name may contain: an explicit blocklist of
+metacharacters, and an allowlist of delimiters. A character can be barred by
+either, and the colon is barred by the second. [D][W]</p>
 <p><strong>Two consequences for an implementer.</strong> A name you send is not free text —
 strip or reject the seven before putting a caller-supplied string in a name
 slot or a name TLV. And a name you <em>receive</em> consisting of exactly <code>*</code> is a
@@ -17071,6 +17081,52 @@ they are not interchangeable and the bitmap has no meaning on an EBLN. [S]</p>
 <li><strong>Legacy 6-character system-name reference limit.</strong> On old firmware revisions a PPCL statement could reference a system point only by a name of up to 6 characters; longer names were truncated for the reference. This is a <em>firmware-keyed</em> limit and is separate from — and stricter than — the BLN/node name limits. [D]</li>
 <li><strong>15-character node-name limit / 30-character object-name limit.</strong> Current firmware references points by the full logical name (§3.4.2). The 6-character limit is a property of the legacy reference encoder, not of the point name itself. [D]</li>
 </ul>
+<p><strong>A qualified reference joins name and suffix with a colon.</strong> Where a statement
+names a point that has a suffix, the operand appears in PPCL source text as a
+<strong>quoted, colon-joined pair</strong> — <code>"&lt;name&gt;:&lt;suffix&gt;"</code> — which is the textual form
+of what the wire carries as <em>two separate TLVs</em> (§8.5). Measured over the PPCL
+program text in the corpus: [W]</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th style="text-align: right;"></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>quoted operands in <code>line_text</code></td>
+<td style="text-align: right;">17 distinct, 158 occurrences</td>
+</tr>
+<tr>
+<td>…containing exactly one colon</td>
+<td style="text-align: right;"><strong>15 distinct, 135 occurrences</strong></td>
+</tr>
+<tr>
+<td>distinct left halves that are a <strong>known wire point name</strong></td>
+<td style="text-align: right;"><strong>10 of 10</strong></td>
+</tr>
+<tr>
+<td>distinct right halves that are a <strong>known wire suffix</strong></td>
+<td style="text-align: right;">3 of 4</td>
+</tr>
+<tr>
+<td>wire <code>name</code>/<code>suffix</code> values containing a colon</td>
+<td style="text-align: right;"><strong>0 of 368</strong></td>
+</tr>
+</tbody>
+</table>
+<p>The colon is therefore a <strong>separator and never a name character</strong>. A reader
+converting between the two representations splits on it; a reader building a
+name must not emit one. Only 3 of the 15 whole operands correspond to a
+<code>(name, suffix)</code> pair this capture also carried on the wire, which is expected —
+a program references points whose values this window never happened to report,
+and says nothing against the syntax.</p>
+<p><strong>What is <em>not</em> here.</strong> The <code>BAC_&lt;device&gt;_&lt;TYPE&gt;_&lt;instance&gt;</code> crosstrunk
+reference form does not occur anywhere in this corpus — no PPCL line mentions
+<code>BAC</code> at all. Cross-trunk <em>behaviour</em> is documented at §3.5; the reference
+<strong>syntax</strong> for a cross-trunk point is not established from this evidence.
+<strong>[OPEN]</strong> [W]</p>
 <p><code>DEFINE</code> (token <code>WHOPDEFINE</code>, §14.3) creates a <strong>macro</strong> — a symbolic alias substituted into later statements at compile time, used to give a readable handle to a point name or a constant. [S]</p>
 <p><strong>System (resident) points.</strong> A program has read access to panel-resident points that always exist and supply time, date, and system status. They are referenced by name like any other point: [S]</p>
 <table>
