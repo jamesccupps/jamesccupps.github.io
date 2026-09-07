@@ -946,7 +946,7 @@ dissector at his own site and saw a seventh value on his first frame.</p>
 <p><strong>Out of scope:</strong> the BACnet protocol stack (BACnet/IP and BACnet MSTP) that coexists on later panels; the serial-era physical layer except as lineage context (§1.5); and any management-station-internal supervisor-to-station RPC that does not appear on the panel wire. [I]</p>
 <h3 id="15-lineage-informative">1.5 Lineage (informative)</h3>
 <p>This subsection is informative; nothing in it is required for interoperation. It orients an implementer to why the protocol is shaped as it is.</p>
-<p><strong>Powers → Landis &amp; Gyr → Siemens.</strong> P2's data model and much of its vocabulary descend from the <strong>Powers System 600</strong> of the 1980s and its <strong>Protocol II</strong> — the peer ("token-passing") network discipline of that era — as distinct from <strong>Protocol I</strong>, the master/slave polling discipline that survives conceptually as the FLN sub-bus beneath a panel. [D/I] The product line passed through <strong>Landis &amp; Gyr</strong> (and a parallel <strong>Staefa Control System</strong> branch) before consolidating under Siemens' APOGEE, which is why conventions from several BAS lineages coexist in the modern system. [D/I]</p>
+<p><strong>Powers → Landis &amp; Gyr → Siemens.</strong> The vendor's shipping code still says so: <code>Bn_adapt.dll</code> names its P2↔BACnet mapping table <strong><code>S600toBACnetXrefTable</code></strong> — <em>System 600</em> — so "S600" is the internal name for the P2 side in a modern BACnet adapter, not merely a historical label. [S] P2's data model and much of its vocabulary descend from the <strong>Powers System 600</strong> of the 1980s and its <strong>Protocol II</strong> — the peer ("token-passing") network discipline of that era — as distinct from <strong>Protocol I</strong>, the master/slave polling discipline that survives conceptually as the FLN sub-bus beneath a panel. [D/I] The product line passed through <strong>Landis &amp; Gyr</strong> (and a parallel <strong>Staefa Control System</strong> branch) before consolidating under Siemens' APOGEE, which is why conventions from several BAS lineages coexist in the modern system. [D/I]</p>
 <p><strong>PPCL.</strong> The control language a panel executes is <strong>Powers Process Control Language</strong>, carrying the Powers name forward into the modern product. PPCL is specified, to the extent needed to read and write programs over the wire, in §14. [D]</p>
 <p><strong>The model is stable; the encoding and transport evolved.</strong> The point taxonomy, the linear analog calibration (<code>engineering value = digitized value × slope + intercept</code>), the command-priority ladder, the point-condition/COV mask, and the peer network model are all carried forward essentially unchanged from the Powers/Protocol-II era. [S][D] What changed is the wire. The original serial-era constructs — the RS-485 multidrop trunk, the circulating media-access token, packed numeric point addressing, RAD-50 name packing, and a serial-link CRC — are <strong>not</strong> part of P2 over TCP: the modern transport is TCP, integrity and ordering are provided by TCP itself, there is no token because there is no shared bus to arbitrate, and routing is by NUL-terminated ASCII name rather than by packed numeric address. [W][I] The peer-equality concept of Protocol II survives (panels originate their own connections, pushes, and routing advertisements) while the serial mechanism that once implemented it does not. An implementer building for TCP MUST NOT implement RS-485 token arbitration, the serial CRC, or numeric wire addressing; these survive only inside a panel's internal database and CLI reports (§5.5). [I]</p>
 <p><strong>A note on string encoding across the lineage.</strong> Name/string encoding is a per-firmware-revision, per-platform property, not a per-frame one. Early (pre-IP) field-controller and supervisor revisions pack names in <strong>RAD-50</strong> — three characters per 16-bit word, over the 40-symbol alphabet <code>" ABCDEFGHIJKLMNOPQRSTUVWXYZ$.?0123456789"</code> (index 0 = space, 1–26 = A–Z, 27 = <code>$</code>, 28 = <code>.</code>, 29 = <code>?</code>, 30–39 = <code>0</code>–<code>9</code>), packed as <code>((c0×40)+c1)×40+c2</code>. [S] All P2/IP revisions use plain ASCII in the length-prefixed TLVs and NUL-terminated routing slots of §6 and §8. Whether a given platform uses RAD-50 or ASCII is keyed by firmware/platform class (a per-platform <code>STRING_TYPE</code> of RAD50 vs ASCII). [S][D] A peer presenting RAD-50-packed names is a pre-IP revision and is out of scope for a TCP/5033 implementation, which is ASCII throughout. [I]</p>
@@ -1232,6 +1232,51 @@ must never be used to infer a frame's meaning (§2.1.2). [I]</p>
 <h4 id="324-bacnet-bln-bbln--separate-stack-noted-only">3.2.4 BACnet BLN (BBLN) — separate stack, noted only</h4>
 <p>Later product generations support a <strong>BACnet BLN (BBLN)</strong>: panels that are BACnet-native (or dual P2+BACnet, e.g. DXR-class controllers) and present themselves over BACnet/IP (UDP/47808, I-Am/Who-Is) rather than over P2. The discovery engine has distinct <code>HandleAddEBlnRequest</code> (P2) vs <code>HandleAddBBlnRequest</code> (BACnet, via <code>IAm</code>) paths. [S][D]</p>
 <p>A BBLN is <strong>out of scope for this document</strong>: it is a different protocol stack with a different addressing model, different framing, and a different security surface. The only cross-tier fact a P2 implementer needs is the negative one in §3.5: <strong>there is no BACnet→P2 routing path</strong>. A point on a BBLN is not reachable through a P2 frame and vice versa. [D][I]</p>
+<h5 id="what-the-bacnet-adapter-reveals-about-p2">What the BACnet adapter reveals about P2</h5>
+<p><code>Bn_adapt.dll</code> is the supervisor component that makes a BACnet network look like
+a P2 trunk. To build a P2 command it must state the P2 model, and its exported
+C++ symbols do — readable from the export table and RTTI descriptors in the
+shipped binary, with no decompilation. Four of them are worth recording because
+each corroborates something this document establishes from a different
+direction: [S]</p>
+<table>
+<thead>
+<tr>
+<th>symbol</th>
+<th>what it says</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>AP2Cmd::Create(char const*, STACK_TYPE, unsigned short, …)</code></td>
+<td>a P2 command is built from a <strong>trunk name</strong>, a stack selector and a <strong>u16 function code</strong> — the opcode width of §9.1 and the name-addressed trunk of §6.4</td>
+</tr>
+<tr>
+<td><code>AP2Cmd::SetTrunkName(const char*)</code> / <code>GetTrunkName(char*)</code></td>
+<td>the trunk is addressed by a <strong>name string</strong>, not a number</td>
+</tr>
+<tr>
+<td><code>AP2Cmd::BLN2CPI(STACK_TYPE, unsigned char const*, …)</code></td>
+<td>an explicit <strong>BLN → CPI</strong> conversion — the "Common Protocol Interface" tier above the wire opcode (§9.1.1) is a real layer in the vendor's code, not a reading of the enum</td>
+</tr>
+<tr>
+<td><code>S600toBACnetXrefTable::TrunkAndNode</code></td>
+<td>a P2 address modelled as a <strong>(trunk, node) pair</strong> (§6.4)</td>
+</tr>
+<tr>
+<td><code>BNBacNetAddTrunkRequestXlator</code>, <code>…RemoveTrunkRequestXlator</code></td>
+<td>BACnet networks are added and removed <strong>as trunks</strong> — the adapter's whole premise</td>
+</tr>
+</tbody>
+</table>
+<p>The translator family is large — roughly forty <code>*Xlator</code> classes, one per BACnet
+service — and the direction of travel is BACnet-service-in, P2-command-out. That
+is the shape to expect: <strong>the supervisor speaks P2 natively and adapts BACnet to
+it</strong>, not the other way round.</p>
+<p>Two cautions. This is the <em>supervisor's</em> model of P2, not a panel's, and §10.4.3
+records what happens when the supervisor's object model is mistaken for the wire
+model. And nothing here is cited in place of wire evidence — it is corroboration
+for claims that stand on their own bytes.</p>
 <h4 id="325-the-logical-bln-is-self-organizing">3.2.5 The logical BLN is self-organizing</h4>
 <p>Regardless of medium, a BLN is a <em>logical</em> peer group, not just a wire. Membership is gated by the <strong>BLN System Name</strong> (see §3.4.1): two nodes exchange traffic only if their BLN names match exactly. Within a matched-name group the BLN self-organizes — each node maintains a <strong>node-name table</strong> (the roster of known peers) that auto-replicates BLN-wide, so every node converges on the same membership view. Peers gate communication to nodes the table marks dead. This is why the membership unit is the <em>name</em>, not the cable: an Ethernet panel and a serial-trunk panel that share a BLN name and a route are members of the same logical BLN. [D][S]</p>
 <h3 id="33-the-point-address-3-tuple-lan--drop--address">3.3 The point-address 3-tuple: LAN / Drop / Address</h3>
@@ -3253,8 +3298,21 @@ carry <strong>different</strong> trunk names. The present corpus cannot test it 
 four-slot frames, slots 0 and 2 are identical in <strong>621,263</strong>, and all five exceptions are
 <code>dir == 0x00</code> research probes from one capture, with a deliberately mismatched BLN name, not
 production traffic. Every capture to hand is
-single-BLN, so the pair reading is <strong>untested, not confirmed</strong>. A capture taken where two BLNs
+single-BLN, so the pair reading is <strong>untested on the wire</strong>. A capture taken where two BLNs
 exchange traffic would settle it in one frame. [W] <strong>[OPEN]</strong></p>
+<p><strong>It is, however, what the vendor's own code models.</strong> <code>Bn_adapt.dll</code> — the
+adapter that presents a BACnet network to the supervisor <em>as a P2 trunk</em> — ships
+a class whose RTTI descriptor reads <code>S600toBACnetXrefTable::TrunkAndNode</code>: a P2
+address held as a <strong>(trunk, node) pair</strong>, nested inside the table that maps the
+P2 side to BACnet. Its command object takes the same shape —
+<code>AP2Cmd::Create(char const*, STACK_TYPE, unsigned short, …)</code>, i.e. a <strong>trunk
+name</strong>, a stack selector and the u16 function code — and exposes
+<code>SetTrunkName(const char*)</code> / <code>GetTrunkName(char*)</code>, so the trunk is identified
+by a <em>name string</em>, exactly as slots 0 and 2 carry one. This is a second,
+independent binary agreeing with the routing object of the paragraph above. It
+does not settle what a cross-BLN frame puts in slot 2, which is why the item
+stays open — but the pair model is no longer only an inference from slot
+duplication. [S]</p>
 <p>Two further details from the same object model. Names decompose into a <strong>base plus a suffix</strong> with
 an explicit truncate operation — which is the mechanism behind the length limits of §3.3.2 rather
 than a separate rule — and there are <strong>two distinct name types</strong>, a <em>system</em> name and a <em>user</em> name,
