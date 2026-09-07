@@ -867,6 +867,38 @@
 </tbody>
 </table>
 <p>A field-layout table is tagged <strong>[S]</strong> when its field order and types come from the ASDU structure definitions, and <strong>[W]</strong> when the layout has additionally been confirmed on the wire. A behavioral claim tagged <strong>[D]</strong> must never be presented as a byte-level wire fact; where the byte offsets behind a documented behavior are not pinned, the gap is tagged <strong>[OPEN]</strong>.</p>
+<h4 id="1411-what-w-rests-on-one-deployment">1.4.1.1 What <code>[W]</code> rests on: one deployment</h4>
+<p>Every <code>[W]</code> claim in this document is grounded in a wire corpus of <strong>638,080
+trusted P2 frames from a single site</strong> — one BLN, one supervisor, a handful of
+panels. That is a large corpus and a narrow one, and the narrowness has a
+specific consequence worth stating plainly rather than leaving to the reader:</p>
+<blockquote>
+<p><strong>Anything that is constant across one deployment cannot be distinguished, by
+that deployment, from a constant of the protocol.</strong></p>
+</blockquote>
+<p>No amount of care applied to this corpus fixes that. Frequency is not evidence
+of universality, and a claim that held in 620,000 frames here can still be an
+artefact of one site's configuration.</p>
+<p><strong>The worked example is §6.2, and it is not hypothetical.</strong> Four editions of
+this document described the <code>msg_type</code> field as a six-valued message class in
+legacy/modern "dialect" pairs. It is a header length. The six values were six
+combinations of <em>this site's</em> node-name lengths; the "legacy versus modern
+firmware" split was single-digit versus double-digit panel numbers. Every test
+run against this corpus confirmed the wrong model, because the field really is
+constant per connection here. It was found by a reader who ran the published
+dissector at his own site and saw a seventh value on his first frame.</p>
+<p>Two things follow for anyone using this document.</p>
+<ul>
+<li><strong>Prefer the internally-checkable claims.</strong> A statement backed by the type
+  system <code>[S]</code>, the vendor's codec <code>[C]</code>, panel firmware <code>[F]</code> or an external
+  standard does not depend on this corpus at all. A <code>[W]</code> claim about a value
+  being <em>stable</em> is the weakest kind here, and where one matters to you, check
+  it against your own traffic.</li>
+<li><strong>A capture from another site is the most valuable thing this document can
+  receive.</strong> Not more frames — <em>different</em> names, different firmware, a
+  different BLN. One screenshot from one such site produced the largest
+  correction in this document's history.</li>
+</ul>
 <h4 id="142-byte-integer-and-field-conventions">1.4.2 Byte, integer, and field conventions</h4>
 <ul>
 <li>Hexadecimal byte values are written <code>0xNN</code>. A run of literal bytes is written space-separated, e.g. <code>01 00 04</code>.</li>
