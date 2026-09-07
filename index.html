@@ -879,6 +879,20 @@ that deployment, from a constant of the protocol.</strong></p>
 <p>No amount of care applied to this corpus fixes that. Frequency is not evidence
 of universality, and a claim that held in 620,000 frames here can still be an
 artefact of one site's configuration.</p>
+<p><strong>And the body-level figures are a 1% sample.</strong> Frame-level counts — 621,268
+frames, the direction split, the <code>msg_type</code> distribution — are over the whole
+corpus. <strong>Body-level figures are not.</strong> Bodies are cached for analysis at the
+<strong>first 60 per opcode</strong>, taken in capture order, giving <strong>4,377 bodies out of
+444,547</strong> actually on the wire. So a phrase like "60 of 60 bodies consume
+exactly" means 60 <em>sampled</em> bodies, and for a high-volume opcode those 60 come
+from one moment in one capture: <code>0x0274 COV_ANNUNCIATE</code> alone carries 120,764.</p>
+<p>This does not weaken the structural claims and does weaken the negative ones.
+A width that closes 60 of 60 bodies <strong>and fails at every alternative</strong> is
+evidence about the width, and 60 is plenty. A statement that something <em>never</em>
+occurs is a statement about the sample — and Pass M found three places where
+the corpus disagrees with it (§8.5, §12.3.3). <strong>Read "never observed here" as
+"not in the 60 sampled for that opcode"</strong> unless a section says it walked
+everything.</p>
 <p><strong>The worked example is §6.2, and it is not hypothetical.</strong> Four editions of
 this document described the <code>msg_type</code> field as a six-valued message class in
 legacy/modern "dialect" pairs. It is a header length. The six values were six
@@ -5429,7 +5443,7 @@ a separate and shorter budget at 16 (§10.3). [D][W]</p>
 </tr>
 </tbody>
 </table>
-<p><strong>Six of the sixteen arms are confirmed; the other ten are never exercised here and stay <code>[OPEN]</code></strong> — <code>looap</code>, <code>lpaci</code>, <code>l2sp</code>, <code>looal</code>, <code>lfssl</code>, <code>lfssp</code>, <code>ldao</code>, <code>lfmsl</code>, <code>lfmsp</code>, <code>ppcl_lai</code>. That is the same ceiling §10.9 describes: this site runs six point types, and no amount of further reading of this capture set will produce a seventh. [W][OPEN] For the replication change-record framing the interior offsets remain <strong>[OPEN]</strong>; treat byte-offset claims there as inferred.</p>
+<p><strong>Seven of the sixteen arms are exercised; the other nine stay <code>[OPEN]</code></strong> — <code>looap</code>, <code>l2sp</code>, <code>looal</code>, <code>lfssl</code>, <code>lfssp</code>, <code>ldao</code>, <code>lfmsl</code>, <code>lfmsp</code>, <code>ppcl_lai</code>. An earlier edition said ten and listed <code>lpaci</code> among them; that was true of the 60-body sample and false of the corpus, which carries <strong>two</strong> <code>lpaci</code> bodies (§1.4.1.1). Walking all 444,547 bodies gives the arm counts as <code>lao</code> 13,499, <code>ldo</code> 5,068, <code>lai</code> 3,909, <code>ldi</code> 1,318, <code>lenum</code> 421, <code>l2sl</code> 146, <strong><code>lpaci</code> 2</strong>. [W] That is the same ceiling §10.9 describes: this site runs six point types, and no amount of further reading of this capture set will produce a seventh. [W][OPEN] For the replication change-record framing the interior offsets remain <strong>[OPEN]</strong>; treat byte-offset claims there as inferred.</p>
 <p>For the byte-level grammar of each opcode's request and response ASDU, see §9; for the point-model structures (value blocks, multistate enum tables, FLN-device subpoints, slope/intercept scaling) these primitives compose into, see §11.</p>
 <h2 id="9-function-code-opcode-catalog">9. Function-Code (Opcode) Catalog</h2>
 <p>Every P2 request, panel-originated push, and response is dispatched on a single 2-byte field, the <strong>AP2 function code</strong> (the wire opcode). This section catalogs that field. §10 then gives the body (ASDU) structures that follow each opcode.</p>
@@ -13516,7 +13530,44 @@ agreement is what licenses the fifth. [W][S]</p>
 <p><strong><code>_PA</code> is a correction, and it is now confirmed from the panel.</strong> It was
 carried here as 5 B by analogy with <code>_DI</code> and <code>_DO</code>, and never tested:
 <code>Physical_address_PA</code> is used by exactly one structure, <code>LPACI_type</code>, and <strong>no
-<code>lpaci</code> point occurs anywhere in the corpus</strong> — 0 of 5,807 walked points. It is
+<code>lpaci</code> point occurs in the 60-body sample</strong> — 0 of 5,807 walked points there.
+<strong>Pass M found two in the full corpus</strong> (§1.4.1.1), and they let the wire speak
+for the first time. Both are <code>0x0981</code> responses of 97 bytes, and re-walking each
+at every plausible width for <code>Physical_address_PA</code> gives:</p>
+<table>
+<thead>
+<tr>
+<th>width</th>
+<th>5</th>
+<th>7</th>
+<th>8</th>
+<th><strong>9</strong></th>
+<th>10</th>
+<th>12</th>
+<th>17</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>result</td>
+<td>+7 over</td>
+<td>+5 over</td>
+<td>+1 over</td>
+<td><strong>exact</strong></td>
+<td>+1 over</td>
+<td>exact</td>
+<td>+12 over</td>
+</tr>
+</tbody>
+</table>
+<p>So the wire <strong>rules out 5, 7, 8, 10 and 17</strong> and narrows the field to <code>{9, 12}</code>.
+It does not settle it: 12 also closes both bodies, which is exactly the
+"clean but wrong" hazard §10.1 warns about — a shifted read can land on a later
+length field that happens to absorb the difference. The catalog computes 9
+field-by-field and the panel's own encoder writes those widths in that order, and
+neither supports 12, so 9 stands on those two — now with the wire excluding five
+of the seven candidates rather than saying nothing at all. [W][S][F]</p>
+<p>It is
 9 bytes, because a pulse-accumulator address carries a <code>gain</code> f32 that a digital
 one does not. <strong>The controller's own encoder writes exactly that</strong>, in this
 order and with these widths — <code>u8 lan, u8 drop, u16 point, f32 gain, u8
@@ -16757,7 +16808,8 @@ AP2_COV_Disable_Request =  name_response : Name_response ,  cov_mask : Cov_mask
 </tr>
 </tbody>
 </table>
-<p>Both are tabulated in full in Appendix A. What is still open is narrower than it was: <strong>no point in this corpus was in a true hi/lo-limit alarm, so neither byte has been seen non-zero on the wire.</strong> A single <code>0x0274</code> push from a point sitting in a limit alarm would confirm the mapping; nothing about it is unknown in the meantime. [S][OPEN]</p>
+<p>Both are tabulated in full in Appendix A. What is still open is narrower than it was: <strong>no point in this corpus was in a true hi/lo-limit alarm.</strong> But <strong><code>alarm_state</code> has been seen non-zero</strong>, which an earlier edition denied on the strength of the 60-body sample: walking all <strong>120,763</strong> <code>0x0274</code> pushes finds <code>alarm_state</code> = <strong>1</strong> (<code>alarm</code>) on <strong>9</strong> of them. So the generic alarm state is wire-confirmed; <code>2</code> <code>high_alarm</code>, <code>3</code> <code>low_alarm</code> and <code>4</code> <code>trouble</code> are not, and <code>alarm_priority</code> is <strong>0 on all 120,763</strong> — the runtime priority genuinely never asserts here (§13.2 explains why: a configured band is 1–6, a point not in alarm reports 0).</p>
+<p>The same full walk widens <code>control_status</code> to <strong>six</strong> of its seven values — <code>0</code> ×77,863, <code>1</code> ×32, <code>2</code> ×1,291, <code>3</code> ×99, <code>4</code> ×41,471, <code>6</code> ×7 — where the sample showed five. Only <code>5</code> <code>manual_override</code> is unobserved.** A single <code>0x0274</code> push from a point sitting in a limit alarm would confirm the mapping; nothing about it is unknown in the meantime. [S][OPEN]</p>
 <h3 id="124-command-priority-carried-in-the-cov-payload">12.4 Command priority (carried in the COV payload)</h3>
 <p><code>point_priority</code> is the command-ownership holder — which class of command source last successfully commanded the point. The <code>Point_priority</code> / <code>User_command_priority</code> ladder, lowest to highest acceptance, with the byte value that encodes it on the wire: [S]</p>
 <table>
@@ -22740,7 +22792,11 @@ specific test that would confirm or falsify it.</p>
    only non-zero byte in the normal-state corpus is <code>control_status</code> at +1).
    <em>Missing:</em> the <em>asserted values</em> — exactly what each alarm/flag/priority byte
    reads when a point is actually in alarm / failed / out-of-service / held under
-   command (all captured pushes were normal-state, so those bytes never asserted).
+   command. <em>Partly answered by Pass M:</em> the earlier "all captured pushes were
+   normal-state" was a statement about the 60-body sample. Across all <strong>120,763</strong>
+   <code>0x0274</code> pushes, <code>alarm_state</code> reads <strong>1</strong> (<code>alarm</code>) on <strong>9</strong>, so the generic
+   alarm state is wire-confirmed. <code>high_alarm</code>, <code>low_alarm</code> and <code>trouble</code> are
+   still unobserved, and <code>alarm_priority</code> is zero on every one of the 120,763.
    <em>Test:</em> capture a <code>0x0274</code> push for a point in alarm and one commanded at a
    non-default priority; the bytes that go non-zero confirm the per-field values.
    <em>Narrowed:</em> the <strong>definition</strong> side of the same question is now answered —
