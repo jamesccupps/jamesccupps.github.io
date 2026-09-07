@@ -2189,13 +2189,27 @@ close it off:</p>
 </tr>
 </tbody>
 </table>
-<p>There is no second population in either. <code>EPing</code> runs at its <strong>intrasite</strong>
-default of 10 s on every connection and never at the 60 s intersite value, which
-establishes that every peer here is intrasite — and an all-intrasite site should
-then show replication at 30 s, not 60 s. So the disagreement is real and is not
-a site-topology artifact: this is one timer at twice its documented intrasite
-default, uniformly, on 153 connections. What remains open is only whether
-<code>0x4634</code> is the opcode that timer governs. [W]</p>
+<p>There is no second population in either. <code>EPing</code> runs at 10 s on every
+connection and never at the 60 s intersite value, which points to every peer
+here being intrasite — and an all-intrasite site should then show replication at
+30 s, not 60 s. So the disagreement looks real rather than a site-topology
+artifact: one timer at twice its documented intrasite default, uniformly, on 153
+connections. What remains open is whether <code>0x4634</code> is the opcode that timer
+governs. [W]</p>
+<p><strong>One alternative the argument has to dispose of, and cannot.</strong> The vendor's
+integration help documents the supervisor-side <strong>Eping rate</strong> as configurable
+with a <strong>minimum of 10 seconds</strong> (and a maximum of <code>0xFFFFFFFF</code>). So 10 s is not
+only the intrasite default — it is also the <em>floor</em>, and a site observed at 10 s
+is equally consistent with a supervisor simply configured at the bottom of its
+range. The inference "10 s therefore intrasite" needs the value to be a default
+rather than a limit, and one site at one value cannot tell the two apart. The
+disagreement stands as an observation; the explanation is weaker than the
+earlier wording implied. [D][W]</p>
+<p>The same help page gives the other supervisor-side rates and their floors, which
+are worth having next to it: <strong>COV polling rate</strong> minimum 5 s, <strong>Time sync</strong>
+minimum 60 minutes, <strong>Maximum BLN messages</strong> minimum 50. All four share the same
+<code>0xFFFFFFFF</code> ceiling, which says they are <code>u32</code> seconds/minutes/counts on the
+configuration side. [D]</p>
 <p><strong>Measure per peer connection, not per node.</strong> A node with several peers emits
 one of these per peer, so a per-node aggregate reads far faster than the
 protocol cadence — for <code>EBLN_PING</code> on a node with three or more peers the
@@ -12652,7 +12666,7 @@ distinguishing and does not attempt all 64. [D]</p>
 <td>4</td>
 <td>point_descriptor</td>
 <td>Point_descriptor</td>
-<td>free-text descriptor</td>
+<td>free-text descriptor. The vendor's integration help caps it at <strong>16 characters</strong>, and the wire agrees without being told to: 567 descriptors observed, lengths 0–16, <strong>29 of them exactly 16 and none longer</strong> — a bound the data touches rather than merely respects. [D][W]</td>
 </tr>
 <tr>
 <td>5</td>
