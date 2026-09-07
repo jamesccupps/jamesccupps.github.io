@@ -693,7 +693,7 @@
 <li><a href="#95-the-catalog">9.5 The catalog</a></li>
 <li><a href="#952-opcodes-the-panel-implements-that-the-enum-does-not-name">9.5.2 Opcodes the panel implements that the enum does not name</a></li>
 <li><a href="#96-the-sessionkeepalive-opcode-0x4640-ebln_ping">9.6 The session/keepalive opcode 0x4640 (EBLN_PING)</a></li>
-<li><a href="#97-wire-behavior-message-classes-directions-error-tails">9.7 Wire behavior: message classes, directions, error tails</a></li>
+<li><a href="#97-wire-behavior-header-lengths-directions-error-tails">9.7 Wire behavior: header lengths, directions, error tails</a></li>
 <li><a href="#10-message-body-structures">10. Message Body Structures</a></li>
 <li><a href="#101-encoding-convention">10.1 Encoding convention</a></li>
 <li><a href="#102-shared-sub-types">10.2 Shared sub-types</a></li>
@@ -775,7 +775,7 @@
 <ul>
 <li><strong>Transport.</strong> TCP, default port <strong>5033</strong> — every field panel and the supervisor listens here; some installations add a second supervisor-side listener on 5034. Frame semantics derive from a frame's contents and direction, never from the TCP port that carried it.</li>
 <li><strong>Peer model.</strong> On the backbone (the BLN, also called the ALN) every member — supervisor and panel alike — is an equal node, and any node may originate traffic. "Request" and "response" describe the role of a <em>frame</em>, not of a node.</li>
-<li><strong>Frame.</strong> Big-endian throughout: <code>u32 total_len | u32 message_type (low byte = message class) | u32 sequence | u8 direction | four NUL-terminated ASCII routing slots [BLN, dst-node, BLN, src-node] | (request/push frames only) u16 opcode | body</code>. The opcode is present only on <code>direction == 0x00</code> frames; a response is matched to its request by the echoed sequence number.</li>
+<li><strong>Frame.</strong> Big-endian throughout: <code>u32 total_len | u32 msg_type (a header length, see below) | u32 sequence | u8 direction | four NUL-terminated ASCII routing slots [BLN, dst-node, BLN, src-node] | (request/push frames only) u16 opcode | body</code>. The opcode is present only on <code>direction == 0x00</code> frames; a response is matched to its request by the echoed sequence number.</li>
 <li><strong><code>msg_type</code> is a header length, not a message class.</strong> It is <code>13 + the total bytes of the four routing slots</code> — the offset at which the slot block ends. <strong>Compute it; never choose it.</strong> A panel silently discards a frame whose value does not match its own slots, so a client that hard-codes a constant simply goes unanswered. Earlier editions of this document described six "message classes" in legacy/modern "dialect" pairs; that model is withdrawn in full (§6.2). String encoding (ASCII vs RAD-50) <em>is</em> a real per-firmware-revision property and is read from <code>CABINET_DISPLAY</code> (<code>0x010C</code>); framing is not.</li>
 <li><strong>Operations.</strong> A 2-byte function code (the "AP2 function code") selects the operation; about 630 are defined and <strong>135</strong> are observed on the wire in the reference corpus (§9.5). The high-volume operations are the COV value push (<code>0x0274</code>), the liveness/identity heartbeat (<code>0x4640</code>), point command and read (<code>0x0240</code> / <code>0x0220</code>), COV subscribe/unsubscribe (<code>0x0271</code> / <code>0x0273</code>), and the database upload/replication family.</li>
 <li><strong>Encoding.</strong> Strings are length-prefixed TLVs (<code>01 00 &lt;len&gt; &lt;ascii&gt;</code>); analog values are IEEE-754 single-precision big-endian floats; command priority rides a scope tag. Bodies are ordered, positionally-typed field structures (ASDUs).</li>
@@ -1629,7 +1629,7 @@ must not assume a cross-BLN reference will resolve. [D]</p>
 </tbody>
 </table>
 <p>FLN device classes are enumerated by the vendor <code>FLN_Device_Type</code> set: <code>TEC</code> (terminal equipment controller), <code>TCU</code>, <code>UC</code> (unitary controller), <code>PXM</code>, <code>DPU</code>/<code>MPU</code>, <code>P1BIM</code> (P1 Bus Interface Module), <code>GATEWAY</code>/<code>FLOAT_GATEWAY</code>, <code>GLOBAL_IO</code>, and <code>FSCS</code>. [S]</p>
-<p>An implementer reaches FLN data by establishing a session to the parent panel (§7.3.1) and issuing the FLN browse/enumerate opcodes of the <code>0x09xx</code> upload family (<code>UPL_ALL_TEC</code>, etc.; see §9 and §10). FLN-scoped operations ride a session-carrier message class on the wire (§6). The panel returns the FLN device's point data on behalf of the field controller; there is no direct P2 transport to an FLN device. An FLN point is selected by its drop number on the addressed FLN plus its subpoint index — this is the lowest level of the LAN/Drop/Address tuple (§3.3) and the FLN-device tail of the named-scope hierarchy (§3.4). [W][S][I]</p>
+<p>An implementer reaches FLN data by establishing a session to the parent panel (§7.3.1) and issuing the FLN browse/enumerate opcodes of the <code>0x09xx</code> upload family (<code>UPL_ALL_TEC</code>, etc.; see §9 and §10). FLN-scoped operations reach the panel over an ordinary session (§6). The panel returns the FLN device's point data on behalf of the field controller; there is no direct P2 transport to an FLN device. An FLN point is selected by its drop number on the addressed FLN plus its subpoint index — this is the lowest level of the LAN/Drop/Address tuple (§3.3) and the FLN-device tail of the named-scope hierarchy (§3.4). [W][S][I]</p>
 <h3 id="39-documented-topology-limits">3.9 Documented topology limits</h3>
 <p>The architectural maxima below are deployment limits, not wire-protocol constants; they bound what a conformant deployment may contain and are useful sanity checks for an implementer sizing tables or validating configuration. [D]</p>
 <table>
@@ -2223,7 +2223,7 @@ threshold at a site configured this way. <strong>The supervisor is on its own
 schedule</strong>, however: the panel↔supervisor pair carried 8,403 pings at a median
 of 8.8 s over the same window — about 40% more traffic and a shorter interval
 than any peer pair. Liveness cadence is therefore per-endpoint, and a client
-must derive it by observation per peer rather than assuming one value network-wide. [W] The same <code>0x4640</code> opcode also serves as the session establish / IdentifyBlock exchange and the in-session keepalive (see §6, §7): establishing presence and proving continued liveness are the same operation, which is why this one opcode is so prominent in the traffic. <code>0x4640</code> is observed under every message class seen anywhere — <code>0x29</code>, <code>0x2A</code>, <code>0x2E</code>, <code>0x2F</code>, <code>0x33</code>, <code>0x34</code> — and on both observed ports <code>5033/5034</code>. (<code>0x2A</code> carries it only in panel↔panel sessions, so it appears in panel-side captures and not in the supervisor-side census; see §9.7.) Its body is the <strong><code>eBLN_Node</code> block</strong> (§10.6) and its length is variable. <strong>Do not compute it arithmetically.</strong> An earlier edition of this document gave <code>35 + node-name length</code>, which reproduces every observation in the corpus and is still wrong to publish: the corpus is a single site, and that 35 is <code>3 (name TLV header) + 6 (site_name TLV) + 10 (bln_name TLV) + 16 (fixed tail)</code> — the site's own site-name and BLN-name lengths baked into a constant. At a site whose site or BLN name differs in length the figure differs, and an implementation using it would mis-frame every ping.</p>
+must derive it by observation per peer rather than assuming one value network-wide. [W] The same <code>0x4640</code> opcode also serves as the session establish / IdentifyBlock exchange and the in-session keepalive (see §6, §7): establishing presence and proving continued liveness are the same operation, which is why this one opcode is so prominent in the traffic. <code>0x4640</code> is observed under every <code>msg_type</code> value seen anywhere — <code>0x29</code>, <code>0x2A</code>, <code>0x2E</code>, <code>0x2F</code>, <code>0x33</code>, <code>0x34</code>, i.e. between every pair of peers on this BLN whatever their name lengths (§6.2) — and on both observed ports <code>5033/5034</code>. (<code>0x2A</code> carries it only in panel↔panel sessions, so it appears in panel-side captures and not in the supervisor-side census; see §9.7.) Its body is the <strong><code>eBLN_Node</code> block</strong> (§10.6) and its length is variable. <strong>Do not compute it arithmetically.</strong> An earlier edition of this document gave <code>35 + node-name length</code>, which reproduces every observation in the corpus and is still wrong to publish: the corpus is a single site, and that 35 is <code>3 (name TLV header) + 6 (site_name TLV) + 10 (bln_name TLV) + 16 (fixed tail)</code> — the site's own site-name and BLN-name lengths baked into a constant. At a site whose site or BLN name differs in length the figure differs, and an implementation using it would mis-frame every ping.</p>
 <p><strong>The correct rule.</strong> Parse the three leading TLVs, then take a 16-byte tail. Where a length must be computed rather than parsed — sizing a buffer, or validating a frame before decoding it — the general form is:</p>
 <pre><code>body_length = 25 + len(node_name) + len(site_name) + len(bln_name)
 
@@ -2801,7 +2801,7 @@ followed by an opcode-specific body. [W]</p>
 <td>4</td>
 <td><code>msg_type</code></td>
 <td>u32 BE</td>
-<td>High three bytes <code>0x00 0x00 0x00</code> in <strong>all 621,268 trusted frames, without exception</strong>; low byte is the message-class discriminator (§6.2).</td>
+<td><strong>A header length, not a class</strong>: <code>13 + the total bytes of the four routing slots</code> — the offset at which the slot block ends (§6.2). The name is kept because it is what every existing tool calls the field. Its top three bytes are zero for the unremarkable reason that a routing header is never 16 MB long. <strong>Compute it; a panel discards a frame whose value does not match its own slots, without replying.</strong></td>
 <td>[W]</td>
 </tr>
 <tr>
@@ -2836,7 +2836,7 @@ followed by an opcode-specific body. [W]</p>
 <td>…</td>
 <td><code>slot[2]</code></td>
 <td>ASCIIZ</td>
-<td>BLN name (identical content to slot[0]).</td>
+<td>BLN name. Identical to slot[0] in 638,075 of 638,080 frames here — but this corpus is single-BLN, and §6.4 gives a <code>(trunk, node)</code> pair reading under which slots 0 and 2 would differ on a cross-BLN frame. <strong>[OPEN]</strong></td>
 <td>[W]</td>
 </tr>
 <tr>
@@ -3022,8 +3022,11 @@ it needed a capture that did not already exist: [W]</p>
   two different ways</strong> — with and without the <code>|&lt;port&gt;</code> suffix, 15 characters
   against 10. §5.3.6 already recorded that the supervisor presents its identity
   "in both plain and <code>&lt;name&gt;|&lt;port&gt;</code> form"; nothing connected the two.</li>
-<li>The <strong>BLN name occupies slots 0 and 2</strong> in every frame, which is why the
-  first and third lengths never move at a single site.</li>
+<li><strong>Slots 0 and 2 both carry the BLN name</strong> — on this network, which has one
+  BLN — which is why the first and third lengths never move here. §6.4 gives a
+  reading under which they are the <em>trunk</em> halves of two <code>(trunk, node)</code> pairs
+  and would differ on a cross-BLN frame; that is untested and marked <code>[OPEN]</code>
+  there. Either way the sum is what <code>msg_type</code> reports.</li>
 </ul>
 <h4 id="624-why-it-survived-which-matters-more-than-the-error">6.2.4 Why it survived, which matters more than the error</h4>
 <p>Four things kept it alive, and each is worth recognising elsewhere.</p>
@@ -3120,7 +3123,7 @@ inside a value block (which signals device health). [W][I]</p>
 carry no length prefix — distinct from the length-prefixed TLV form (<code>&lt;textType&gt; &lt;len:u16&gt;</code>) used
 inside bodies; the two MUST NOT be conflated. [W]</p>
 <p><strong>There are always exactly four, and the count is not conditional on anything</strong> —
-direction, message class, opcode or body: <strong>621,268 frames of 621,268</strong> carry
+direction, <code>msg_type</code>, opcode or body: <strong>621,268 frames of 621,268</strong> carry
 four, with no exceptions. A parser may therefore read four NUL-terminated
 strings unconditionally after the header and does not need to probe for a
 terminator count. [W]</p>
@@ -3190,8 +3193,9 @@ slot[3] = source node / self identity (the sender)
 <p>On a response (<code>dir == 0x01</code> or <code>0x05</code>) the destination and source contents swap, so each frame's
 <code>slot[1]</code> always names that frame's destination. A request addressed <code>[BLNNAME, NODE1, BLNNAME,
 P2SCAN]</code> produces a reply addressed <code>[BLNNAME, P2SCAN, BLNNAME, NODE1]</code>. Slots 0 and 2 are stable
-(both the BLN name); slots 1 and 3 reverse. The BLN name appears <strong>twice</strong> in every frame; both
-copies carry the same value, and a conformant node MUST populate both. [W] The vendor framing logs
+(both the BLN name); slots 1 and 3 reverse. The BLN name appears <strong>twice</strong> in every frame; on this
+single-BLN network both copies carry the same value, and a conformant node MUST populate both — but
+see the pair reading below before assuming they are the same field. [W] The vendor framing logs
 the routing as name/channel/trunk/cabinet, with the trunk corresponding to the BLN. [S]</p>
 <p><strong>Why the BLN name appears twice — a better answer, and a way to test it.</strong> The routing object in
 the supervisor's own stack does not model four independent slots. It models <strong>four roles</strong>: a trunk
@@ -3200,9 +3204,9 @@ are not <code>[BLN, dst, BLN, src]</code> but <strong>two <code>(trunk, node)</c
 with the trunk it lives on. The duplication is then not redundancy at all; it is one field per pair,
 and both pairs happen to name the same trunk on a single-BLN network.</p>
 <p>That is a <strong>falsifiable prediction</strong>: on a frame that crosses between two BLNs, slots 0 and 2 should
-carry <strong>different</strong> trunk names. The present corpus cannot test it — across <strong>621,268</strong> trusted
-four-slot frames, slots 0 and 2 are identical in <strong>206,045</strong>, and every one of the five exceptions
-is a deliberately malformed research probe rather than production traffic. Every capture to hand is
+carry <strong>different</strong> trunk names. The present corpus cannot test it — across <strong>638,080</strong> trusted
+four-slot frames, slots 0 and 2 are identical in <strong>638,075</strong>, and all five exceptions are
+<code>dir == 0x00</code> research probes with a deliberately mismatched BLN name, not production traffic. Every capture to hand is
 single-BLN, so the pair reading is <strong>untested, not confirmed</strong>. A capture taken where two BLNs
 exchange traffic would settle it in one frame. [W] <strong>[OPEN]</strong></p>
 <p>Two further details from the same object model. Names decompose into a <strong>base plus a suffix</strong> with
@@ -4285,10 +4289,14 @@ a communicating pair maintains at least <strong>two</strong> long-lived TCP conn
 <li>supervisor → panel:5033 — the supervisor's poll/command channel.</li>
 <li>panel → supervisor:listener — the panel's announcement + COV/value-push channel.</li>
 </ul>
-<p>The message classes a given pair uses are fixed by the <strong>panel's firmware generation</strong>, not by which
-of these two connections a frame rides: a legacy panel uses <code>0x33</code> data + <code>0x2E</code> second-channel in
-both directions, a modern panel uses <code>0x34</code> + <code>0x2F</code> (§6.2/§6.6). The second channel (<code>0x2E</code>/<code>0x2F</code>)
-is where the panel's announce/identity and DB-change/replication records flow toward the supervisor.</p>
+<p><strong>Both connections carry the operational opcode set</strong>, and which one a frame
+rides is a property of who initiated it, not of any field in the header. An
+earlier edition said the <code>msg_type</code> values a pair uses are "fixed by the panel's
+firmware generation" and named a legacy pair and a modern pair; that is
+withdrawn with the rest of the dialect model (§6.2) — <code>msg_type</code> is a header
+length and its value follows the routing slots. The panel→supervisor connection
+is where announce/identity and DB-change/replication records flow, which is a
+statement about <strong>direction and opcode</strong>, and it stands.</p>
 <p>These connections are long-lived; reconnects (panel reboot, link flap, supervisor restart) add further
 connections over the life of a capture. [W]</p>
 <p><strong>How long-lived, measured.</strong> In the 16.7-hour capture, <strong>24 sessions carry
@@ -4473,10 +4481,14 @@ reads the panel's copy, remote crosses the field bus. The remote form's p99 is
 3.7 s, which sits well inside the 30-second <code>ClientTrnxTimeout</code> of §4.6 — so a
 client should not treat a multi-second reply to an FLN-crossing opcode as a
 fault, and should not apply one timeout to every opcode.</p>
-<p><strong>The BLN is a full peer mesh.</strong> Every node holds live P2 sessions with the supervisor <strong>and</strong> with
-every other node on the BLN — panel↔panel sessions run over <code>panel:5033</code> just like the supervisor's
-poll channel (carried by the <code>0x29</code>/<code>0x2A</code> peer-session band, §6.2). This realizes the self-organizing
-logical BLN of §5.3 at the connection layer. Inter-panel traffic is <strong>only visible at a panel's own
+<p><strong>This BLN is a full peer mesh.</strong> Every node observed here holds live P2 sessions with the
+supervisor <strong>and</strong> with every other node on the BLN — panel↔panel sessions run over <code>panel:5033</code>
+just like the supervisor's poll channel. (An earlier edition attributed these to a "peer-session
+band" of <code>msg_type</code> values; <code>msg_type</code> is a header length and identifies nothing, §6.2. The mesh
+is established from TCP SYNs, below, which is the stronger evidence anyway.) This realizes the
+self-organizing logical BLN of §5.3 at the connection layer. Whether a <em>full</em> mesh is required by
+the protocol or is this site's configuration is not something one site can answer — what is
+established is that panel↔panel sessions exist and are ordinary P2 sessions. Inter-panel traffic is <strong>only visible at a panel's own
 switch port</strong>, never from the supervisor's vantage — a capture taken at the supervisor sees
 supervisor↔panel traffic but none of the panel↔panel mesh. [W]</p>
 <p><strong>Connection establishment (observed at SYN level).</strong> A panel-side switch-port mirror captures the
@@ -4494,7 +4506,7 @@ depends on the channel role: on a supervisor→panel poll channel (TCP/5033) to 
 periodic database-change poll (<code>0x0959</code>/<code>DBCHANGE</code> family) at a ~5-second cadence; on a panel→supervisor
 push channel (e.g. TCP/5034) it is typically a COV push/enable (<code>0x0274</code>/<code>0x0271</code>). The constant across
 all fresh streams is the <code>0x4640</code> (<code>EBLN_PING</code>) identity exchange. There is <strong>no dedicated P2 "connect
-handshake" opcode</strong> — the TCP handshake plus the message-class context (§6.2) is the session. [W]</p>
+handshake" opcode</strong> — the TCP connection itself is the session. [W]</p>
 <pre><code>                       supervisor &quot;SUP&quot;  (192.0.2.10)
                        listener: TCP/5034
                           ▲              │
@@ -4849,7 +4861,7 @@ failure. [W] The leading <code>scope_byte</code> <strong>is the command priority
 <p>The same five priority names are exposed in the PPCL control language as the literals <code>@NONE</code>, <code>@PDL</code>, <code>@EMER</code>, <code>@SMOKE</code>, <code>@OPER</code>, and the field-controller priority field is a single byte (<code>GetPriority -&gt; BYTE</code>), confirming <code>scope_byte</code> is exactly the 1-byte command priority. [D]</p>
 <p>Priority semantics an implementer must honor:</p>
 <ul>
-<li>A <strong>write</strong> commands the target at the priority in <code>scope_byte</code>; a <strong>read</strong> uses <code>0x00</code> (<code>none</code>). The read-vs-write body shape for a polymorphic scoped opcode is discriminated by <code>scope_byte</code> (<code>0x23</code> write vs <code>0x00</code> read) <strong>together with</strong> traffic direction — never by TCP port and never by the message class. [W][S]</li>
+<li>A <strong>write</strong> commands the target at the priority in <code>scope_byte</code>; a <strong>read</strong> uses <code>0x00</code> (<code>none</code>). The read-vs-write body shape for a polymorphic scoped opcode is discriminated by <code>scope_byte</code> (<code>0x23</code> write vs <code>0x00</code> read) <strong>together with</strong> traffic direction — never by TCP port and never by <code>msg_type</code>, which carries no information about the body at all (§6.2). [W][S]</li>
 <li><strong>Priority is held until released.</strong> A command placed at a given priority holds the point at that priority. A held priority MUST be explicitly released (commanded back to <code>none</code>) before a lower-authority source — for example a PPCL program commanding at <code>NONE</code> — can reclaim control of the point. A PPCL <code>NONE</code> command does not override a higher held priority. [D][I]</li>
 </ul>
 <h4 id="822-point-priority-overlay-bacnet-16-level-band-s">8.2.2 Point priority overlay (BACnet 16-level band) [S]</h4>
@@ -5212,9 +5224,9 @@ char:   &quot; ABCDEFGHIJKLMNOPQRSTUVWXYZ$.?0123456789&quot;
 <p>The AP2 function code is a 16-bit big-endian value that sits on the wire immediately after the fourth NUL-terminated routing slot, in <code>direction == 0x00</code> frames (requests and panel-originated async pushes). It is the dispatch key the panel exec (CEC) uses to select the operation; the bytes following it are the operation's ASDU body (§10). The opcode is meaningful only in <code>direction == 0x00</code> frames — reading the post-slot bytes off a <code>0x01</code> success or <code>0x05</code> error response yields response-payload bytes, not an opcode, and fabricates phantom values (see §6.4). [W][S]</p>
 <p>The complete command vocabulary of the protocol is defined by the vendor's <code>AP2_Function_Code</code> enumeration: <strong>641 named members across 630 distinct opcode values</strong> (a handful of values carry two names — historical aliases such as <code>AP2_DUMMY_CMD</code>/<code>AP2_REV_STRING</code> at 0x0100, or the <code>CONTROLLER</code>/<code>TEC</code> doublets). The enum's numeric values <strong>are</strong> the wire opcodes: cross-checking every opcode seen on the wire against the enum, all matched exactly. [S]</p>
 <p>Of the 630 defined values, <strong>135 are observed in the capture corpus</strong> (621,268 trusted P2 frames across the 121 captures that carry P2; see §9.5 for the counting criteria and for why an earlier figure of 135 was withdrawn); the remaining 495 are defined-but-unobserved (overwhelmingly configuration, database-management, upload, and BACnet/LON-integration operations that a passive supervisor↔panel capture does not exercise). A further <strong>15 opcode values appear on the wire without an enum definition at all</strong> and therefore have no catalog row; thirteen of them are real panel operations and two are artifacts of a deliberately malformed test frame (§9.5). Counting those, <strong>148 distinct operations</strong> have been observed. Every defined opcode is enumerable from the catalog below; "not observed" means absent from this corpus, not undefined. The corpus combines passive supervisor↔panel and panel↔panel site captures with a smaller set of active read/enumeration test captures; opcode counts are corpus frequencies, not a claim about steady-state operation. [W][S]</p>
-<p>Rows that were seen on the wire are tagged <strong>[W]</strong> and carry their frame count; defined-but-unobserved rows are tagged <strong>[S]</strong> (struct/metadata-derived from the vendor enum — definitional truth). Wire counts in the catalog come from the corpus census; per-opcode response shapes, error tails, and message-class distributions are in §9.7.</p>
+<p>Rows that were seen on the wire are tagged <strong>[W]</strong> and carry their frame count; defined-but-unobserved rows are tagged <strong>[S]</strong> (struct/metadata-derived from the vendor enum — definitional truth). Wire counts in the catalog come from the corpus census; per-opcode response shapes, error tails, and <code>msg_type</code> distributions are in §9.7.</p>
 <blockquote>
-<p><strong>Vantage point bounds every count in this section.</strong> Almost all of the corpus was captured at the supervisor, and a supervisor-side tap structurally cannot see a session between two panels — P2 is unicast TCP, so the switch shows that tap only the conversations the supervisor is in. Taps placed on a panel's own switch port — five of them, on two different panels — each show it holding P2 sessions with <strong>nine peers</strong>, of which the supervisor is one. Read the counts here as frequencies in <em>supervisor-facing</em> P2, and read a zero as "the supervisor does not invoke this," never as "panels do not exchange this." The message-class figures in §9.7 make the difference concrete: class <code>0x2A</code> is absent from the supervisor-side census and plainly present from a panel-side one. [W]</p>
+<p><strong>Vantage point bounds every count in this section.</strong> Almost all of the corpus was captured at the supervisor, and a supervisor-side tap structurally cannot see a session between two panels — P2 is unicast TCP, so the switch shows that tap only the conversations the supervisor is in. Taps placed on a panel's own switch port — five of them, on two different panels — each show it holding P2 sessions with <strong>nine peers</strong>, of which the supervisor is one. Read the counts here as frequencies in <em>supervisor-facing</em> P2, and read a zero as "the supervisor does not invoke this," never as "panels do not exchange this." The <code>msg_type</code> figures in §9.7 make the difference concrete: the value <code>0x2A</code> is absent from the supervisor-side census and plainly present from a panel-side one. [W]</p>
 </blockquote>
 <h3 id="911-the-wire-opcode-is-the-bottom-of-a-three-tier-model">9.1.1 The wire opcode is the bottom of a three-tier model</h3>
 <p>An implementer reading only the wire sees one identifier per request. The stack
@@ -11245,8 +11257,8 @@ neighbours include Telnet control and node eviction (§17.4), the honest positio
 is that an unidentified operation in this band should be assumed capable of
 changing panel state and left alone.</p>
 <h3 id="96-the-sessionkeepalive-opcode-0x4640-ebln_ping">9.6 The session/keepalive opcode 0x4640 (EBLN_PING)</h3>
-<p><code>AP2_EBLN_PING</code> (0x4640) is the most cross-cutting opcode in the corpus: it is the only opcode that appears under every message class seen anywhere — 0x29, 0x2A, 0x2E, 0x2F, 0x33 and 0x34 — and it dominates the peer carriers, though it is not alone under them: panel-side captures show class 0x29 also carrying <code>0x4634</code>, <code>0x4633</code>, <code>0x4636</code> and <code>0x0271</code> (see §9.7) — and it serves three roles. As <strong>session establish</strong> it is the IdentifyBlock handshake carrying the peer's identity slots; as <strong>keepalive</strong> it recurs on a ~10-second cadence (the EPing / Ethernet-Ping liveness heartbeat — a configurable interval whose documented minimum is 10 s, not a protocol constant; see §7.1); and its request/response body is the <code>eBLN_Node</code> block (§10.6). It is also the opcode whose malformed slot-walk produces the <code>0x0C44</code>/<code>0x4443</code> phantoms in §9.5. Its length is variable: three leading TLVs (<code>node_name</code>, <code>site_name</code>, <code>bln_name</code>) followed by a fixed 16-byte tail. The <code>35 + node-name length</code> shorthand of earlier editions is this corpus's single site expressed as a constant — see §7.1. Every <em>supervisor-initiated</em> request in the corpus drew a reply; panel-initiated pings into a supervisor's <code>5033</code> are a different matter (§5.1). [W][S]</p>
-<h3 id="97-wire-behavior-message-classes-directions-error-tails">9.7 Wire behavior: message classes, directions, error tails</h3>
+<p><code>AP2_EBLN_PING</code> (0x4640) is the most cross-cutting opcode in the corpus: it is the only opcode that appears under every <code>msg_type</code> value seen anywhere — 0x29, 0x2A, 0x2E, 0x2F, 0x33 and 0x34, which per §6.2 means between every pair of peers on this BLN — and it dominates the shortest-named pairs, though it is not alone under them: panel-side captures show class 0x29 also carrying <code>0x4634</code>, <code>0x4633</code>, <code>0x4636</code> and <code>0x0271</code> (see §9.7) — and it serves three roles. As <strong>session establish</strong> it is the IdentifyBlock handshake carrying the peer's identity slots; as <strong>keepalive</strong> it recurs on a ~10-second cadence (the EPing / Ethernet-Ping liveness heartbeat — a configurable interval whose documented minimum is 10 s, not a protocol constant; see §7.1); and its request/response body is the <code>eBLN_Node</code> block (§10.6). It is also the opcode whose malformed slot-walk produces the <code>0x0C44</code>/<code>0x4443</code> phantoms in §9.5. Its length is variable: three leading TLVs (<code>node_name</code>, <code>site_name</code>, <code>bln_name</code>) followed by a fixed 16-byte tail. The <code>35 + node-name length</code> shorthand of earlier editions is this corpus's single site expressed as a constant — see §7.1. Every <em>supervisor-initiated</em> request in the corpus drew a reply; panel-initiated pings into a supervisor's <code>5033</code> are a different matter (§5.1). [W][S]</p>
+<h3 id="97-wire-behavior-header-lengths-directions-error-tails">9.7 Wire behavior: header lengths, directions, error tails</h3>
 <p>The corpus distribution grounds the catalog in observed behavior:</p>
 <ul>
 <li><strong><code>msg_type</code> values.</strong> Six distinct values occur in this corpus. They are <strong>not</strong> classes: <code>msg_type</code> is <code>13 + the total bytes of the four routing slots</code> (§6.2), so a value is a <em>sum of node-name lengths</em> and the six reflect this site's naming, not a protocol taxonomy. Another site produces other values. The census is kept because the frame counts are real, with the old role names struck through; any low-byte value outside the set below is parser noise from a desynced stream. Corpus distribution, over <strong>621,268 trusted frames in 121 distinct P2-carrying captures</strong> (content-deduplicated; criteria stated because an earlier edition of this table gave counts that cannot be reproduced from the evidence base, see the note below):</li>
@@ -11570,7 +11582,7 @@ far: [W][S]</p>
 <tr>
 <td><code>Representation</code></td>
 <td style="text-align: right;">1</td>
-<td>inside <code>Analog_format</code>, constant across analog points</td>
+<td>inside <code>Analog_format</code>. The <strong>width</strong> is the claim; the <em>value</em> happens not to vary across this site's analog points, which is configuration, not protocol</td>
 </tr>
 <tr>
 <td><code>Proof_status</code></td>
@@ -12803,7 +12815,10 @@ here, in the one family of responses that carries the extension somewhere else.
 <p>The mapping is corroborated by an authority independent of both the structure
 definition and the enum — the <strong>point descriptors</strong>, free text written by
 whoever commissioned the site. Across all 71 <code>0x0508 ALARM_PRINT</code> request
-bodies: [W]</p>
+bodies. Read the right-hand column as <em>what this site happens to have wired to
+each point type</em>, not as what the type means: the corroboration is that free
+text written by an installer agrees with the tag, which is what makes it
+independent evidence. [W]</p>
 <table>
 <thead>
 <tr>
@@ -13139,7 +13154,7 @@ model consumes <strong>5,795 of 5,807 walked points (99.8%) with zero remainder<
 <tr>
 <td><code>Representation</code></td>
 <td>1</td>
-<td>constant across analog points; <code>Analog_format</code> = repr + <code>decimal_places</code> u8</td>
+<td><code>Analog_format</code> = repr + <code>decimal_places</code> u8. The value does not vary across this site's analog points — configuration, not protocol</td>
 </tr>
 <tr>
 <td><code>cov_limit_</code></td>
@@ -14115,7 +14130,7 @@ firmware: eight on a 2013-era revision (<code>V2.8.10</code>) and one on a 2019-
 part stands. [W]</p>
 <p><strong>What does not stand, and it was published here for three editions.</strong> This
 paragraph used to continue: <em>"That split is exactly the legacy/modern
-message-class split — so a client can read a panel's firmware generation from
+<code>msg_type</code> split — so a client can read a panel's firmware generation from
 <code>0x010C</code> and select the correct dialect before sending any data-class frame."</em>
 The two splits coincide at this site for a reason that has nothing to do with
 firmware: the eight older panels have <strong>five-character</strong> names and the newer one
