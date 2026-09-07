@@ -14987,6 +14987,60 @@ any register built the same way: read a blocked verdict as "do not assume you
 can walk this body generically", not as "this operation is undocumented", and
 where a section of §10 describes an opcode in prose, that description is the
 authority.</p>
+<p><strong>Two enums are bitmasks, and the wire proves it.</strong> §10.1's caution below warns
+that an enum's members can be <strong>bit positions</strong> rather than values, <code>Schedule_days</code>
+being the example. That was read off the declaration. It is now measured, and the
+values are unambiguous: [W]</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">value</th>
+<th>bits</th>
+<th style="text-align: right;">×</th>
+<th>reads as</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;"><code>62</code></td>
+<td><code>0111110</code></td>
+<td style="text-align: right;"><strong>56</strong></td>
+<td><strong>Mon, Tue, Wed, Thu, Fri</strong></td>
+</tr>
+<tr>
+<td style="text-align: right;"><code>127</code></td>
+<td><code>1111111</code></td>
+<td style="text-align: right;">2</td>
+<td>all seven days</td>
+</tr>
+<tr>
+<td style="text-align: right;"><code>16</code></td>
+<td><code>0010000</code></td>
+<td style="text-align: right;">20</td>
+<td>Thursday</td>
+</tr>
+<tr>
+<td style="text-align: right;"><code>8</code></td>
+<td><code>0001000</code></td>
+<td style="text-align: right;">2</td>
+<td>Wednesday</td>
+</tr>
+</tbody>
+</table>
+<p>A weekday mask dominating a building's schedules is not a coincidence, and none
+of the four is a declared member value — the enum declares <code>Sunday</code> = 0 through
+<code>Replacement7</code> = 13, which as <em>values</em> would be meaningless here. <code>Cov_mask</code>
+behaves the same way: only <code>0</code> and <code>65535</code> occur, all-clear and all-set, against
+eight declared members that are plainly bit positions. <strong>Read both as masks over
+the declared positions, never as values.</strong> [W][S]</p>
+<p><strong>Two enums carry <code>255</code> as a sentinel the declaration does not list.</strong>
+<code>Cabinet_report_config</code> declares <code>reports_to_port0</code>…<code>port4</code> and reads <code>255</code> on
+<strong>57 of 60</strong> bodies (with <code>1</code> on the other three); <code>Point_priority</code> declares 27
+members topping out at 116 and reads <code>255</code> once in 2,968. Neither is in range,
+both are <code>0xFF</code>, and the obvious reading — <em>unset / not configured</em> — is
+consistent with <code>Cabinet_report_config</code> being the dominant value on a site that
+routes no cabinet reports. A decoder must not treat an out-of-range enum value
+as corruption. <strong>[OPEN]</strong> on what <code>255</code> is formally called. [W]</p>
 <p><strong>Do not guess a width from an enum's value range.</strong> This is the one shortcut
 that looks safe and is not, and it is recorded here because it very nearly went
 into this document as a rule. Twenty-one enum widths had been measured
@@ -16946,7 +17000,7 @@ band names. Render the number; render a label only if you have that site's
 profile. [D] An earlier revision of this table merged Life Safety and Fire into
 one row, which left five bands against six values and no way to tell which value
 was missing.</p>
-<p>The alarm report carries this priority as a 1-byte value (1–6) and may append a 4-character class label (e.g. <code>URGT</code>, <code>MAIN</code>, <code>TROB</code>). [W] The type system's <code>Alarm_priority_enum</code> has <strong>seven</strong> members, <code>priority_0</code> through <code>priority_6</code>, and the extra one reconciles cleanly: the control language's <code>ALMPRI</code> function — which reads a point's alarm priority from inside a program — is documented as returning <strong>1 through 6</strong>, the same range the report carries. <code>priority_0</code> is therefore the unassigned value, not a seventh severity, and a decoder should render it as "none" rather than inventing a band for it. [D][S] The point's runtime <code>alarm_state</code> (§12.3.1) is one of <code>normal / alarm / high_alarm / low_alarm / trouble</code>. [S]</p>
+<p>The alarm report carries this priority as a 1-byte value (1–6) and may append a 4-character class label (e.g. <code>URGT</code>, <code>MAIN</code>, <code>TROB</code>). [W] The type system's <code>Alarm_priority_enum</code> has <strong>seven</strong> members, <code>priority_0</code> through <code>priority_6</code>, and the extra one reconciles cleanly: the control language's <code>ALMPRI</code> function — which reads a point's alarm priority from inside a program — is documented as returning <strong>1 through 6</strong>, the same range the report carries. <code>priority_0</code> is therefore the unassigned value, not a seventh severity, and a decoder should render it as "none" rather than inventing a band for it. [D][S] <strong>The wire splits exactly that way</strong>, which was a prediction of this paragraph before it was a measurement: the <em>configuration</em> read-back <code>0x0983 UPL_ALL_ALARM_MODE</code> emits <strong>1 through 6 and never 0</strong> (3, 3, 8, 3, 5, 5 occurrences — all six bands in use at this site), while the <em>runtime</em> fields that report a point's current state — <code>0x0274 COV_ANNUNCIATE</code> and <code>0x0295 TREND_DATA_DISPLAY</code> — emit <strong>0 and nothing else</strong>, 1,650 times. A configured band is always 1–6; a point not currently in alarm reports 0. [W] The point's runtime <code>alarm_state</code> (§12.3.1) is one of <code>normal / alarm / high_alarm / low_alarm / trouble</code>. [S]</p>
 <h3 id="133-analog-limits-transitions-and-deadband">13.3 Analog limits, transitions, and deadband</h3>
 <p>An analog or pulse point carries a <strong>high limit</strong> and a <strong>low limit</strong> in engineering units. A value crossing a limit asserts the alarm condition (and, for analog, distinguishes <code>high_alarm</code> vs <code>low_alarm</code>). [S/D] An <strong>alarm deadband</strong> equal to one COV limit (§12.5) is automatically applied at each limit to suppress nuisance re-alarming as the value dithers across the threshold. [D] The point-definition record carries both English and SI limit pairs alongside the dual scaling (<code>english_low_alarm</code> / <code>english_high_alarm</code> / <code>si_low_alarm</code> / <code>si_high_alarm</code>). [S]</p>
 <p>Alarm transitions follow the standard three-transition model — <strong>to-off-normal</strong>, <strong>to-fault</strong>, <strong>to-normal</strong> (the <code>BAC_Transitions</code> set: <code>to_offnormal</code>, <code>to_fault</code>, <code>to_normal</code>) — and a point may be configured to <strong>annunciate</strong> on each transition independently ("Annunciate to Normal / Off-Normal / Fault Transitions"). [S/D] The standard-alarm time delay is the BACnet one: the value must stay outside the high/low band for that long before a to-off-normal event, or back inside it <em>including the deadband</em> before a to-normal. [D]</p>
