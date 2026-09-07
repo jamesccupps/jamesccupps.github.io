@@ -22651,7 +22651,15 @@ specific test that would confirm or falsify it.</p>
    73 alarm-configured points in the corpus, <code>inalarm</code>, <code>introuble</code>,
    <code>inalarm_by_command</code>, <code>program_disabled</code> and <code>proofing</code> are <strong>constant zero</strong> —
    the site's alarms were quiet throughout. Their positions are established; their
-   asserted values are not.</p>
+   asserted values are not.
+   <em>Narrowed again:</em> the <strong>encoding</strong> is no longer part of this question either.
+   <code>Alarm_state</code> (<code>0</code> normal, <code>1</code> alarm, <code>2</code> high_alarm, <code>3</code> low_alarm, <code>4</code>
+   trouble) and <code>Alarm_priority</code> (<code>0</code>–<code>6</code>) are declared by the type system and
+   tabulated in Appendix A, and <code>control_status</code>'s two wire-characterised values
+   agree with their declared names (<code>2</code> <code>by_priority</code> under command, <code>4</code>
+   <code>input_only</code> on an input). What is missing is <em>only</em> an observation of a
+   non-zero value on the wire — a strictly smaller question than the one this
+   item was written to ask (§12.3.3).</p>
 </li>
 <li>
 <p><strong>Heartbeat-miss count for failed-node transition.</strong> <em>Known:</em> there is <strong>no
@@ -22672,10 +22680,21 @@ specific test that would confirm or falsify it.</p>
    FLN-invalid-drop-number, <code>0x0E12</code> FLN-device-failed, <code>0x0E15</code>
    physical-point-not-commandable — and <code>0x0E10</code>–<code>0x0E17</code> is the FLN band. The
    AP2 error-<strong>class</strong> names also exist (not-supported, bad-tag-value,
-   bad-packet-length, …). <em>Missing:</em> the mapping between the two, i.e. which
-   named class emits which code, and whether per-opcode error namespaces exist.
-   <em>Test:</em> drive each error-class condition deliberately on a lab panel
-   (malformed length, bad tag, wrong element count) and record the returned code.</p>
+   bad-packet-length, …).
+   <em>Now — the namespace half is ANSWERED.</em> There are <strong>no per-opcode error
+   namespaces</strong>. The type system declares only <strong>16</strong> <code>*_Error_enum</code> types,
+   fifteen of them RACS partner and port operations, and where a member carries a
+   value it is the <em>same</em> value the global catalog uses: <code>invalid_partner_number</code>
+   = 2 = <code>invalid_command</code>, <code>partner_not_found</code> = 3 = <code>not_found</code>,
+   <code>partner_already_here</code> = 9 = <code>already_exists</code>. A per-operation error enum is a
+   <strong>named subset</strong> of one global code space, not a second one, so there is no
+   mapping to perform (§7.2.2). The full 42-code catalog is now published there
+   too.
+   <em>Missing:</em> which named class emits which code for the operations that declare
+   no enum, and one anomaly — five RACS enums carry a member at value <strong>0</strong>,
+   which the global catalog does not define. <em>Test:</em> drive each error-class
+   condition deliberately on a lab panel (malformed length, bad tag, wrong
+   element count) and record the returned code.</p>
 </li>
 <li>
 <p><strong>FLN / P1 and serial-AEM frame bytes.</strong> <em>Known:</em> FLN points are a separate
@@ -22739,6 +22758,37 @@ specific test that would confirm or falsify it.</p>
    compare chain yields only its middle arm. <strong>No structure in the catalog names
    either one as a field type</strong>, so nothing can reach them and nothing is
    blocked. Neither is worth a capture.</p>
+</li>
+<li>
+<p><strong>How strictly does a panel enforce <code>msg_type</code>?</strong> <em>Known:</em> the field is a
+   header length, <code>13 +</code> the total bytes of the four routing slots (§6.2), and a
+   panel largely checks it: holding node names constant, a frame whose value
+   matches its slots is answered 98.0% of the time and one that does not 6.2%.
+   <em>Missing:</em> it is <strong>not</strong> a plain equality test. Seven wrongly-framed frames
+   were answered anyway, off by <code>+5</code>, <code>−1</code> and <code>+1</code>, and seven samples do not
+   reveal the rule. Nor is it known whether the panel uses the field at all when
+   parsing or merely validates it — the slots are self-delimiting, so a receiver
+   need not consult it. <em>Test:</em> on a lab panel, sweep the value across a range
+   around the correct one for a fixed frame and record which values draw a reply;
+   the shape of the accepting set is the rule.</p>
+</li>
+<li>
+<p><strong>How is a cross-trunk point named?</strong> <em>Known:</em> cross-trunk data flow is
+   brokered by the supervisor (§3.5) and PPCL references a local point as a
+   quoted colon-joined <code>"name:suffix"</code> pair (§14.2). <em>Missing:</em> the reference
+   syntax for a point on <em>another</em> trunk. Pass F went looking for the
+   <code>BAC_&lt;device&gt;_&lt;TYPE&gt;_&lt;instance&gt;</code> form and <strong>no PPCL line in this corpus
+   mentions <code>BAC</code> at all</strong>; nothing here shows how the trunk is qualified.
+   <em>Test:</em> capture or export a PPCL program from a site with two trunks that
+   actually shares points between them.</p>
+</li>
+<li>
+<p><strong>What does the <code>.BN</code> suffix mark?</strong> <em>Known:</em> the BACnet name twin is
+    <strong>bare ↔ <code>.BAC</code></strong>, four stems of four, both forms carrying traffic (§11.6).
+    <em>Missing:</em> <code>.BN</code> is a single stem, 60 occurrences, always suffixed, with no
+    bare form and no <code>.BAC</code> form anywhere in the corpus. One stem cannot say what
+    the suffix means. <em>Test:</em> a capture from a site with more than one <code>.BN</code>
+    point, or a database export showing what the suffix is configured on.</p>
 </li>
 </ol>
 <h3 id="appendix-e--evidence-tag-legend-and-lineage-pointer">Appendix E — Evidence-tag legend and lineage pointer</h3>
