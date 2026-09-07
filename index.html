@@ -16194,6 +16194,97 @@ counted only fields whose leaf name is literally <code>name</code> and found <st
 all 60 occurrences. When a measurement contradicts a standing claim, the first
 suspect is the measurement's own field selection.</p>
 </blockquote>
+<h3 id="117-how-a-p2-point-and-a-bacnet-object-are-joined">11.7 How a P2 point and a BACnet object are joined</h3>
+<p>§11.6 shows the two names. This is the structure that carries both identities at
+once, and it is declared in the type system rather than inferred from traffic.</p>
+<p><strong>One operation creates a point in both name spaces.</strong> The
+<code>AP2_BAC_Point_Add_&lt;LTYPE&gt;</code> family — twelve typed variants — has a request body
+of the form: [S]</p>
+<pre><code>bac_data_revision                    BACnet-side revision
+bac_data_size                        BACnet-side size
+bac_props_common : BAC_Props_Common  the BACnet property set
+bac_point_base   : BAC_Point_Base    the BACnet OBJECT (tag = ASHRAE object type, §10.4.6)
+point_base       : Point_base        the P2 point base
+&lt;ltype&gt;          : lai_ / ldo_ / …   the P2 type-specific arm
+lenum_address, user_profile, point_extension2
+</code></pre>
+<p>The BACnet object and the P2 point are <strong>fields of the same body</strong>. That is the
+join: not a mapping table the supervisor maintains, but a single record that
+declares a point twice.</p>
+<p><strong>Twelve of the sixteen P2 point types have a typed form.</strong> [S]</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>typed BACnet add exists</td>
+<td><code>LAI</code> <code>LAO</code> <code>LDI</code> <code>LDO</code> <code>L2SL</code> <code>L2SP</code> <code>LOOAL</code> <code>LOOAP</code> <code>LENUM</code> <code>LFSSL</code> <code>LFSSP</code> <code>LPACI</code></td>
+</tr>
+<tr>
+<td><strong>no typed form</strong></td>
+<td><code>LDAO</code> <code>LFMSL</code> <code>LFMSP</code> <code>PPCL_LAI</code></td>
+</tr>
+</tbody>
+</table>
+<p>The four omissions read sensibly rather than arbitrarily: <code>PPCL_LAI</code> is a
+program-resident calculated value with no physical termination to expose, and
+the other three are specialised output and multi-speed types. A generic
+<code>AP2_BAC_Point_Add_Request</code> also exists, taking <code>point : All_points</code> instead of
+a fixed arm, so the twelve typed forms are a convenience over a general one
+rather than the whole capability. Whether a panel accepts the generic form for
+the four is not established here. <strong>[OPEN]</strong></p>
+<p><strong>The property sets are ASHRAE's, one per object type.</strong> Nine <code>BAC_Props_*</code>
+structures map one-for-one onto <code>BAC_Point_Base</code>'s nine arms, over three shared
+bases: [S]</p>
+<table>
+<thead>
+<tr>
+<th>base</th>
+<th>property set for</th>
+<th>carries</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>BAC_Props_Common_Analog</code></td>
+<td>AI, AO, AV</td>
+<td><code>present_value</code>, <code>units</code>, <code>cov_increment</code>, <code>alarm_info</code></td>
+</tr>
+<tr>
+<td><code>BAC_Props_Common_Binary</code></td>
+<td>BI, BO, BV</td>
+<td><code>present_value</code>, <code>inactive_text</code>, <code>active_text</code>, <code>change_of_state_time</code>, <code>change_of_state_count</code>, <code>elapsed_active_time</code>, …</td>
+</tr>
+<tr>
+<td><code>BAC_Props_Common_Multi</code></td>
+<td>MI, MO, MV</td>
+<td><code>present_value</code>, <code>number_of_states</code>, <code>state_text</code></td>
+</tr>
+<tr>
+<td><code>BAC_Props_Common</code></td>
+<td>all</td>
+<td><code>object_identifier</code>, <code>object_name</code>, <code>object_type</code>, <code>description</code>, <code>status_flags</code>, <code>event_state</code>, <code>reliability</code>, <code>out_of_service</code>, <code>alarm_info</code>, <code>profile_name</code></td>
+</tr>
+</tbody>
+</table>
+<p>Every one of those names is a standard ASHRAE 135 property, as are the
+type-specific additions — <code>polarity</code> and <code>minimum_on_time</code> / <code>minimum_off_time</code>
+on the binary outputs, <code>priority_array</code> and <code>relinquish_default</code> on every
+commandable type, <code>min_pres_value</code> / <code>max_pres_value</code> / <code>resolution</code> on the
+analogs. <strong>This is a second, independent check on §10.4.6's tag map</strong>, which was
+recovered from the vendor's codec and validated against ASHRAE's object-type
+numbering: the arms carry the properties ASHRAE assigns to exactly those object
+types.</p>
+<p><strong>What this says about scope.</strong> §3.2.4 places the BACnet stack out of scope and
+that stands — none of this is needed to speak P2. But the boundary is not where
+it might appear: these are <strong>P2 operations</strong>, in the P2 opcode space, with P2
+bodies, and a client enumerating a panel will meet them. They are documented
+here so a reader can recognise and skip them, not so a reader can implement
+BACnet. [S]</p>
 <h2 id="12-change-of-value-cov">12. Change-of-Value (COV)</h2>
 <p>COV is the mechanism by which a panel reports a point's value change to interested peers without being polled. It is a <strong>subscription</strong> service: a peer enables COV on points it cares about, the panel thereafter pushes a report (<code>COV_ANNUNCIATE</code>) whenever a subscribed point changes by at least its COV resolution, and the peer disables or deletes the subscription when done. COV is the highest-volume P2 operation in steady state. [W]</p>
 <h3 id="121-the-subscription-opcode-set">12.1 The subscription opcode set</h3>
