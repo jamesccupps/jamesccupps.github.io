@@ -1061,9 +1061,11 @@ with it</strong>, and <strong>send it alarms</strong>. That is the behaviour of 
 node that other nodes subscribe to and command is a peer in the BLN, whatever
 else runs on the same machine.</p>
 <p>The point names confirm it. Every write addressed to that port names one of only
-<strong>nine distinct points</strong>, and 97% of those writes carry the <strong><code>.BN</code> / <code>.BAC</code>
-name-twin suffixes</strong> — the BACnet-twin convention of §11. The endpoint is
-publishing BACnet-side values into the P2 name space. [W]</p>
+<strong>nine distinct points</strong>, and 97% of those writes name a point carrying a
+<strong><code>.BN</code> or <code>.BAC</code> suffix</strong> — the BACnet-side naming of §11.6. The endpoint is
+publishing BACnet-side values into the P2 name space. (An earlier edition called
+these two "name-twin suffixes", pairing them with each other. They are not a
+pair; §11.6 has the measurement.) [W]</p>
 <p>Two identifications fit, and the wire does not separate them:</p>
 <ul>
 <li><strong>A software field panel.</strong> Vendor documentation describes field-panel
@@ -16142,6 +16144,56 @@ decodable.</strong></p>
 </tbody>
 </table>
 <hr>
+<h3 id="116-bacnet-side-point-names-and-what-actually-twins-with-what">11.6 BACnet-side point names, and what actually twins with what</h3>
+<p>A P2 point that also exists on the BACnet side of a panel is named with a
+suffix. §3.4 refers to this as the "<code>.BN</code> / <code>.BAC</code> name-twin" convention; that
+phrasing pairs the two suffixes with each other, and the wire does not.</p>
+<p>Measured across <strong>268 distinct point-name strings</strong> in the corpus, counting only
+fields that name a point (<code>name</code>, <code>name_pattern</code>, <code>point_name</code>, <code>last_name</code>):
+[W]</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th style="text-align: right;">stems</th>
+<th style="text-align: right;">also present as a <strong>bare</strong> point name</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>.BAC</code></td>
+<td style="text-align: right;">4</td>
+<td style="text-align: right;"><strong>4 of 4</strong></td>
+</tr>
+<tr>
+<td><code>.BN</code></td>
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">0</td>
+</tr>
+</tbody>
+</table>
+<p><strong>The twin is bare ↔ <code>.BAC</code>.</strong> All four <code>.BAC</code> stems also appear without a
+suffix, and both forms carry real traffic rather than one being a stray — the
+four pairs run bare/<code>.BAC</code> at 19/7, 9/2, 13/15 and 9/2 occurrences. A point
+therefore has a P2 name and, where it is also exposed to BACnet, the same stem
+with <code>.BAC</code> appended, and a client may see either on the wire for what is
+physically one point.</p>
+<p><strong><code>.BN</code> is not the other half of a pair here.</strong> The single <code>.BN</code> stem appears 60
+times, always with the suffix, and neither its bare form nor a <code>.BAC</code> form is
+ever seen. Whatever <code>.BN</code> marks, this corpus shows it standing alone. One stem
+is far too little to say what it means, and it is not said. <strong>[OPEN]</strong></p>
+<p>The two suffixes also arrive by different routes, which is why an earlier
+reading paired them: <code>.BN</code> occurs only in <code>0x0240 POINT_CMD_VALUE</code> requests — a
+<strong>write</strong> — and <code>.BAC</code> only in <code>0x0274 COV_ANNUNCIATE</code> — a <strong>read</strong>. That is a
+suggestive split and it is not evidence of pairing; no stem carries both. [W]</p>
+<blockquote>
+<p><strong>A method note, because it nearly produced a false retraction.</strong> A first pass
+counted only fields whose leaf name is literally <code>name</code> and found <strong>zero</strong>
+<code>.BN</code> anywhere — which would have contradicted §3.4. The commanded point in a
+<code>POINT_CMD_VALUE</code> request is named in <code>name_pattern</code>, so the narrow filter hid
+all 60 occurrences. When a measurement contradicts a standing claim, the first
+suspect is the measurement's own field selection.</p>
+</blockquote>
 <h2 id="12-change-of-value-cov">12. Change-of-Value (COV)</h2>
 <p>COV is the mechanism by which a panel reports a point's value change to interested peers without being polled. It is a <strong>subscription</strong> service: a peer enables COV on points it cares about, the panel thereafter pushes a report (<code>COV_ANNUNCIATE</code>) whenever a subscribed point changes by at least its COV resolution, and the peer disables or deletes the subscription when done. COV is the highest-volume P2 operation in steady state. [W]</p>
 <h3 id="121-the-subscription-opcode-set">12.1 The subscription opcode set</h3>
