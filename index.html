@@ -1495,6 +1495,70 @@ period, apostrophe, comma, dash, underscore or space. Period is the default and
 the vendor recommends it, which is why almost everything one sees uses it, and
 exactly why a tokenizer written against observed traffic will hard-code the
 wrong thing. [D]</p>
+<p><strong>All six occur on the wire, and that is the smaller half of the finding.</strong>
+Across <strong>326,143</strong> name-like strings in the corpus: [W]</p>
+<table>
+<thead>
+<tr>
+<th>character</th>
+<th style="text-align: right;">strings containing it</th>
+<th>mostly in</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>period</td>
+<td style="text-align: right;"><strong>163,815</strong></td>
+<td><code>name</code>, <code>name_pattern</code>, <code>last_name</code></td>
+</tr>
+<tr>
+<td>space</td>
+<td style="text-align: right;">51,438</td>
+<td><code>suffix</code>, <code>name</code></td>
+</tr>
+<tr>
+<td>underscore</td>
+<td style="text-align: right;">9,873</td>
+<td><code>name</code>, <code>last_name</code></td>
+</tr>
+<tr>
+<td>dash</td>
+<td style="text-align: right;">1,275</td>
+<td><code>name</code></td>
+</tr>
+<tr>
+<td>comma</td>
+<td style="text-align: right;">329</td>
+<td><code>name</code>, <code>descriptor</code></td>
+</tr>
+<tr>
+<td>apostrophe</td>
+<td style="text-align: right;"><strong>1</strong></td>
+<td><code>descriptor</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>But "a site setting chosen from six" is not something a tokenizer can be built
+on, because names carry more than one of the six at a time.</strong> This is a single
+site with a single configured separator, and it still produces names combining
+period with underscore (1,767 strings), space with underscore (3,575), space
+with period (529), and comma with dash (222). Shapes, with invented names
+carrying the same character combinations:</p>
+<pre><code>A07.CHW1_2_PGM            period AND underscore
+LEVEL 03 ZONE PMP_1_BAC   space  AND underscore
+FAN DIR. FWD              space  AND period
+GRP4-Smith,Jones&amp;Lee      dash   AND comma
+</code></pre>
+<p>The reconciliation is that the configured setting governs the <strong>structural</strong>
+delimiter between name components, while the other five characters occur freely
+<em>inside</em> a component — a space inside <code>LEVEL 03 ZONE</code>, an underscore inside
+<code>PMP_1_BAC</code>. Nothing on the wire marks which role a given character is playing.</p>
+<p><strong>So the practical rule is stronger than "do not hard-code the separator":
+do not split a point name at all unless you know the site's setting out of
+band, and do not assume the other five characters are absent when you do.</strong>
+Treat a name as an opaque string wherever the protocol lets you — every opcode
+that takes a name takes it whole, and §10.2.3's range-and-resume idiom compares
+names without decomposing them. [W][D]</p>
 <p>Note that this is the opposite constraint from the scopes below it: BLN, node
 and site names <em>forbid</em> periods and spaces (§3.4.1–§3.4.3), while a point name
 may be joined by either. A client splitting a compound name must take the
@@ -15820,7 +15884,11 @@ Panel-resident analog points are different, and the constants are unobvious:
 [D/S]</p>
 <p><strong>The count range is a property of the controller family and the signal class
 together</strong>, and neither end of it is 0 or a power of two. These are the raw
-digitized ranges an analog <strong>input</strong> is defined against: [D]</p>
+digitized ranges an analog <strong>input</strong> is defined against — <strong>vendor
+documentation, not measurement</strong>, and not checkable from this corpus, because
+the wire carries the <em>converted</em> engineering value (§12.3) and never the raw
+count. An implementer scaling counts to engineering units is trusting the table
+below exactly as far as they trust the manual it came from: [D]</p>
 <table>
 <thead>
 <tr>
