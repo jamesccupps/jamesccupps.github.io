@@ -849,7 +849,7 @@
 </tr>
 <tr>
 <td><strong>[F]</strong></td>
-<td><strong>Firmware-attested.</strong> The value or behavior is carried in a controller firmware image itself, rather than in a supervisor-side binary. Stronger than [S] for the question <em>does a panel actually implement this</em>, because [S] describes only what a supervisor knows how to ask for.</td>
+<td><strong>Firmware-attested.</strong> The value or behavior is carried in a controller firmware image itself, rather than in a supervisor-side binary. Stronger than [S] for the question <em>does a panel actually implement this</em>, because [S] describes only what a supervisor knows how to ask for. <strong>The images are not read out of panels</strong> — see the note below.</td>
 </tr>
 <tr>
 <td><strong>[C]</strong></td>
@@ -869,6 +869,20 @@
 </tr>
 </tbody>
 </table>
+<p><strong>Where the <code>[F]</code> images come from, since the tag invites the wrong guess.</strong> They
+are <strong>not</strong> extracted from a running panel, and nothing here depends on being
+able to do that. Controller firmware ships inside the supervisor's own
+installation media, because that is how a supervisor pushes an upgrade to a
+panel in the first place — the images sit in the installer, and an
+administrative extraction of it (<code>msiexec /a</code> on the Insight distribution, for
+example) writes them to disk as ordinary files alongside the panel-side opcode
+tables. Any owner-operator with their own media has the same access; no panel is
+touched and no protocol path is involved. The P2 wire itself carries <strong>no
+firmware-read operation</strong>, and the panel's documented FTP service (§4, TCP/20–21)
+exists to push firmware and database files <em>to</em> a controller, not to dump the
+running image out of one. If you are trying to read an image off a panel to
+learn something about the protocol, you are solving a harder problem than you
+need to.</p>
 <p>A field-layout table is tagged <strong>[S]</strong> when its field order and types come from the ASDU structure definitions, and <strong>[W]</strong> when the layout has additionally been confirmed on the wire. A behavioral claim tagged <strong>[D]</strong> must never be presented as a byte-level wire fact; where the byte offsets behind a documented behavior are not pinned, the gap is tagged <strong>[OPEN]</strong>.</p>
 <h4 id="1411-what-w-rests-on-one-deployment">1.4.1.1 What <code>[W]</code> rests on: one deployment</h4>
 <p>Every <code>[W]</code> claim in this document is grounded in a wire corpus of <strong>621,268
