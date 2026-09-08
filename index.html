@@ -15042,6 +15042,9 @@ authority.</p>
 that an enum's members can be <strong>bit positions</strong> rather than values, <code>Schedule_days</code>
 being the example. That was read off the declaration. It is now measured, and the
 values are unambiguous: [W]</p>
+<p>Across <strong>all</strong> 115 <code>Schedule_days</code> fields in the corpus — not the 60-body
+sample, which showed four values — every one of the thirteen distinct values is
+a coherent day mask: [W]</p>
 <table>
 <thead>
 <tr>
@@ -15055,39 +15058,67 @@ values are unambiguous: [W]</p>
 <tr>
 <td style="text-align: right;"><code>62</code></td>
 <td><code>0111110</code></td>
-<td style="text-align: right;"><strong>56</strong></td>
-<td><strong>Mon, Tue, Wed, Thu, Fri</strong></td>
+<td style="text-align: right;"><strong>63</strong></td>
+<td><strong>Mon, Tue, Wed, Thu, Fri</strong> — the weekday mask</td>
+</tr>
+<tr>
+<td style="text-align: right;"><code>16</code></td>
+<td><code>0010000</code></td>
+<td style="text-align: right;">23</td>
+<td>Thursday</td>
+</tr>
+<tr>
+<td style="text-align: right;"><code>1</code> <code>2</code> <code>4</code> <code>8</code> <code>32</code> <code>64</code></td>
+<td>one bit each</td>
+<td style="text-align: right;">4, 4, 2, 4, 3, 2</td>
+<td>Sun, Mon, Tue, Wed, Fri, Sat</td>
+</tr>
+<tr>
+<td style="text-align: right;"><code>65</code></td>
+<td><code>1000001</code></td>
+<td style="text-align: right;">3</td>
+<td><strong>Sunday + Saturday — the weekend</strong></td>
+</tr>
+<tr>
+<td style="text-align: right;"><code>30</code></td>
+<td><code>0011110</code></td>
+<td style="text-align: right;">1</td>
+<td>Mon–Thu</td>
+</tr>
+<tr>
+<td style="text-align: right;"><code>126</code></td>
+<td><code>1111110</code></td>
+<td style="text-align: right;">2</td>
+<td>Mon–Sat</td>
 </tr>
 <tr>
 <td style="text-align: right;"><code>127</code></td>
 <td><code>1111111</code></td>
 <td style="text-align: right;">2</td>
-<td>all seven days</td>
+<td>all seven</td>
 </tr>
 <tr>
-<td style="text-align: right;"><code>16</code></td>
-<td><code>0010000</code></td>
-<td style="text-align: right;">20</td>
-<td>Thursday</td>
-</tr>
-<tr>
-<td style="text-align: right;"><code>8</code></td>
-<td><code>0001000</code></td>
+<td style="text-align: right;"><code>512</code></td>
+<td>bit <strong>9</strong></td>
 <td style="text-align: right;">2</td>
-<td>Wednesday</td>
+<td><strong><code>Replacement3</code></strong></td>
 </tr>
 </tbody>
 </table>
-<p>A weekday mask dominating a building's schedules is not a coincidence, and none
-of the four is a declared member value — the enum declares <code>Sunday</code> = 0 through
-<code>Replacement7</code> = 13, which as <em>values</em> would be meaningless here. <code>Cov_mask</code>
-behaves the same way: only <code>0</code> and <code>65535</code> occur, all-clear and all-set, against
-eight declared members that are plainly bit positions. <strong>Read both as masks over
-the declared positions, never as values.</strong> [W][S]</p>
+<p>Seven single-day masks, a weekday mask, a weekend mask, Mon–Thu, Mon–Sat and
+all-seven. Not one is a declared member <em>value</em>, and <code>512</code> settles the shape:
+bit 9 is <code>Replacement3</code>, so the mask covers <strong>all fourteen declared members</strong> —
+bits 0–6 the days, bits 7–13 the replacement slots — not just the seven days.</p>
+<p><code>Cov_mask</code> reads the same way, and the full corpus supplies the confirmation the
+sample could not: its dominant non-zero value is <strong><code>0x00FF</code></strong> (6,182 of 13,400)
+— <strong>eight bits set for the eight declared positions</strong> — alongside <code>0xFFFF</code>
+(1,176) and <code>0</code> (6,042). A mask of exactly the declared width is much harder to
+explain as anything else. <strong>Read both as masks over the declared positions,
+never as values.</strong> [W][S]</p>
 <p><strong>Two enums carry <code>255</code> as a sentinel the declaration does not list.</strong>
 <code>Cabinet_report_config</code> declares <code>reports_to_port0</code>…<code>port4</code> and reads <code>255</code> on
-<strong>57 of 60</strong> bodies (with <code>1</code> on the other three); <code>Point_priority</code> declares 27
-members topping out at 116 and reads <code>255</code> once in 2,968. Neither is in range,
+the great majority of its 238 occurrences corpus-wide; <code>Point_priority</code> declares
+27 members topping out at 116 and reads <code>255</code> in 228,818 occurrences. Neither is in range,
 both are <code>0xFF</code>, and the obvious reading — <em>unset / not configured</em> — is
 consistent with <code>Cabinet_report_config</code> being the dominant value on a site that
 routes no cabinet reports. A decoder must not treat an out-of-range enum value
