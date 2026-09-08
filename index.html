@@ -3549,8 +3549,10 @@ mapped segment copies <code>n</code> bytes into the buffer and advances the curs
 final segment's length is <code>total - cursor</code>. The sender knows <code>total</code> before it
 begins, and the command object carries an explicit more-follows field, set on the
 segmenting path and cleared on the direct one. [S]</p>
-<p><strong>The ceiling is not exercised by anything we have captured.</strong> No body in the
-corpus exceeds 16,382 B: the largest complete body is 1,570 B and the largest
+<p><strong>The ceiling is not exercised by anything we have captured</strong>, and this is one
+of the few figures a full-corpus walk did not move. Across all <strong>444,547</strong>
+bodies on the wire — not the analysis sample of §1.4.1.1 — <strong>no body exceeds
+16,382 B and the largest is 1,570 B</strong>, a <code>0x0295</code> trend response. The largest
 <em>declared</em> body is the 12,073-byte replication data store of §9.5. So a client
 may size a receive buffer at 16 KB with confidence for this implementation, but
 the on-wire form of a <strong>multi-segment</strong> exchange — whether it appears as two P2
@@ -13873,81 +13875,105 @@ alarm configured takes one of the other eight</strong>, and none of them is decl
 three bytes before it and everything after must consume the body exactly.
 Searching for the arm width that satisfies both: <strong>54 of 54 bodies admit exactly
 one width — none admits two, none admits none.</strong> [W]</p>
+<p>Walking the whole corpus rather than the analysis sample raises every count by
+roughly an order of magnitude and adds something the anchor argument did not
+have — <strong>each width now closes its body across four or more different
+operations</strong>, not one structure: [W]</p>
 <table>
 <thead>
 <tr>
 <th>arm</th>
 <th style="text-align: right;">width</th>
-<th>observed on</th>
-<th>how confirmed</th>
+<th style="text-align: right;">bodies</th>
+<th>consume exactly</th>
+<th>operations carrying it</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td><code>no_alarming</code></td>
 <td style="text-align: right;">0</td>
-<td>all types</td>
-<td><code>NULL_</code></td>
-</tr>
-<tr>
-<td><code>std_digital_</code></td>
-<td style="text-align: right;"><strong>38 B</strong></td>
-<td><code>ldi</code>, <code>l2sl</code></td>
-<td>anchor; and independently <code>ldo</code> alarmed tail 44 − unalarmed 6</td>
+<td style="text-align: right;">23,410</td>
+<td><strong>100%</strong></td>
+<td><code>0x0981</code>, <code>0x0271</code>, <code>0x0220</code>, <code>0x4221</code>, …</td>
 </tr>
 <tr>
 <td><code>std_analog_</code></td>
 <td style="text-align: right;"><strong>47 B</strong></td>
-<td><code>lai</code></td>
-<td>anchor, 44 bodies</td>
+<td style="text-align: right;">483</td>
+<td><strong>100%</strong></td>
+<td><code>0x0981</code>, <code>0x0220</code>, <code>0x0508</code>, <code>0x0271</code></td>
+</tr>
+<tr>
+<td><code>std_digital_</code></td>
+<td style="text-align: right;"><strong>38 B</strong></td>
+<td style="text-align: right;">347</td>
+<td><strong>100%</strong></td>
+<td><code>0x0981</code>, <code>0x0220</code>, <code>0x0295</code>, <code>0x0271</code></td>
 </tr>
 <tr>
 <td><code>enhanced_analog_</code></td>
 <td style="text-align: right;"><strong>55 B</strong></td>
-<td><code>lai</code></td>
-<td>anchor, 3 bodies</td>
+<td style="text-align: right;">87</td>
+<td><strong>100%</strong></td>
+<td><code>0x0981</code>, <code>0x0220</code>, <code>0x0295</code>, <code>0x0271</code></td>
 </tr>
 <tr>
 <td><code>enhanced_digital_</code></td>
 <td style="text-align: right;"><strong>48 B</strong></td>
-<td>digital</td>
-<td>solved on the alarm-mode uploads, then <strong>independently confirmed</strong> — see below</td>
+<td style="text-align: right;">36</td>
+<td><strong>100%</strong></td>
+<td><code>0x0981</code>, <code>0x0220</code>, <code>0x0508</code>, <code>0x0271</code></td>
 </tr>
 <tr>
 <td><code>std_single_analog_</code></td>
 <td style="text-align: right;">42 B</td>
+<td style="text-align: right;"><strong>0</strong></td>
 <td>—</td>
 <td>type system only</td>
 </tr>
 <tr>
 <td><code>enhanced_lenum_</code></td>
 <td style="text-align: right;">50 B</td>
+<td style="text-align: right;"><strong>0</strong></td>
 <td>—</td>
 <td>type system only</td>
 </tr>
 <tr>
 <td><code>bacnet_alarm_analog_</code></td>
 <td style="text-align: right;">16 B</td>
+<td style="text-align: right;"><strong>0</strong></td>
 <td>—</td>
 <td>type system only</td>
 </tr>
 <tr>
 <td><code>bacnet_alarm_digital_</code></td>
 <td style="text-align: right;">7 B</td>
+<td style="text-align: right;"><strong>0</strong></td>
 <td>—</td>
 <td>type system only</td>
 </tr>
 </tbody>
 </table>
+<p><strong>24,363 of 24,363 close to exactly zero.</strong> A count of successful arm decodes
+would be near-circular on its own — the walker reads the declared width to find
+the arm at all. What is not circular is that the body <em>containing</em> it then
+consumes exactly: a wrong arm width displaces everything after it, and in all
+five of these structures there is always something after it.</p>
+<p><code>enhanced_digital_</code> is the arm that gains most. It had rested on <strong>four</strong> bodies
+and a subtraction; it now closes <strong>36</strong> bodies across four operations. And the
+four zero rows are zero across the whole corpus rather than across a sample, so
+"type system only" is a measured negative rather than an artefact of the 60.</p>
 <p><strong>All nine arms are pinned, and the last four came free with a validation
 attached.</strong> The arm types are declared <em>inside</em> <code>Alarm_object</code> and were lost by
 the catalog's flattening (§10.1); read back out of the type system they size to
 <code>0, 38, 42, 47, 48, 55, 50, 16, 7</code> in tag order. What makes that usable rather
-than merely available is that <strong>every one of the five widths already measured on
-the wire reproduces exactly</strong> — including <code>enhanced_digital_</code> at 48, which had
-rested on four bodies and a subtraction and was labelled thin here for that
-reason. Five agreements out of five, and the four remaining arms follow from the
-same source. [W][S]</p>
+than merely available is that <strong>every one of the five widths measured on the
+wire reproduces exactly</strong> — including <code>enhanced_digital_</code> at 48, which was
+labelled thin here when it rested on four bodies and a subtraction, and which
+the table above now shows closing 36 bodies across four operations. Five
+agreements out of five, and the four remaining arms follow from the same
+source. [W][S]</p>
 <p><strong>A fourth arm, and it is not anchored the way the first three are.</strong> The
 <code>0x0982 UPL_ALL_ALARM_SETUP</code> and <code>0x0983 UPL_ALL_ALARM_MODE</code> responses both end
 in <code>alarm_object</code>, so once every other field in them is pinned (see
@@ -16884,7 +16910,7 @@ AP2_COV_Disable_Request =  name_response : Name_response ,  cov_mask : Cov_mask
 <p><strong>[W/F — values pinned; the alarm band is declared but unobserved here]</strong> The 10-byte trailing block's <strong>position, size, and field order are established</strong> (the <code>Annunciate_request</code> ASDU defines fields #3–#12, exactly ten one-byte fields follow the value, and that fits the wire bit-for-bit). <strong>The controller's own encoder confirms it independently:</strong> the function that serialises this body emits <code>u16 | TEXT_ | TEXT_ | f32 |</code> and then <strong>exactly ten calls to the one-byte write primitive</strong>, consecutively, with nothing between them — so "ten one-byte fields after the value" is not an inference reconciling a schema against a byte count, it is what the panel is compiled to write. [F] Newer command/abnormal-state captures confirm the <strong>first two bytes' asserted values</strong>: <code>point_priority</code> (+0) ∈ {<code>0x00</code> NONE, <code>0x20</code> EMER, <code>0x23</code> OPER} tracking who holds the point (<code>0x20</code>/emer seen on BACnet-integration points commanded to 1.0), and <code>control_status</code> (+1) observed taking <code>{0x00, 0x02, 0x03, 0x04, 0x06}</code> (e.g. <code>0x02</code> when the point is under an active operator command, <code>0x04</code> on a normal analog input). A failed sensor asserts a flag byte in the OOS/failed region (+2..+8). [W]</p>
 </blockquote>
 <p><strong><code>control_status</code> (+1) can be read, and the reading checks itself.</strong> The type system names this byte's enumeration <code>0 remote / 1 tool_override / 2 by_priority / 3 config_only / 4 input_only / 5 manual_override / 6 undefined</code> (Appendix A; §11.3.1 for what <code>manual_override</code> means to an operator). Set that against the two values this corpus characterises <em>from the wire alone</em> — <code>0x02</code> on a point under an active operator command, <code>0x04</code> on a normal analog input — and both land on the name that describes exactly that condition: <code>by_priority</code> for a point held by a command priority, <code>input_only</code> for an input. The wire reading and the vendor's name for it were arrived at separately and agree, which is worth more than either alone. The other three observed values follow: <code>0x00</code> <code>remote</code> on a normal panel-controlled output, <code>0x03</code> <code>config_only</code>, <code>0x06</code> <code>undefined</code>. [W][S]</p>
-<p><strong><code>alarm_state</code> (+8) and <code>alarm_priority</code> (+9) are declared, and this corpus does not exercise them.</strong> Those are two different statements and an earlier edition of this section ran them together, calling the <em>encoding</em> open when only the <em>observation</em> was missing:</p>
+<p><strong><code>alarm_state</code> (+8) and <code>alarm_priority</code> (+9) are declared; the corpus exercises one of them barely and the other not at all.</strong> Those are two different statements and an earlier edition of this section ran them together, calling the <em>encoding</em> open when only the <em>observation</em> was missing:</p>
 <table>
 <thead>
 <tr>
@@ -16907,7 +16933,7 @@ AP2_COV_Disable_Request =  name_response : Name_response ,  cov_mask : Cov_mask
 </tbody>
 </table>
 <p>Both are tabulated in full in Appendix A. What is still open is narrower than it was: <strong>no point in this corpus was in a true hi/lo-limit alarm.</strong> But <strong><code>alarm_state</code> has been seen non-zero</strong>, which an earlier edition denied on the strength of the 60-body sample: walking all <strong>120,763</strong> <code>0x0274</code> pushes finds <code>alarm_state</code> = <strong>1</strong> (<code>alarm</code>) on <strong>9</strong> of them. So the generic alarm state is wire-confirmed; <code>2</code> <code>high_alarm</code>, <code>3</code> <code>low_alarm</code> and <code>4</code> <code>trouble</code> are not, and <code>alarm_priority</code> is <strong>0 on all 120,763</strong> — the runtime priority genuinely never asserts here (§13.2 explains why: a configured band is 1–6, a point not in alarm reports 0).</p>
-<p>The same full walk widens <code>control_status</code> to <strong>six</strong> of its seven values — <code>0</code> ×77,863, <code>1</code> ×32, <code>2</code> ×1,291, <code>3</code> ×99, <code>4</code> ×41,471, <code>6</code> ×7 — where the sample showed five. Only <code>5</code> <code>manual_override</code> is unobserved.** A single <code>0x0274</code> push from a point sitting in a limit alarm would confirm the mapping; nothing about it is unknown in the meantime. [S][OPEN]</p>
+<p>The same full walk widens <code>control_status</code> to <strong>six</strong> of its seven values — <code>0</code> ×77,863, <code>1</code> ×32, <code>2</code> ×1,291, <code>3</code> ×99, <code>4</code> ×41,471, <code>6</code> ×7 — where the sample showed five. Only <code>5</code> <code>manual_override</code> is unobserved. A single <code>0x0274</code> push from a point sitting in a limit alarm would confirm the mapping; nothing about it is unknown in the meantime. [S][OPEN]</p>
 <h3 id="124-command-priority-carried-in-the-cov-payload">12.4 Command priority (carried in the COV payload)</h3>
 <p><code>point_priority</code> is the command-ownership holder — which class of command source last successfully commanded the point. The <code>Point_priority</code> / <code>User_command_priority</code> ladder, lowest to highest acceptance, with the byte value that encodes it on the wire: [S]</p>
 <table>
