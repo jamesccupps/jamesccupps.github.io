@@ -913,8 +913,10 @@ legacy/modern "dialect" pairs. It is a header length. The six values were six
 combinations of <em>this site's</em> node-name lengths; the "legacy versus modern
 firmware" split was single-digit versus double-digit panel numbers. Every test
 run against this corpus confirmed the wrong model, because the field really is
-constant per connection here. It was found by a reader who ran the published
-dissector at his own site and saw a seventh value on his first frame.</p>
+constant per connection here. <strong>No test run against these captures could have
+failed</strong>, and none did. What settles it is traffic from a deployment whose
+device names are different lengths, where a seventh value appears on the first
+frame.</p>
 <p>Two things follow for anyone using this document.</p>
 <ul>
 <li><strong>Prefer the internally-checkable claims.</strong> A statement backed by the type
@@ -924,7 +926,7 @@ dissector at his own site and saw a seventh value on his first frame.</p>
   it against your own traffic.</li>
 <li><strong>A capture from another site is the most valuable thing this document can
   receive.</strong> Not more frames — <em>different</em> names, different firmware, a
-  different BLN. One screenshot from one such site produced the largest
+  different BLN. A single frame from such a site produced the largest
   correction in this document's history.</li>
 </ul>
 <h4 id="142-byte-integer-and-field-conventions">1.4.2 Byte, integer, and field conventions</h4>
@@ -3237,11 +3239,13 @@ previous edition of this section and hard-coded <code>0x33</code> would see a pa
 "does not support" whatever they asked, when in fact the frame was discarded
 before the opcode was read — and would see it <em>intermittently</em>, since a few
 wrong values do get through, which is worse than a clean failure.</p>
-<p><em>This correction came from a reader who ran the published dissector against his
-own site, saw a value the table did not list, and worked out what it was. The
-corpus here contains one site; his did not. It is the clearest argument possible
-for putting protocol work in the open, and for treating a single deployment as a
-sample of one.</em> [W]</p>
+<p><em>This correction did not come from the corpus, and could not have. The field is
+constant per connection here, so every check run against these captures
+confirmed the wrong model — the error was invisible from the inside and obvious
+from the outside, where a value the table did not list turns up immediately. It
+is the clearest argument possible for publishing protocol work openly, where it
+meets deployments its author does not have, and for treating a single deployment
+as a sample of one.</em> [W]</p>
 <h3 id="63-the-direction-byte">6.3 The direction byte</h3>
 <p>The single byte <code>dir</code> at offset 12 selects the meaning of everything after the routing slots.
 Exactly three values are defined. [W]</p>
