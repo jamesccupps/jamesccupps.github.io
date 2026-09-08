@@ -869,8 +869,9 @@
 <p>A field-layout table is tagged <strong>[S]</strong> when its field order and types come from the ASDU structure definitions, and <strong>[W]</strong> when the layout has additionally been confirmed on the wire. A behavioral claim tagged <strong>[D]</strong> must never be presented as a byte-level wire fact; where the byte offsets behind a documented behavior are not pinned, the gap is tagged <strong>[OPEN]</strong>.</p>
 <h4 id="1411-what-w-rests-on-one-deployment">1.4.1.1 What <code>[W]</code> rests on: one deployment</h4>
 <p>Every <code>[W]</code> claim in this document is grounded in a wire corpus of <strong>621,268
-trusted P2 frames from a single site</strong> — one BLN, one supervisor, a handful of
-panels. That is a large corpus and a narrow one, and the narrowness has a
+trusted P2 frames from a single site</strong> — one BLN, one supervisor, and <strong>five
+distinct panels</strong>, which is the count that answers the port enumeration of
+§16.1. That is a large corpus and a narrow one, and the narrowness has a
 specific consequence worth stating plainly rather than leaving to the reader:</p>
 <blockquote>
 <p><strong>Anything that is constant across one deployment cannot be distinguished, by
@@ -879,6 +880,12 @@ that deployment, from a constant of the protocol.</strong></p>
 <p>No amount of care applied to this corpus fixes that. Frequency is not evidence
 of universality, and a claim that held in 620,000 frames here can still be an
 artefact of one site's configuration.</p>
+<p><strong>The five panels are not identically configured, and that is the one axis along
+which this corpus does carry variation.</strong> §16.1 has the worked case: four panels
+return an all-default port table and the fifth runs its HMI port at 115.2 k with
+alarm printing enabled on three ports. Wherever a claim rests on a difference
+<em>between panels</em>, that difference is real evidence. Wherever it rests on
+something all five share, it is still one site.</p>
 <p><strong>And the body-level figures are a 1% sample.</strong> Frame-level counts — 621,268
 frames, the direction split, the <code>msg_type</code> distribution — are over the whole
 corpus. <strong>Body-level figures are not.</strong> Bodies are cached for analysis at the
@@ -889,10 +896,17 @@ from one moment in one capture: <code>0x0274 COV_ANNUNCIATE</code> alone carries
 <p>This does not weaken the structural claims and does weaken the negative ones.
 A width that closes 60 of 60 bodies <strong>and fails at every alternative</strong> is
 evidence about the width, and 60 is plenty. A statement that something <em>never</em>
-occurs is a statement about the sample — and Pass M found three places where
-the corpus disagrees with it (§8.5, §12.3.3). <strong>Read "never observed here" as
-"not in the 60 sampled for that opcode"</strong> unless a section says it walked
-everything.</p>
+occurs is a statement about the sample — and re-walking every body found <strong>five</strong>
+places where the corpus disagreed with such a statement: an alarm byte that was
+said never to leave zero (§12.3.3), a point arm said never to be exercised
+(§8.5), a status field said to take five values and not six (§12.3.3), a
+reserved-character row that read "not observed" (§8.4.4), and a whole record
+whose value spaces were said to be untouched (§16.1). <strong>Read "never observed
+here" as "not in the 60 sampled for that opcode"</strong> unless a section says it
+walked everything. Sections that did walk everything say so.</p>
+<p>Two independent checks say the <em>alignment</em> of the walk is nonetheless sound —
+128,953 floats with nothing implausible, and every real date carrying its own
+correct weekday. Both are in §10.1.</p>
 <p><strong>The worked example is §6.2, and it is not hypothetical.</strong> Four editions of
 this document described the <code>msg_type</code> field as a six-valued message class in
 legacy/modern "dialect" pairs. It is a header length. The six values were six
@@ -5274,9 +5288,9 @@ char:   &quot; ABCDEFGHIJKLMNOPQRSTUVWXYZ$.?0123456789&quot;
 characters</strong>, letters, digits, periods and spaces, and <em>"any ASCII character
 except the following: <code>?</code> <code>*</code> <code>[</code> <code>]</code> <code>{</code> <code>}</code> and the vertical bar"</em>. [D]</p>
 <p>Taken alone that is a rule to obey. The corpus explains it. Every one of those
-seven characters that occurs anywhere in 4,412 decoded name-like strings occurs
-<strong>only</strong> in a role that requires it to be reserved, and <strong>never inside a name</strong>:
-[W]</p>
+seven characters that occurs anywhere in the <strong>1,485,767</strong> decoded name-like
+strings on the wire occurs <strong>only</strong> in a role that requires it to be reserved,
+and <strong>never inside a name</strong>: [W]</p>
 <table>
 <thead>
 <tr>
@@ -5288,18 +5302,18 @@ seven characters that occurs anywhere in 4,412 decoded name-like strings occurs
 <tbody>
 <tr>
 <td><code>*</code></td>
-<td><code>name_pattern</code>, <code>suffix_pattern</code>, <code>last_name</code> — always as the entire field, never as part of one</td>
-<td style="text-align: right;">1,625</td>
+<td><strong>In every name field it is the entire field, never part of one</strong> — <code>name_pattern</code> 20,745, <code>suffix_pattern</code> 14,802, <code>last_name</code> 37. In PPCL <code>line_text</code>, which is program source and not a name, it is <strong>embedded</strong> 41 times: as the multiplication operator (<code>HW3P5F = HW3VFD * HW3P5</code>) and inside quoted OIP arguments</td>
+<td style="text-align: right;">35,632</td>
 </tr>
 <tr>
 <td><strong>vertical bar</strong></td>
-<td><code>entry_id</code>, <code>originating_node</code>, <code>node_name</code>, <code>node_bits[]</code> — always the node/port separator of §3.3, i.e. the bar between <code>&lt;node&gt;</code> and <code>&lt;port&gt;</code></td>
-<td style="text-align: right;">145</td>
+<td><code>node_name</code> 31,404, <code>originating_node</code> 10,066, <code>entry_id</code> 490 — always the node/port separator of §3.3, and <strong>exactly one bar in every one of the 41,960 strings</strong>, never two</td>
+<td style="text-align: right;">41,960</td>
 </tr>
 <tr>
 <td><code>?</code> <code>[</code> <code>]</code> <code>{</code> <code>}</code></td>
-<td>not observed</td>
-<td style="text-align: right;">0</td>
+<td><strong>Never in vendor traffic.</strong> Six occurrences exist in the corpus and all six are this project's own wildcard probes (below)</td>
+<td style="text-align: right;">6, none of them the panel's or the supervisor's</td>
 </tr>
 </tbody>
 </table>
@@ -5307,9 +5321,17 @@ seven characters that occurs anywhere in 4,412 decoded name-like strings occurs
 had been describing two of its members in separate sections without stating the
 rule that connects them: <code>*</code> is the wildcard selector of §10.2.3's
 range-and-resume idiom, and <code>|</code> is the port separator of §3.3. A name containing
-either would be ambiguous with a wildcard or with an address. The remaining five
-are presumably further pattern syntax; nothing in this corpus exercises them, so
-that is inference, not observation. [D][W][I]</p>
+either would be ambiguous with a wildcard or with an address — and the PPCL
+occurrences make the <code>*</code> case stronger, not weaker, because it is an <em>operator</em>
+there. A name carrying one would be ambiguous twice over. [D][W]</p>
+<p><strong>The remaining five are still inference, and now for a stated reason.</strong> An
+earlier edition said "nothing in this corpus exercises them". Something does:
+127 probe requests deliberately sent <code>?</code>, <code>?*?*</code>, <code>[A-Z]*</code>, <code>[*]</code>, <code>${BLN}</code> and
+<code>{{BLN}}</code> as a <code>bln_name</code>, precisely to find out whether the panel does glob
+matching. <strong>The panel's answers were never captured</strong> — that capture is
+one-sided, 136 frames, every one outbound, not a single reply. So the experiment
+that would settle whether <code>[ ]</code> and <code>{ }</code> are real pattern syntax exists, was
+run, and produced no recorded result. <strong>[OPEN]</strong> [I]</p>
 <p><strong>A third separator, excluded by a different mechanism.</strong> The colon is not on
 the vendor's blocklist above, and it is not a name character either: it never
 appears inside any of 368 distinct wire <code>name</code>/<code>suffix</code> values, and it appears
@@ -11874,12 +11896,12 @@ far: [W][S]</p>
 <tr>
 <td><code>Baud_rate</code></td>
 <td style="text-align: right;"><strong>2</strong></td>
-<td><code>0x099f</code>, 60 bodies, and the record carries its own oracle — see below</td>
+<td><code>0x099f</code>, 95 records corpus-wide, and the record carries its own oracle at <strong>two</strong> values — see below</td>
 </tr>
 <tr>
 <td><code>Port_number</code>, <code>Port_type</code></td>
 <td style="text-align: right;">1 each</td>
-<td>same 60 bodies; <code>Port_number</code> corroborated by <code>Port_request</code>, which types the same concept <code>UNSIGNED8</code></td>
+<td>same 95 records; <code>Port_number</code> corroborated by <code>Port_request</code>, which types the same concept <code>UNSIGNED8</code></td>
 </tr>
 </tbody>
 </table>
@@ -11896,7 +11918,10 @@ value-range reasoning §10.9 records as false.</p>
 reproduces the previously measured sum of 4 exactly — two independent
 measurements meeting. The decisive evidence is inside the record: its
 <code>DiagPortString</code> spells the port's settings in ASCII as <code>;bd=9600;…</code>, and the
-<code>Baud_rate</code> enum decodes to <code>baud9600</code> in all 60. [W]</p>
+<code>Baud_rate</code> enum decodes to the same number the string spells in <strong>95 of 95</strong>
+records — including the one panel whose HMI port runs at 115.2 k, where the enum
+reads <code>10</code> = <code>baud115p2k</code> and the string reads <code>bd=115200</code>. Agreement at two
+separate values is what makes this a measurement rather than a coincidence. [W]</p>
 <p>The library also offers a second, still-unused check on the same value, worth
 keeping for a commissioning capture: six request structures carry
 <code>baud_rate : Baud_rate</code> <strong>and nothing else</strong> —</p>
@@ -12166,6 +12191,36 @@ slots are the same length throughout and the two readings cannot be told apart
 here. At a site with different node-name lengths a frame-sized buffer would give
 a different body size — so an implementer should treat 220 as <em>this site's</em>
 observation, not a protocol constant.</p>
+<p><strong>Exact consumption is not the only test, and the other two agree with it.</strong> A
+body can consume to exactly zero remainder and still be read <strong>one byte out</strong> —
+the widths would sum correctly while every field sat in the wrong place. Two
+checks catch that and neither depends on the structure library being right about
+<em>meaning</em>, only about <em>position</em>. Both were run over all <strong>444,547</strong> bodies on
+the wire, not the analysis sample (§1.4.1.1): [W]</p>
+<table>
+<thead>
+<tr>
+<th>check</th>
+<th>result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong><code>FLOAT_</code> sanity</strong> — a misaligned <code>f32</code> reads as NaN, infinity, a denormal, or a magnitude no building quantity takes</td>
+<td><strong>128,953 floats decoded, 0 implausible.</strong> No NaN, no infinity, nothing under <code>1e-6</code> or over <code>1e9</code></td>
+</tr>
+<tr>
+<td><strong><code>DATE_</code> self-consistency</strong> — the four bytes are year, month, day-of-month <strong>and day-of-week</strong>, so each record checks itself</td>
+<td><strong>10,189 real dates; 9,435 carry the weekday their own date falls on</strong></td>
+</tr>
+</tbody>
+</table>
+<p>The 754 that do not are <strong>sentinels, not misreads</strong>, and identifying them is
+itself a result. <strong>750</strong> are the <code>0x0295</code> trend cursor's null value <code>00 01 01 00</code>
+(§10.8) — 1900-01-01 with the weekday byte left at zero. <strong>Four</strong> are <code>0x0989</code>
+request date fields reading month 0 and day 0, which is not a date either. Every
+<code>DATE_</code> in the corpus that carries a real date carries the right weekday for it:
+<strong>9,435 of 9,435</strong>.</p>
 <p>Two structural conventions recur. <strong>CHOICE / tagged union:</strong> several structures begin with a <code>tag_ : UNSIGNED_8</code> followed by one alternative per possible type (e.g. <code>All_points</code>, <code>Alarm_object</code>, <code>Physical_address_Lenum</code>); the tag selects which one alternative is actually present on the wire. <strong>Counted array:</strong> a <code>nrOf&lt;x&gt; : UNSIGNED_16</code> immediately precedes its <code>&lt;x&gt; : &lt;T&gt;[]</code> array. [S]</p>
 <h3 id="102-shared-sub-types">10.2 Shared sub-types</h3>
 <p>These sub-types appear inside many request/response bodies and are defined once here. Field order is the wire order.</p>
@@ -14729,6 +14784,18 @@ Only the site and BLN names can be compared across nodes.</p>
 </tr>
 </tbody>
 </table>
+<p><strong>The resume key has a wire-observed null value, and it is not zero.</strong> All
+<strong>750</strong> <code>0x0295</code> requests in the corpus carry <code>last_date_time</code> = <code>00 01 01 00</code> —
+year 0, month 1, day 1, day-of-week 0, i.e. <strong>1900-01-01</strong>, the minimum
+representable <code>DATE_</code> rather than an all-zero field. Every one of the 750 is
+that value, so this corpus only ever <em>starts</em> a trend walk and never resumes
+one. <strong>A client beginning a walk sends the epoch, not zeros</strong> — a decoder or
+generator that writes four zero bytes here is writing month 0 and day 0, which
+is not a date. The day-of-week byte is <code>0</code> and 1900-01-01 was a <strong>Monday</strong>, so
+the sentinel does not bother to fill it; that is the one place in the corpus
+where a <code>DATE_</code>'s weekday does not agree with its date, and it is why (§10.1, “exact consumption is not the only test”). [W]</p>
+<p>The responses are the opposite: <strong>9,209 of 9,209</strong> <code>Trend_data.time</code> stamps
+carry the weekday their own date falls on. [W]</p>
 <p><strong><code>AP2_TREND_DATA_DISPLAY</code> response (0x0295)</strong> — <code>name_response</code> + <code>point : All_points</code> + <code>nrOftrend_data:u16</code> + <code>trend_data : Trend_data[]</code> + <code>lenum_address</code> + <code>nrOftrend_dst:u16</code> + <code>trend_dst : Trend_dst[]</code>. Each <strong><code>Trend_data</code></strong> sample: <code>sequence_number:u32, time:DATE_TIME, point_value:Point_value, point_priority, out_of_service:bool, failed:bool, control_status, alarm_priority, acked:bool, in_alarm:bool, in_trouble:bool, commanded_to_alarm:bool, operator_disabled:bool, program_disabled:bool, proof_pending:bool</code>. [S]</p>
 <p><strong><code>AP2_TEC_REMOTE_INIT_VALUE_LOG</code> (0x4221)</strong> and the TEC family carry a <code>TEC_body</code> plus <code>TEC_valid</code> (no/yes/maybe) and the FLN-device init-value records — the FLN/Terminal-Equipment-Controller application init-value model. (1,776 frames observed; one of the routine FLN reads.) [S][W]</p>
 <p><strong>Alarm representative — <code>AP2_POINT_LOG_ALARM</code> response (0x0221)</strong> reuses the <code>name_response</code> + <code>point : All_points</code> + <code>lenum_address</code> + <code>point_extension2</code> shape; the alarm configuration itself is the <code>Alarm_object</code> CHOICE (tagged by <code>Alarm_object_type</code>: no_alarming / std_digital / std_single_analog / std_analog / enhanced_<em> / bacnet_alarm_</em>), each alternative carrying <code>Alarm_level[]</code> records (<code>offset:FLOAT_, alarm_priority, category:u8, msg_number:u16</code>). [S]</p>
@@ -18416,11 +18483,11 @@ using the selector-and-resume-key paging idiom of §10.2.3.</p>
 band: the announce carries the fact, the data channel carries the data. [W]</p>
 <h4 id="1613-upl_all_port-0x099f--the-panels-port-table-and-where-baud_rate-was-measured">16.1.3 <code>UPL_ALL_PORT</code> (0x099F) — the panel's port table, and where <code>Baud_rate</code> was measured</h4>
 <p>The sweep's first operation is also one of its most completely decoded. <code>0x099F</code>
-returns one record per port, and <strong>60 of 60 bodies in the corpus consume
+returns one record per port, and <strong>95 of 95 records in the corpus consume
 exactly</strong>: [W]</p>
 <pre><code>Port_log      port_number : Port_number            u8
               port_status : Port_status
-Port_status   descriptor              TEXT_        (empty in all 60)
+Port_status   descriptor              TEXT_        (empty in 90 of 95)
               baud_rate               Baud_rate    u16 BE      &lt;- TWO bytes
               highlight_enabled       BOOLEAN_
               autobye_enabled         BOOLEAN_
@@ -18439,15 +18506,21 @@ Port_status   descriptor              TEXT_        (empty in all 60)
 That the request types a port number as <code>UNSIGNED8</code> is the independent
 corroboration that <code>Port_number</code> is one byte in the response too. [S]</p>
 <p><strong><code>Baud_rate</code> is two bytes, and this body is what settles it.</strong> At width 1 not a
-single body consumes exactly; at width 2 all 60 do. Better than that, the record
-carries its own oracle: <code>DiagPortString</code> is an ASCII settings string of the form
-<code>;bd=9600;pa=0;mk=0.</code>, and <strong>the decoded <code>Baud_rate</code> enum equals the <code>bd=</code> value
-in all 60 records</strong> — <code>6</code> decoding to <code>baud9600</code> against a literal <code>9600</code> in the
-same message. <code>pa=</code> likewise tracks the record's own port number. A width that
-is right about the byte count <em>and</em> right about the number is not a coincidence.
-[W] The consequence for the enum-width shortcut is in §10.9.</p>
-<p><strong>The ports a panel exposes.</strong> The five records repeat identically across the
-twelve sweeps captured: [W]</p>
+single body consumes exactly; at width 2 every one does. Better than that, the
+record carries its own oracle: <code>DiagPortString</code> is an ASCII settings string of
+the form <code>;bd=9600;pa=0;mk=0.</code>, and <strong>the decoded <code>Baud_rate</code> enum equals the
+<code>bd=</code> value in all 95 records on the wire</strong> — <code>pa=</code> likewise tracks the record's
+own port number.</p>
+<p><strong>And the oracle now agrees at two different values, which one value could never
+establish.</strong> An earlier edition checked it against 60 records that all read
+9600. Walking the whole corpus finds a panel whose HMI port runs at <strong>115.2 k</strong>:
+the enum reads <code>10</code>, <code>Baud_rate_enum</code> declares <code>baud115p2k</code> = 10, and the same
+message's <code>DiagPortString</code> says <code>bd=115200</code>. <strong>95 of 95 agree, across <code>6</code>→9600
+(×94) and <code>10</code>→115200 (×1).</strong> A decode that is right about the byte count, right
+about the number, and right about a <em>second</em> number in a different record is not
+a coincidence. [W] The consequence for the enum-width shortcut is in §10.9.</p>
+<p><strong>The ports a panel exposes.</strong> The same five records appear on every panel, and
+the <code>PortName</code> values are identical across all nineteen sweeps: [W]</p>
 <table>
 <thead>
 <tr>
@@ -18478,19 +18551,71 @@ twelve sweeps captured: [W]</p>
 </tr>
 </tbody>
 </table>
-<p><strong>What this body does <em>not</em> establish, stated plainly.</strong> Every one of the 60
-records carries <code>baud_rate</code> 9600, <code>port_type</code> 0, all four booleans clear, and an
-empty <code>descriptor</code>. So the <strong>widths</strong> are pinned by exact consumption but the
-<strong>value spaces</strong> are not exercised at all: <code>Port_type</code> has a second member that
-never appears, and no port on this panel runs at any other rate. A decoder built
-from this will walk any port record correctly and has been shown nothing about
-what the fields mean when they are non-zero. <strong>[OPEN]</strong> [W]</p>
+<p><strong>What this body does and does not establish.</strong> The corpus carries <strong>95</strong> port
+records — <strong>19 sweeps of 5 ports, and the sweeps are five <em>distinct panels</em> on
+the same BLN</strong>, not one panel read repeatedly. Eighteen sweeps are entirely
+default. <strong>One panel differs on all five of its ports</strong>, and it is the only
+reason any of these value spaces is exercised at all: [W]</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>18 sweeps (90 records)</th>
+<th>the outlier panel (5 records)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>baud_rate</code></td>
+<td>9600 on all</td>
+<td><strong>115.2 k on the HMI port</strong>, 9600 on the other four</td>
+</tr>
+<tr>
+<td><code>alarm_printing_enabled</code></td>
+<td>0 on all</td>
+<td><strong>1 on HMI, USB Tool and USB Printer</strong></td>
+</tr>
+<tr>
+<td><code>report_printing_enabled</code></td>
+<td>0 on all</td>
+<td><strong>1 on HMI</strong></td>
+</tr>
+<tr>
+<td><code>descriptor</code></td>
+<td>empty on all</td>
+<td><strong>one character, numeric, on all five</strong></td>
+</tr>
+<tr>
+<td><code>port_type</code></td>
+<td>0 on all</td>
+<td>0 on all</td>
+</tr>
+<tr>
+<td><code>highlight_enabled</code>, <code>autobye_enabled</code></td>
+<td>0 on all</td>
+<td>0 on all</td>
+</tr>
+</tbody>
+</table>
+<p>So three of the six value spaces <strong>are</strong> exercised, and an earlier edition said
+none of them was — a statement about the 60-record analysis sample (§1.4.1.1),
+which stopped before it reached the fifth panel. What genuinely stays
+unexercised is narrower: <strong><code>Port_type</code> reads 0 on all 95</strong>, so its second member
+still never appears. <strong>[OPEN]</strong> [W]</p>
+<p>The variation lands exactly where the firmware says it should, which is the
+useful part. §16.1's next paragraph reports that the encoder writes
+<code>highlight_enabled</code> and <code>autobye_enabled</code> as literal constants while fetching
+<code>alarm_printing_enabled</code> and <code>report_printing_enabled</code> from the object. <strong>The two
+constants read zero on all 95 records and the two fetched fields are precisely
+the two that vary</strong> — an independent wire confirmation of a claim that had rested
+on the binary alone. [W][F]</p>
 <p><strong>Two of the four booleans are not fields at all.</strong> The panel's port encoder
 writes <code>highlight_enabled</code> and <code>autobye_enabled</code> as <strong>literal zero</strong> — not read
 from the port record, written as a constant — while <code>alarm_printing_enabled</code> and
 <code>report_printing_enabled</code> are fetched from the object. So those two reading zero
-in all 60 captures is not a sample of a quiet site; <strong>this firmware cannot emit
-anything else</strong>. A decoder should carry them as reserved-zero rather than as
+in all <strong>95</strong> records is not a sample of a quiet site; <strong>this firmware cannot
+emit anything else</strong> — and the table above shows the other two doing the
+opposite on the one panel that has printing configured. A decoder should carry them as reserved-zero rather than as
 state, and a virtual panel should write zero. [F]</p>
 <p>One thing worth noting for §17: this is an <strong>unauthenticated read that
 enumerates a panel's console and management ports by name</strong> — the Telnet port
