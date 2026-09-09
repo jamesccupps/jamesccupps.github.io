@@ -17386,6 +17386,52 @@ that describes exactly that condition: <code>by_priority</code> for a point held
 <blockquote>
 <p>Implementation caution: a field/application document's "COV limit" or "DISPLAY RES" describes the <strong>local operator-display deadband</strong> of a TEC, which explicitly does NOT affect networked values. Do not treat that local display setting as the network COV subscription resolution specified here. [D]</p>
 </blockquote>
+<p><strong>Measured: the report rate here is nowhere near one per 100 seconds, and an
+implementer must not size for it.</strong> Every bullet above is <code>[D]</code>. The "roughly one
+report per 100 seconds" target is the one that is a number, so it was measured
+across all <strong>120,763</strong> <code>0x0274</code> pushes — 151 distinct points, <strong>119,410</strong>
+intervals between consecutive reports of the same point, computed within a
+capture so that gaps between captures are not counted: [W]</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>median interval</td>
+<td><strong>0.62 s</strong></td>
+</tr>
+<tr>
+<td>p75 / p90</td>
+<td>2.0 s / 28.8 s</td>
+</tr>
+<tr>
+<td>longest</td>
+<td>2,713 s</td>
+</tr>
+<tr>
+<td><strong>under 10 s</strong></td>
+<td><strong>103,814 of 119,410 — 86.9%</strong></td>
+</tr>
+<tr>
+<td>in a generous 50–200 s band</td>
+<td>1,114 — <strong>0.9%</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>A receive path provisioned for one report per point per 100 s would be
+under-built by about two orders of magnitude.</strong> Two points alone account for
+55% of all pushes in the corpus.</p>
+<p>That does not refute the vendor's description, and the distinction matters.
+Dynamic COV is described as <em>auto-tuning a noisy point so it does not flood the
+network</em> — a governor that engages on the points that need it. What the corpus
+shows is that either it is not enabled here, or it is not engaging on points
+reporting sub-second, which two readings this evidence cannot separate.
+<strong>[OPEN]</strong> What the corpus does settle is the planning figure: <strong>size for the
+observed rate, not the documented target.</strong> [W][D]</p>
 <hr>
 <h2 id="13-alarming">13. Alarming</h2>
 <p>Alarming is the panel's autonomous evaluation of points against limits and proof, and the reporting of alarm transitions to operators and destinations. Alarm reporting reaches the network either as a dedicated unsolicited alarm report or as a COV with the <code>alarm</code> mask bit set (§12.2); a subscriber may learn of an alarm by either path. [D]</p>
