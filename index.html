@@ -4558,6 +4558,17 @@ families are shaped as they are: [S]</p>
 </tr>
 </tbody>
 </table>
+<p><strong>Three of these have an unmistakable wire counterpart; the rest have none.</strong>
+<code>Request</code>/<code>Response</code> is the confirmed exchange of §7.1, seen throughout.
+<code>ReadEventInd</code> is the unconfirmed COV/alarm push, which the direction byte marks
+directly (§6.3). <code>GetFirst</code>/<code>GetNext</code> is the range-and-resume cursor of §10.2.3
+— <strong>62,076</strong> resume-key fields are decoded in the corpus. The remaining four —
+<code>ReturnData</code>, <code>ReadConfirmedInd</code>, <code>NetMgrRequest</code>, <code>SourceData</code> — are names for
+paths <em>inside</em> the stack and carry <strong>no distinguishing field on the wire</strong>: a
+decoder cannot tell them from an ordinary exchange and should not try to. Read
+this table as an explanation of why the opcode families are shaped as they are,
+which is what it is for, and not as a set of message types to dispatch on.
+[W][S]</p>
 <p>The <strong><code>GetFirst</code> / <code>GetNext</code> / <code>CancelGetNext</code> triple is the same cursor idiom</strong>
 §7.2's continuation discussion describes at the application layer: enumeration
 is a stack-level concept, not a per-opcode convention, which is why the
@@ -16658,6 +16669,50 @@ lenum_address, user_profile, point_extension2
 <p>The BACnet object and the P2 point are <strong>fields of the same body</strong>. That is the
 join: not a mapping table the supervisor maintains, but a single record that
 declares a point twice.</p>
+<p><strong>And the structure set proves it rather than asserting it.</strong> There is a second,
+plain family this section did not mention — <code>AP2_POINT_ADD_&lt;LTYPE&gt;</code> at
+<code>0x0200</code>–<code>0x020F</code> — and the BACnet form is a <strong>strict superset of it</strong>.
+<code>AP2_Point_Add_LAO_Request</code> declares five fields;
+<code>AP2_BAC_Point_Add_LAO_Request</code> declares the same five plus exactly four more:
+<code>bac_data_revision</code>, <code>bac_data_size</code>, <code>bac_props_common</code>, <code>bac_point_base</code>.
+Nothing is renamed, reordered or dropped. <strong>The BACnet point-add is the P2
+point-add with a BACnet block bolted on</strong>, which is a stronger statement of the
+join than the field list alone. [S]</p>
+<p><strong>Which of the two you can actually use is the opposite of what this section
+implies.</strong> [W][S]</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>opcodes</th>
+<th>in the shipped catalog</th>
+<th>observed</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>plain <code>AP2_POINT_ADD_&lt;LTYPE&gt;</code></td>
+<td><code>0x0200</code>–<code>0x020F</code>, sixteen</td>
+<td><strong>all sixteen</strong></td>
+<td><strong>yes</strong> — <code>0x0203 LAO</code> ×2, <code>0x0204 LAI</code> ×8</td>
+</tr>
+<tr>
+<td><code>AP2_BAC_Point_Add_&lt;LTYPE&gt;</code></td>
+<td><strong>none known</strong></td>
+<td><strong>none</strong></td>
+<td><strong>no</strong></td>
+</tr>
+</tbody>
+</table>
+<p>The thirteen <code>AP2_BAC_Point_Add_*</code> structures are in the vendor's type system and
+in no opcode mapping, so <code>p2_asdu.py</code> prunes them (it carries only structures an
+operation can reach, §10.9) and the shipped decoder cannot walk one. Nor has any
+been seen: the corpus contains no BACnet point-add traffic at all.</p>
+<p>So treat this section as <strong>the type system's account of how the two identities
+are joined</strong>, which it establishes well, and not as an operation you can invoke.
+If you need to create a point over P2 today, the plain family is the one that is
+mapped, shipped and observed. Finding the opcode that carries the BACnet form is
+<strong>[OPEN]</strong>.</p>
 <p><strong>Twelve of the sixteen P2 point types have a typed form.</strong> [S]</p>
 <table>
 <thead>
@@ -19461,6 +19516,12 @@ system, a guest-room controller — represents that device with <strong>the same
 point-team model</strong>: an application number resolving to an ordered member list,
 each member typed and scaled exactly as §11 describes. Roughly seventeen device
 families are carried this way. [S]</p>
+<p><strong>The wire shows one of them.</strong> <code>application_number</code> is decoded <strong>291</strong> times
+across the corpus and takes exactly <strong>three</strong> distinct values: <code>0</code>, and the two
+spellings of the unset sentinel (<code>-1</code> / <code>65535</code>, §9.5.1). So the uniform model is
+a claim about the vendor's library — a good source for it, and the right one —
+but this site runs a single application, and nothing here tests the claim for the
+other sixteen families. [W]</p>
 <p>What matters to an implementer is that they are not each modelled differently.
 <strong>Sixteen of the seventeen families carry a common diagnostics team</strong>, so a
 client that understands it can report on a gateway-attached device of any
@@ -19520,6 +19581,12 @@ exposed as points, which means gateway tuning is reachable through the ordinary
 point-command path rather than through any special operation. [S]</p>
 <h3 id="164-reading-a-controller-application-from-a-live-panel">16.4 Reading a controller application from a live panel</h3>
 <p>The upload opcodes for the application/team model: <code>0x0986 AP2_UPL_ALL_TEC</code> (upload all TEC application data), <code>0x400F AP2_TEAM_DESC_UPLOAD</code> (upload a point-team descriptor), <code>0x4015/0x4016 AP2_TEAM_DESC_DB_CHANGE / TEAM_MEMBER_DB_CHANGE</code> (team DB-change replication). Walking <code>0x0986</code> for a panel returns its loaded controller applications, which a client resolves against the master <code>.ptd</code>/DBF library by application number + revision. [S]</p>
+<p><strong>Two of those four opcodes are exercised here and two are not.</strong> <code>0x0986</code>
+carries <strong>2,019</strong> bodies in the corpus and <code>0x400F</code> carries <strong>38</strong>, so the upload
+path is wire-confirmed. <code>0x4015</code> and <code>0x4016</code> carry <strong>none</strong> — the team
+DB-change replication path is described from the type system alone, and a client
+that relies on being notified of a team change has no evidence here that the
+notification arrives. <strong>[OPEN]</strong> [W]</p>
 <h3 id="1641-ap2_services_rendered--the-capability-document">16.4.1 <code>AP2_SERVICES_RENDERED</code> — the capability document</h3>
 <p>Immediately after the <code>0x010C</code> identity read sit two further operations:
 <code>0x010D</code> <code>AP2_SERVICES_RENDERED</code> and <code>0x010E</code>
