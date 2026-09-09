@@ -14798,6 +14798,40 @@ Only the site and BLN names can be compared across nodes.</p>
 <p><strong><code>Node_Choice</code></strong> (target selector for node-management ops) — CHOICE: <code>all_nodes : NULL_</code> or <code>single_node : UNSIGNED8</code> (node number). Used by the <code>SET_NODE_STATE</code> / cabinet online-offline family. [S]</p>
 <p><strong><code>Cov_data</code></strong> (BLN COV-share table entry) — <code>destination_panel : UNSIGNED16</code> + <code>cov_mask : Cov_mask</code>. Defines which panel receives which change classes (the cross-BLN COV share). [S]</p>
 <p>The EBLN host-table, MII, IP, and MAC display/configure ops (0x462D–0x463E) carry the corresponding <code>IP_Address_Settings</code> / <code>MII_Data</code> / <code>Mac_Address</code> sub-types from §10.5, and the host-table entry add/remove ops carry a host name + IP. The replication family (0x4633–0x4636, 0x464C) carries <code>Repl_Cmd_Type</code> (unknown/add/delete) records and node-roster grains (<code>Grain_Type</code> enum: node_list_entry, storage_node_db, user_acc_entry, hosttbl_entry, addresstbl_entry, …). [S]</p>
+<p><strong>Two of the three families above have never been seen on the wire, and the
+third has.</strong> The distinction matters because <code>[S]</code> gives the same tag to a
+structure in daily use and one nobody has ever observed: [W]</p>
+<table>
+<thead>
+<tr>
+<th>structure</th>
+<th>carried by</th>
+<th>status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Node_Choice</code></td>
+<td><code>0x0034 SET_NODE_STATE</code> and the cabinet online/offline family</td>
+<td><strong>never observed</strong> — the opcode appears in the panel firmware table but in no capture</td>
+</tr>
+<tr>
+<td><code>Cov_data</code></td>
+<td><code>0x0275 XREF_COV_DISPLAY</code></td>
+<td><strong>never observed</strong> — likewise, and no <code>Cov_mask</code> in the corpus sits in a <code>Cov_data</code> row; all 13,400 are on the two subscription requests (§12.2)</td>
+</tr>
+<tr>
+<td>replication grains</td>
+<td><code>0x4633</code>–<code>0x4636</code>, <code>0x464C</code></td>
+<td><strong>wire-observed</strong>, extensively</td>
+</tr>
+</tbody>
+</table>
+<p>So the BLN COV-share table and the node-state selector are described from the
+type system alone. Their field order and widths are as reliable as any other
+<code>[S]</code> claim, and <strong>nothing here demonstrates that a panel answers either
+opcode</strong> — which is a separate question, and the one an implementer is actually
+asking. <strong>[OPEN]</strong> [S][W]</p>
 <h3 id="108-upload--ppcl--tec--trend--alarm-representatives">10.8 Upload / PPCL / TEC / trend / alarm representatives</h3>
 <p><strong><code>AP2_UPL_ALL_POINT</code> request (0x0981)</strong> — bulk point upload; body is a single <code>name_search : Name_search</code> (the class/range selector). Response reuses the <code>POINT_LOG_VALUE</code> response shape (§10.3), iterated. The whole <code>UPL_ALL_*</code> family (0x0982–0x09C3) follows the same pattern: a <code>Name_search</code>/<code>*_search</code> request, a per-record response paged via the <code>last_*</code> resume keys. [S][W]</p>
 <p><strong><code>AP2_Ppcl_Program_Display</code> response (0x410A)</strong> — a single <code>PPCL_data</code> record (programs are returned line-by-line). [S]</p>
@@ -17821,6 +17855,19 @@ as <strong>[OPEN]</strong>.</p>
 <p>The complete set of names a program may not use as a point name, grouped by
 role. This is the language's actual surface, and it is the authority for
 spelling — the token names of the table above are identifiers, not syntax. [D]</p>
+<p><strong>It constrains PPCL source, not the point database, and the difference is
+load-bearing for a client.</strong> Checked against <strong>360,839</strong> name-like strings on
+the wire: 89 of the words below never appear as a name — and <strong><code>ALARM</code> does</strong>,
+eight times, both as a point <code>name</code> and as a <code>last_name</code> enumeration cursor. The
+frames are ordinary panel and supervisor traffic, not this project's probes
+(§99.1). [W]</p>
+<p>A point called <code>ALARM</code> therefore exists and the panel enumerates it happily.
+What the rule means is that a <em>program</em> cannot write <code>ALARM</code> to refer to that
+point, because in PPCL the word is a keyword — the constraint lives in the
+language, not in the naming layer or on the wire. <strong>A client must not reject or
+rewrite a name for being reserved</strong>; it will reject names the panel itself
+serves. The list is a PPCL authoring constraint and should be applied only when
+generating or parsing PPCL source (§14). [W][D]</p>
 <table>
 <thead>
 <tr>
@@ -18583,6 +18630,16 @@ writes are not static tuning constants: they are the panel's learned state, and
 overwriting them discards what the zone has learned about its own thermal
 response. A tool that round-trips an SSTO configuration must preserve them
 byte-for-byte rather than re-deriving them from the setpoints. [D]</p>
+<p><strong>The opcodes are wire-observed; the adaptive claim is not, and cannot be tested
+here.</strong> All four SSTO families appear in the corpus — <code>DBCHANGE_SSTO_*</code>,
+<code>UPL_ADDED_SSTO_*</code>, <code>UPL_ALL_SSTO_*</code> and <code>EQS_SSTO_SETUP_*</code> — and their bodies
+decode, so the structures above are <code>[W]</code>-supported. <strong>The behavioural claim is
+not.</strong> Demonstrating that the coefficients are <em>learned</em> would need the same
+zone's blocks read at two separated times and seen to differ; the corpus carries
+62 SSTO records in which most fields take only two distinct values, which is
+equally consistent with a couple of zones whose coefficients simply did not move
+during the capture window. So preserve them byte-for-byte on the strength of the
+vendor's description, not of anything measured here. <strong>[OPEN]</strong> [W][D]</p>
 <p><strong>The zone model those blocks hang off.</strong> An EQS <strong>zone</strong> is a schedulable
 building resource — typically a room or a floor — and is composed of points plus
 three things: its <strong>operating modes</strong> (the mode states the zone runs in), a
