@@ -1714,6 +1714,13 @@ must not assume a cross-BLN reference will resolve. [D]</p>
 </ul>
 <p>The 24-hour tombstone and the auto-replication are why stale roster entries persist and propagate across a BLN — relevant to the accumulation behavior discussed in the findings, and the reason an implementer should expect a roster to contain entries for nodes not currently reachable. [D][I]</p>
 <h4 id="361-node-states">3.6.1 Node states</h4>
+<blockquote>
+<p><strong>No node-state field is decoded anywhere in the corpus.</strong> The states below are
+the type system's, and the opcodes that would carry them — <code>0x0034
+SET_NODE_STATE</code> and its siblings — appear in the panel firmware table and in
+no capture (§10.7). Nothing here is contradicted by the wire; nothing is
+confirmed by it either. <strong>[OPEN]</strong> [S][W]</p>
+</blockquote>
 <p>A node-table entry carries a state. The node-state vocabulary (the values an entry can hold, and the events that transition it) is the liveness taxonomy: [S]</p>
 <table>
 <thead>
@@ -3976,6 +3983,15 @@ up to 14 requests pipelined outstanding (§6.5):</p>
 absolute guarantees. The ordering is the durable observation: pings and COV are cheap, point read/write
 are mid-cost, and trend retrieval is the slowest by an order of magnitude over pings. [W]</p>
 <h4 id="721-error-classes-vendor-ap2-error-taxonomy">7.2.1 Error classes (vendor AP2 error taxonomy)</h4>
+<blockquote>
+<p><strong>This taxonomy is not carried in a body.</strong> A P2 error rides the direction byte
+<code>0x05</code> with the code in the frame, not as a field inside a response body — the
+corpus decodes essentially no error-typed body field. So the classes below are
+the vendor's organising scheme for the codes, and the <strong>wire-observed counts
+for the codes themselves are in §7.2.2</strong>, which catalogs all 42 with their
+frequencies. Read the two together: this section for what a class means,
+§7.2.2 for what actually happens. [S][W]</p>
+</blockquote>
 <p>The vendor codec defines a fixed set of AP2 error classes (C++ RTTI types in the codec, mirrored as
 named members in the managed type system). These are the definitional error categories; the wire
 carries a numeric code (§7.2.2) that maps onto them. [S]</p>
@@ -17040,6 +17056,14 @@ the panel evidently tolerates it. A client should send <code>0x00FF</code>. [W][
 <p>The panel also maintains a <strong>COV cross-reference</strong> (which peers are subscribed to which points), readable via <code>AP2_Xref_COV_Display</code> — its response is a count-prefixed array of <code>Cov_data = { destination_panel: u16, cov_mask }</code> rows, i.e. for each subscribing panel the mask it holds. [S]</p>
 <h3 id="123-the-annunciate--value-payload">12.3 The annunciate / value payload</h3>
 <h4 id="1231-field-model">12.3.1 Field model</h4>
+<blockquote>
+<p><strong>Unusually for this document, every field below is heavily exercised.</strong> All
+fifteen are decoded on <strong>120,763</strong> <code>0x0274</code> bodies — the same count for each,
+which is itself the check that the record is fixed-shape with no optional
+members. Where other sections in this pass had to disclose that a mechanism
+was never observed, this one is the opposite case and the reader can rely on
+it. What the fields' <em>values</em> do and do not exercise is §12.3.2. [W]</p>
+</blockquote>
 <p>The body the panel pushes for each changed point is the <code>Annunciate_request</code> record. Its fields are the <strong>complete dynamic state</strong> of a point (the static definition attributes — name, descriptor, limits, slope/intercept, units, proof delay — are not carried; they come from the point-definition record, §11.4/§11.5). [S]</p>
 <table>
 <thead>
@@ -17854,6 +17878,17 @@ the capacity of the host/node-name table of §5.3, which is a separate structure
 treat 100 as the ceiling on liveness-addressable nodes and the table's own limit
 as <strong>[OPEN]</strong>.</p>
 <h3 id="143-statement--keyword-vocabulary">14.3 Statement / keyword vocabulary</h3>
+<blockquote>
+<p><strong>Roughly half of this vocabulary appears in the programs this site runs.</strong>
+Across the <strong>2,644</strong> PPCL lines decoded from the wire, <strong>35 of the 66</strong>
+keywords below occur — led by <code>IF</code> ×603, <code>THEN</code> ×599, <code>GOTO</code> ×446, <code>EQ</code> ×426,
+<code>ON</code> ×372, <code>OFF</code> ×312. Thirty-one never appear, including every trigonometric
+function, both <code>SSTO</code> forms, <code>TOD</code>/<code>TODMOD</code>, the alarm-limit words
+<code>HLIMIT</code>/<code>LLIMIT</code>, and <code>AUTO</code>. That is a statement about <strong>one site's
+programs</strong>, not about the language: an absent keyword is one nobody here
+wrote, and a parser must still accept all 66. It does say which half of the
+language a decoder will meet first. [W][S]</p>
+</blockquote>
 <p>PPCL statements fall into functional categories; the panel stores each statement with a <strong>token byte</strong> identifying the statement type. The complete token set is the 71-entry statement-type table (vendor enum <code>PPCL_statement_type</code>, members prefixed <code>WHOP*</code> = "what-opcode"); it is reproduced in full in the appendix (cross-ref Appendix — PPCL statement-type token table). [S] The functional grouping: [D/S]</p>
 <table>
 <thead>
@@ -18498,6 +18533,16 @@ may carry. Both are 16 and they are unrelated. [D]
 <p>Mode semantics: <strong>DAY = occupied</strong>, <strong>NIGHT = the complement</strong> (unoccupied). <code>TODSET</code> re-evaluates the schedule after a power failure and carries a <strong>recommand flag</strong> controlling whether the schedule re-issues its current command on restart. [D]</p>
 <p>The schedule day index that selects which day-class applies is the <code>Schedule_days</code> enum: <code>Sunday</code>=0 … <code>Saturday</code>=6, then <code>Replacement1</code>–<code>Replacement7</code> (values 7–13) for special/replacement (e.g. holiday-override) days. [S]</p>
 <h3 id="152-tod-opcodes-per-point-time-of-day-scheduling">15.2 TOD opcodes (per-point time-of-day scheduling)</h3>
+<blockquote>
+<p><strong>Nothing in this section has been seen on the wire.</strong> All <strong>seventeen</strong> TOD
+opcodes carry <strong>zero</strong> bodies in the corpus — the whole per-point time-of-day
+family is unexercised here. Field order and widths below are as reliable as
+the type system that declares them, and <strong>no panel in this corpus has been
+shown to answer any of these opcodes</strong>. Scheduling at this site is done
+through the EQS family (§15.3) instead, which is heavily observed. Treat this
+section as a specification to build against and test, not as confirmed
+behaviour. <strong>[OPEN]</strong> [S][W]</p>
+</blockquote>
 <table>
 <thead>
 <tr>
