@@ -907,7 +907,7 @@ something all five share, it is still one site.</p>
 frames, the direction split, the <code>msg_type</code> distribution — are over the whole
 corpus. <strong>Body-level figures are not.</strong> Bodies are cached for analysis at the
 <strong>first 60 per opcode</strong>, taken in capture order, giving <strong>4,377 bodies out of
-444,547</strong> actually on the wire. So a phrase like "60 of 60 bodies consume
+444,961</strong> actually on the wire. So a phrase like "60 of 60 bodies consume
 exactly" means 60 <em>sampled</em> bodies, and for a high-volume opcode those 60 come
 from one moment in one capture: <code>0x0274 COV_ANNUNCIATE</code> alone carries 120,764.</p>
 <p>This does not weaken the structural claims and does weaken the negative ones.
@@ -3662,7 +3662,7 @@ final segment's length is <code>total - cursor</code>. The sender knows <code>to
 begins, and the command object carries an explicit more-follows field, set on the
 segmenting path and cleared on the direct one. [S]</p>
 <p><strong>The ceiling is not exercised by anything we have captured</strong>, and this is one
-of the few figures a full-corpus walk did not move. Across all <strong>444,547</strong>
+of the few figures a full-corpus walk did not move. Across all <strong>444,961</strong>
 bodies on the wire — not the analysis sample of §1.4.1.1 — <strong>no body exceeds
 16,382 B and the largest is 1,570 B</strong>, a <code>0x0295</code> trend response. The largest
 <em>declared</em> body is the 12,073-byte replication data store of §9.5. So a client
@@ -5579,7 +5579,7 @@ a separate and shorter budget at 16 (§10.3). [D][W]</p>
 </tr>
 </tbody>
 </table>
-<p><strong>Seven of the sixteen arms are exercised; the other nine stay <code>[OPEN]</code></strong> — <code>looap</code>, <code>l2sp</code>, <code>looal</code>, <code>lfssl</code>, <code>lfssp</code>, <code>ldao</code>, <code>lfmsl</code>, <code>lfmsp</code>, <code>ppcl_lai</code>. An earlier edition said ten and listed <code>lpaci</code> among them; that was true of the 60-body sample and false of the corpus, which carries <strong>two</strong> <code>lpaci</code> bodies (§1.4.1.1). Walking all 444,547 bodies gives the arm counts as <code>lao</code> 13,499, <code>ldo</code> 5,068, <code>lai</code> 3,909, <code>ldi</code> 1,318, <code>lenum</code> 421, <code>l2sl</code> 146, <strong><code>lpaci</code> 2</strong>. [W] That is the same ceiling §10.9 describes: this site runs six point types, and no amount of further reading of this capture set will produce a seventh. [W][OPEN] For the replication change-record framing the interior offsets remain <strong>[OPEN]</strong>; treat byte-offset claims there as inferred.</p>
+<p><strong>Seven of the sixteen arms are exercised; the other nine stay <code>[OPEN]</code></strong> — <code>looap</code>, <code>l2sp</code>, <code>looal</code>, <code>lfssl</code>, <code>lfssp</code>, <code>ldao</code>, <code>lfmsl</code>, <code>lfmsp</code>, <code>ppcl_lai</code>. An earlier edition said ten and listed <code>lpaci</code> among them; that was true of the 60-body sample and false of the corpus, which carries <strong>two</strong> <code>lpaci</code> bodies (§1.4.1.1). Walking all 444,961 bodies gives the arm counts as <code>lao</code> 13,499, <code>ldo</code> 5,068, <code>lai</code> 3,909, <code>ldi</code> 1,318, <code>lenum</code> 421, <code>l2sl</code> 146, <strong><code>lpaci</code> 2</strong>. [W] That is the same ceiling §10.9 describes: this site runs six point types, and no amount of further reading of this capture set will produce a seventh. [W][OPEN] For the replication change-record framing the interior offsets remain <strong>[OPEN]</strong>; treat byte-offset claims there as inferred.</p>
 <p>For the byte-level grammar of each opcode's request and response ASDU, see §9; for the point-model structures (value blocks, multistate enum tables, FLN-device subpoints, slope/intercept scaling) these primitives compose into, see §11.</p>
 <h2 id="9-function-code-opcode-catalog">9. Function-Code (Opcode) Catalog</h2>
 <p>Every P2 request, panel-originated push, and response is dispatched on a single 2-byte field, the <strong>AP2 function code</strong> (the wire opcode). This section catalogs that field. §10 then gives the body (ASDU) structures that follow each opcode.</p>
@@ -12309,7 +12309,7 @@ observation, not a protocol constant.</p>
 body can consume to exactly zero remainder and still be read <strong>one byte out</strong> —
 the widths would sum correctly while every field sat in the wrong place. Two
 checks catch that and neither depends on the structure library being right about
-<em>meaning</em>, only about <em>position</em>. Both were run over all <strong>444,547</strong> bodies on
+<em>meaning</em>, only about <em>position</em>. Both were run over all <strong>444,961</strong> bodies on
 the wire, not the analysis sample (§1.4.1.1): [W]</p>
 <table>
 <thead>
