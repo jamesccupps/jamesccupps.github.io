@@ -16901,6 +16901,53 @@ that window behind.</p>
 AP2_COV_Disable_Request =  name_response : Name_response ,  cov_mask : Cov_mask
 </code></pre>
 <p><code>Cov_mask</code> is carried by exactly three structures — those two and <code>Cov_data</code>, the cross-reference record below. So on the P2 wire a subscription is defined by the <strong>mask alone</strong>: which transitions generate a report. The granularity enum is declared but unreachable through these opcodes, and is most likely a supervisor-internal or BACnet-side concept (the library does carry a separate <code>Bacnet_COV_Destination</code>). An implementer building a subscriber sets mask bits and nothing else. [S]</p>
+<p><strong>What is actually sent, and the warning in it.</strong> The bit table above is the type
+system's; this is the wire. Every <code>Cov_mask</code> in the corpus — <strong>13,400</strong> of them,
+a full walk and not a sample — takes one of <em>three</em> values: [W]</p>
+<table>
+<thead>
+<tr>
+<th>opcode</th>
+<th>mask</th>
+<th style="text-align: right;">×</th>
+<th>bits set</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0x0271 COV_ENABLE</code></td>
+<td><code>0x00FF</code></td>
+<td style="text-align: right;"><strong>6,182</strong></td>
+<td>all eight declared classes</td>
+</tr>
+<tr>
+<td><code>0x0271 COV_ENABLE</code></td>
+<td><code>0xFFFF</code></td>
+<td style="text-align: right;">1,176</td>
+<td>all eight, plus bits 8–15 that are not declared</td>
+</tr>
+<tr>
+<td><code>0x0273 COV_DISABLE</code></td>
+<td><code>0x0000</code></td>
+<td style="text-align: right;"><strong>6,042</strong></td>
+<td>none</td>
+</tr>
+</tbody>
+</table>
+<p>Two things follow, and neither is visible from the type system alone.</p>
+<p><strong>Selective subscription is unobserved.</strong> Every enable in this corpus asks for
+<strong>all eight classes</strong>; not one asks for a subset. The bit table invites a client
+to subscribe to, say, <code>data</code> alone, and <strong>nothing here demonstrates that a panel
+honours a partial mask</strong> — an implementer who tries it may get everything, or
+nothing, and the document cannot say which. Build the all-classes subscription
+first, confirm it works, and treat any narrowing as untested. <strong>[OPEN]</strong> [W]</p>
+<p><strong>On disable the mask carries no information.</strong> All 6,042 disables send zero, so
+the field is structurally present and semantically vestigial on that opcode —
+<code>0x0273</code> unsubscribes the named point wholesale. Do not expect to clear
+individual classes with it. [W]</p>
+<p>That both <code>0x00FF</code> and <code>0xFFFF</code> are accepted for "all" is worth noting for a
+panel implementer rather than a client one: the upper byte is undeclared, and
+the panel evidently tolerates it. A client should send <code>0x00FF</code>. [W][I]</p>
 <p>The panel also maintains a <strong>COV cross-reference</strong> (which peers are subscribed to which points), readable via <code>AP2_Xref_COV_Display</code> — its response is a count-prefixed array of <code>Cov_data = { destination_panel: u16, cov_mask }</code> rows, i.e. for each subscribing panel the mask it holds. [S]</p>
 <h3 id="123-the-annunciate--value-payload">12.3 The annunciate / value payload</h3>
 <h4 id="1231-field-model">12.3.1 Field model</h4>
