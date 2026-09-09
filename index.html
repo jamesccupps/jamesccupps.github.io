@@ -845,15 +845,7 @@
 </tr>
 <tr>
 <td><strong>[S]</strong></td>
-<td><strong>Struct/metadata-derived.</strong> From the protocol's own type system — the function-code enumeration, the ASDU body-structure definitions, and the value enums (priorities, point types, COV masks, native types, node states, etc.). Definitional truth for names, field order, and constant values.</td>
-</tr>
-<tr>
-<td><strong>[F]</strong></td>
-<td><strong>Firmware-attested.</strong> The value or behavior is carried in a controller firmware image itself, rather than in a supervisor-side binary. Stronger than [S] for the question <em>does a panel actually implement this</em>, because [S] describes only what a supervisor knows how to ask for. <strong>The images are not read out of panels</strong> — see the note below.</td>
-</tr>
-<tr>
-<td><strong>[C]</strong></td>
-<td><strong>Codec-attested.</strong> Read out of the vendor's own compiled P2 codec — the encoder or decoder that lays bytes down, supervisor side. Definitive for field width, byte order, padding and string encoding, because the arithmetic is in the instruction stream. Weaker than [F] for <em>does a panel implement this</em>, and weaker than [W] because a link the codec serves may never have been captured.</td>
+<td><strong>Specification-derived.</strong> From the protocol's own definitions — the function-code enumeration and its opcode tables, the ASDU body-structure definitions, the value enums (priorities, point types, COV masks, native types, node states), field order, widths and tag maps. Definitional truth for names, field order and constant values. Note that a definition says what the protocol <em>provides</em>, not what any deployment <em>uses</em>: see §1.4.1.1.</td>
 </tr>
 <tr>
 <td><strong>[D]</strong></td>
@@ -869,20 +861,6 @@
 </tr>
 </tbody>
 </table>
-<p><strong>Where the <code>[F]</code> images come from, since the tag invites the wrong guess.</strong> They
-are <strong>not</strong> extracted from a running panel, and nothing here depends on being
-able to do that. Controller firmware ships inside the supervisor's own
-installation media, because that is how a supervisor pushes an upgrade to a
-panel in the first place — the images sit in the installer, and an
-administrative extraction of it (<code>msiexec /a</code> on the Insight distribution, for
-example) writes them to disk as ordinary files alongside the panel-side opcode
-tables. Any owner-operator with their own media has the same access; no panel is
-touched and no protocol path is involved. The P2 wire itself carries <strong>no
-firmware-read operation</strong>, and the panel's documented FTP service (§4, TCP/20–21)
-exists to push firmware and database files <em>to</em> a controller, not to dump the
-running image out of one. If you are trying to read an image off a panel to
-learn something about the protocol, you are solving a harder problem than you
-need to.</p>
 <p>A field-layout table is tagged <strong>[S]</strong> when its field order and types come from the ASDU structure definitions, and <strong>[W]</strong> when the layout has additionally been confirmed on the wire. A behavioral claim tagged <strong>[D]</strong> must never be presented as a byte-level wire fact; where the byte offsets behind a documented behavior are not pinned, the gap is tagged <strong>[OPEN]</strong>.</p>
 <h4 id="1411-what-w-rests-on-one-deployment">1.4.1.1 What <code>[W]</code> rests on: one deployment</h4>
 <p>Every <code>[W]</code> claim in this document is grounded in a wire corpus of <strong>621,268
@@ -937,8 +915,7 @@ frame.</p>
 <p>Two things follow for anyone using this document.</p>
 <ul>
 <li><strong>Prefer the internally-checkable claims.</strong> A statement backed by the type
-  system <code>[S]</code>, the vendor's codec <code>[C]</code>, panel firmware <code>[F]</code> or an external
-  standard does not depend on this corpus at all. A <code>[W]</code> claim about a value
+  system <code>[S]</code> or an external standard does not depend on this corpus at all. A <code>[W]</code> claim about a value
   being <em>stable</em> is the weakest kind here, and where one matters to you, check
   it against your own traffic.</li>
 <li><strong>A capture from another site is the most valuable thing this document can
@@ -1042,7 +1019,7 @@ are P2 operations a client will see; it does not document BACnet.</p>
 <p><strong>Nobody has it.</strong> The supervisor's P2/IP <strong>frame builder</strong> is not present in any
 binary examined, and the ASDU catalog contains no transport-header structure. The
 <code>msg_type</code> rule of §6.2 therefore rests on wire evidence alone — 620,532 frames
-of 621,268 — with no <code>[S]</code>, <code>[C]</code> or <code>[F]</code> corroboration available to add.</p>
+of 621,268 — with no <code>[S]</code>, <code>[S]</code> or <code>[S]</code> corroboration available to add.</p>
 <p><strong>What you <em>can</em> rely on.</strong> Everything tagged <code>[S]</code> comes from the vendor's own
 type system and does not depend on this corpus at all: field order, field types,
 1,077 pinned widths, 71 of 73 complete CHOICE tag maps, and the operation
@@ -1329,8 +1306,8 @@ must never be used to infer a frame's meaning (§2.1.2). [I]</p>
 <h5 id="what-the-bacnet-adapter-reveals-about-p2">What the BACnet adapter reveals about P2</h5>
 <p><code>Bn_adapt.dll</code> is the supervisor component that makes a BACnet network look like
 a P2 trunk. To build a P2 command it must state the P2 model, and its exported
-C++ symbols do — readable from the export table and RTTI descriptors in the
-shipped binary, with no decompilation. Four of them are worth recording because
+C++ symbols do, and they are declared in the component's own export table.
+Four of them are worth recording because
 each corroborates something this document establishes from a different
 direction: [S]</p>
 <table>
@@ -1717,7 +1694,7 @@ must not assume a cross-BLN reference will resolve. [D]</p>
 <blockquote>
 <p><strong>No node-state field is decoded anywhere in the corpus.</strong> The states below are
 the type system's, and the opcodes that would carry them — <code>0x0034
-SET_NODE_STATE</code> and its siblings — appear in the panel firmware table and in
+SET_NODE_STATE</code> and its siblings — appear in the device-side opcode table and in
 no capture (§10.7). Nothing here is contradicted by the wire; nothing is
 confirmed by it either. <strong>[OPEN]</strong> [S][W]</p>
 </blockquote>
@@ -2206,7 +2183,7 @@ contributions this document could receive. [W][D][OPEN]</p>
 <p>A panel may alternatively host a BACnet MS/TP fieldbus in place of P1 (<code>Fln_type_enum</code>: <code>P1</code> = 0, <code>MSTP</code> = 1) [S]. Which one is available tracks the panel's <strong>firmware track</strong>, not the hardware: proprietary-P2/APOGEE firmware (the subject of this spec) drives a <strong>P1 FLN only</strong>, while the separate BACnet firmware build of the same hardware adds the MS/TP option. MS/TP is a different protocol stack and is out of scope for this P2 specification; only the P1/FLN bus is treated here. [D]</p>
 <h3 id="45-open-items--serial-and-field-bus-framing">4.5 Open items — serial and field-bus framing</h3>
 <blockquote>
-<p><strong>[OPEN, PARTLY ANSWERED] Serial-BLN P2 link framing bytes.</strong> Only the line parameters (8/N/1, baud tiers, trunk numbering) were established for the dedicated serial BLN. <strong>The message layer above the framing is now recovered from controller firmware — see §6.8</strong> — giving the address byte and its position, a compact operation encoding, a 253-byte cap, and the forwarding rule for a message addressed elsewhere. <strong>The message layer is now attested from the supervisor end as well</strong> — a supervisor-side codec builds the same encoding, agreeing with the panel on the group/ordinal pair and adding the ordinal's byte order (§6.8). [C] What is still unobserved is the <strong>link</strong> layer beneath it: start/sync delimiting, CRC/checksum, and the medium's segmentation, all of which a lower layer has already stripped before the code in §6.8 sees the message. The supervisor's link-layer component was examined for them and does not carry them: it is a transport — ports, partners, sequence numbers, a socket path and a modem path — and it hands the codec's output down without prefixing a P2 header, so the three bytes preceding the group byte are added below it or supplied by the medium. [C] An AEM Channel-1 capture (TCP/3001) remains the way to see them, since the AEM tunnels the serial stream verbatim.</p>
+<p><strong>[OPEN, PARTLY ANSWERED] Serial-BLN P2 link framing bytes.</strong> Only the line parameters (8/N/1, baud tiers, trunk numbering) were established for the dedicated serial BLN. <strong>The message layer above the framing is now recovered from controller firmware — see §6.8</strong> — giving the address byte and its position, a compact operation encoding, a 253-byte cap, and the forwarding rule for a message addressed elsewhere. <strong>The message layer is now attested from the supervisor end as well</strong> — a supervisor-side codec builds the same encoding, agreeing with the panel on the group/ordinal pair and adding the ordinal's byte order (§6.8). [S] What is still unobserved is the <strong>link</strong> layer beneath it: start/sync delimiting, CRC/checksum, and the medium's segmentation, all of which a lower layer has already stripped before the code in §6.8 sees the message. The supervisor's link-layer component was examined for them and does not carry them: it is a transport — ports, partners, sequence numbers, a socket path and a modem path — and it hands the reference implementation's output down without prefixing a P2 header, so the three bytes preceding the group byte are added below it or supplied by the medium. [S] An AEM Channel-1 capture (TCP/3001) remains the way to see them, since the AEM tunnels the serial stream verbatim.</p>
 <p><strong>[OPEN] FLN/P1 frame bytes.</strong> The P1 fieldbus discovery transaction (P1WhoAreYou), addressing (drop + application number), physical layer (RS-485 2-wire), and baud are documented, but the P1 frame byte layout itself is unobserved. The on-wire P1 frame structure, the WhoAreYou request/response bytes, and the per-poll cadence/retry behavior require a P1-bus capture or a route-through capture from the BLN. <strong>The route-through opcode is now named: <code>0x0313 AP2_P1_ROUTE</code>, with <code>0x0314</code> alongside it</strong> (§9.1.1). Sixteen distinct field-device operations tunnel through <code>0x0313</code>, so a capture containing it carries P1 payloads inside a P2 frame — which is the cheapest route to these bytes, and needs no access to the RS-485 segment itself. Neither opcode occurs in any capture in the present corpus.</p>
 <p><strong>[OPEN, LARGELY ANSWERED] P2 segmentation thresholds and reassembly rules.</strong> The ~256-byte figure from vendor connection-test material is a <em>connection-test ping</em> size, <strong>not</strong> a maximum P2 data-packet cap — single P2 frames are observed with <code>total_len</code> up to ≈1,587 bytes (a ~1,530-byte body of packed records plus header+slots) in one response [W]. <strong>The ceiling and the reassembly rule are now recovered from the supervisor's AP2 codec.</strong> A segment buffer is <strong>16,384 bytes</strong>, of which the encoder is handed <code>buf+2</code> with a capacity of <strong>16,382 bytes</strong>; the two reserved bytes at <code>buf[0]</code> are the <code>u16</code> function code, which is why the wire carries the opcode immediately before the body and why <code>total_length</code> includes it. Reassembly is a cursor against a declared total: each mapped segment copies <code>n</code> bytes and advances the cursor, except the last, whose length is <code>total - cursor</code>; the sender therefore knows the total before it begins. The command object carries an explicit <strong>more-follows</strong> field, set on the segmenting path and cleared on the direct one. [S] <strong>What is still open is the wire behaviour at the threshold.</strong> No body in the corpus exceeds 16,382 B — the largest complete body is 1,570 B and the largest <em>declared</em> is 12,073 B — so the corpus is consistent with the ceiling without exercising it. Whether a result larger than one segment appears as two P2 frames, and what marks the continuation on the wire, needs a capture of an upload large enough to segment. [W][OPEN]</p>
 </blockquote>
@@ -2950,7 +2927,7 @@ with a distinct structured body opening with the standard <code>SYST</code> scop
 refused. <code>0x4647</code> returned nothing at all and remains <strong>[OPEN]</strong>.</p>
 <p><strong><code>0x464C</code> is the NodeList report</strong>, established from three independent
 directions rather than inferred: the vendor function enum names it
-<code>AP2_EBLN_REPL_DIAG_NODELIST</code>; the panel firmware's own resource names an
+<code>AP2_EBLN_REPL_DIAG_NODELIST</code>; the device-side resource names an
 <em>EBLN Replication NodeList Report</em> with columns <code>Node Name | Connection |
 Replication</code>; and the captured body is exactly a list of node names. [W][S]</p>
 <p><strong><code>0x464D</code> is the replication data store.</strong> The 4,380 bytes that arrived before
@@ -3517,7 +3494,7 @@ single-BLN, so the pair reading is <strong>untested on the wire</strong>. A capt
 exchange traffic would settle it in one frame. [W] <strong>[OPEN]</strong></p>
 <p><strong>It is, however, what the vendor's own code models.</strong> <code>Bn_adapt.dll</code> — the
 adapter that presents a BACnet network to the supervisor <em>as a P2 trunk</em> — ships
-a class whose RTTI descriptor reads <code>S600toBACnetXrefTable::TrunkAndNode</code>: a P2
+a declared class named <code>S600toBACnetXrefTable::TrunkAndNode</code>: a P2
 address held as a <strong>(trunk, node) pair</strong>, nested inside the table that maps the
 P2 side to BACnet. Its command object takes the same shape —
 <code>AP2Cmd::Create(char const*, STACK_TYPE, unsigned short, …)</code>, i.e. a <strong>trunk
@@ -3683,7 +3660,7 @@ allocates a <strong>16,384-byte</strong> segment buffer and hands its encoder <c
 capacity of <strong>16,382 bytes</strong>. The two bytes it holds back at <code>buf[0]</code> are the
 <code>u16</code> function code, written after the body is encoded — which is exactly why the
 wire carries the opcode immediately before the body, and why <code>total_length</code>
-counts it. An implementer reading a body is reading the encoder's <code>buf+2</code>. [S]</p>
+counts it. An implementer reading a body is reading the reference encoder's <code>buf+2</code>. [S]</p>
 <p><strong>Reassembly is a cursor against a declared total</strong>, not a negotiation. Each
 mapped segment copies <code>n</code> bytes into the buffer and advances the cursor; the
 final segment's length is <code>total - cursor</code>. The sender knows <code>total</code> before it
@@ -3706,12 +3683,12 @@ previous response's object name until the panel returns end-of-list. A controlle
 list (e.g. an AHU returning consecutive ~1514-byte records) is walked the same way — each response is
 one near-MTU frame and the <strong>next</strong> record is fetched by cursor, not by a continuation bit. Across
 every <code>UPL_ALL_*</code> capture the panel kept each response to a single frame (frame ≤ 1,622 B) and the client
-advanced by cursor; the data-channel more-follows flag was <strong>not observed firing</strong>. [W] The codec
+advanced by cursor; the data-channel more-follows flag was <strong>not observed firing</strong>. [W] The reference implementation
 <em>has</em> a more-follows mechanism [S] and the <code>EBLN_REPL_*</code> replication bodies use explicit segment
 cursors (above), but for ordinary <code>0x33</code>/<code>0x34</code> reads the on-wire pattern is cursored request/response
 pagination capped near one MTU.</p>
 <p><strong>[OPEN]</strong> Whether a single object whose record exceeds the largest observed
-frame triggers the codec's frame-level more-follows flag (and at what byte) is
+frame triggers the reference implementation's frame-level more-follows flag (and at what byte) is
 still unpinned — no single record that large was captured; every large result
 was continued by cursor instead. [S][OPEN]</p>
 <p><strong>Do not read the Ethernet MTU as the boundary.</strong> A P2 frame is not capped near
@@ -3722,7 +3699,7 @@ five captures, each one arithmetically exact
 Ethernet segment and a receiver <em>must</em> reassemble across TCP segment boundaries
 (§6.1.1) — the MTU is a property of the link, not a protocol limit, and the
 pagination described above is a <em>cursor</em> convention rather than a size ceiling
-the codec enforces. [W]</p>
+the reference implementation enforces. [W]</p>
 <p>P2 segmentation is <strong>distinct</strong> from the BACnet-side Transport Segment Management (TSML) layer
 (High/Low halves, per-TSM <code>invokeID</code>/<code>userID</code>, <code>ReqACK</code>, out-of-order <code>expected/received</code>
 reassembly) that rides over the BACnet IPC connection. TSML is a different stack and is out of scope
@@ -3732,7 +3709,7 @@ for the P2 wire. [S]</p>
 <p>Everything in §6 so far describes P2 as it rides TCP. A controller also speaks P2
 over a byte-oriented link, and it is <strong>not the same encoding</strong> — same protocol,
 same operations, a far more compact frame. This is recovered from controller
-firmware, not from a capture: the corpus is entirely TCP/5033. [F]</p>
+firmware, not from a capture: the corpus is entirely TCP/5033. [S]</p>
 <pre><code>  offset  size  field
   ------  ----  ---------------------------------------------------------
      0     1    node address  -- checked against the receiver's own id
@@ -3751,23 +3728,23 @@ not interpret the message, it wraps the raw four header bytes and the payload
 verbatim and raises it as operation <strong><code>0x0136</code></strong>, whose name in the function-code
 enumeration is <strong><code>AP2_P2_ROUTE</code></strong>. Second, the encode path is byte-for-byte
 symmetric — given <code>0x0136</code> it restores the same four header bytes and payload and
-puts them back on the link. A multi-drop link forwarding P2 between nodes. [F][S]</p>
+puts them back on the link. A multi-drop link forwarding P2 between nodes. [S]</p>
 <p>The operation is encoded as <code>(group, ordinal)</code> rather than as the 16-bit AP2
 function code, and §9.4.1 gives the tables that translate between the two, in
-both directions. The ordinal's width is fixed by the firmware's 2-byte read
+both directions. The ordinal's width is fixed by a 2-byte read on the device side
 primitive and independently by group <code>0xE0</code>, whose ordinals run 256–259 and could
 not fit in a byte. <strong>The ordinal is big-endian</strong>, and the group byte precedes it
-directly. [C]</p>
+directly. [S]</p>
 <p><strong>The pairing is attested from both ends.</strong> Everything above is the panel's side.
 A supervisor-side codec builds the same encoding, and for group <code>0xE0</code> it emits
 ordinals 256, 257, 258 and 259 — the same four the panel's <code>0xE0</code> table holds,
 plus a fifth, 260, that this panel generation does not implement. Two
 independent implementations for two different processors agreeing on four exact
 values in a 16-bit space is what makes the group/ordinal reading safe to build
-on. [C][F] The same codec shows that not every leading byte is a group selector:
+on. [S] The same codec shows that not every leading byte is a group selector:
 some classes are followed by an ordinal, others by a fixed addressing prefix of
 their own, so a decoder must switch on the class byte before assuming an ordinal
-follows it. [C]</p>
+follows it. [S]</p>
 <p>Set against the TCP framing of §6.1 — <code>u32 total_len | u32 msg_type | u32 seq |
 u8 dir | four NUL-terminated slots | u16 opcode</code> — the difference is stark: one
 address byte where TCP carries four variable-length name slots, and a
@@ -3777,16 +3754,16 @@ not assume one P2 parser handles both.</strong></p>
 dedicated RS-485 BLN and the dial-up path. A one-byte node address with
 multi-drop forwarding fits the RS-485 BLN, but nothing observed excludes the
 modem path, and both may use this same encoding.</p>
-<p><strong>And the framing beneath it is [OPEN].</strong> The firmware receives the four header
+<p><strong>And the framing beneath it is [OPEN].</strong> The device side receives the four header
 bytes already parsed into fields, so start/sync delimiting and any CRC are
 stripped by a lower layer this code does not contain.</p>
 <p><strong>Two layers above the wire have been checked and neither adds the three bytes
 that precede the group selector.</strong> The supervisor's protocol adapter builds the
-request object, points it at a 600-byte buffer, calls the encoder — which writes
-the group byte at offset 0 — and hands <em>that same buffer and the encoder's own
+request object, points it at a 600-byte buffer, calls the reference encoder — which writes
+the group byte at offset 0 — and hands <em>that same buffer and the reference encoder's own
 length</em> to the transmit call, with nothing prepended. The link component beneath
 it is a transport: ports, partners, sequence numbers, a socket path and a modem
-path, and no P2 header assembly. [C] So on the supervisor's send path a message
+path, and no P2 header assembly. [S] So on the supervisor's send path a message
 begins at the group byte, and the <code>node | ? | ?</code> prefix is either added below
 both of them or is not present on that path at all.</p>
 <p>That second possibility is worth stating because it is testable and would
@@ -3794,7 +3771,7 @@ explain the shape: the panel-side header is described by code that <strong>forwa
 message whose address byte is not its own</strong> (<code>0x0136</code>), which is a routing
 concern. A directly-addressed message may simply not carry it. This document
 does not choose between the two — it records that the two layers where the
-prefix would most naturally be added do not add it. [C][OPEN]</p>
+prefix would most naturally be added do not add it. [S][OPEN]</p>
 <blockquote>
 <p><strong>A note on the ~256-byte figure.</strong> §6.7 records, correctly, that the ~256-byte
 number in vendor connection-test material is a <em>ping</em> size and not a maximum
@@ -3806,7 +3783,7 @@ demonstrated one. [I]</p>
 </blockquote>
 <h2 id="7-service-model--message-types">7. Service Model &amp; Message Types</h2>
 <h3 id="71-the-asdu-service-model">7.1 The ASDU service model</h3>
-<p>P2 is an ISO/OSI-style application protocol. The vendor codec frames every transaction as a service
+<p>P2 is an ISO/OSI-style application protocol. The reference implementation frames every transaction as a service
 primitive carrying an <strong>ASDU</strong> (Application Service Data Unit) as its payload, with the classic
 four-primitive shape: <strong>Request → Indication</strong> on the originator/receiver pair, and <strong>Response →
 Confirm</strong> on the reply path. [S] The 2-byte wire opcode is the <strong>AP2 function code</strong> (a 16-bit
@@ -4013,7 +3990,7 @@ for the codes themselves are in §7.2.2</strong>, which catalogs all 42 with the
 frequencies. Read the two together: this section for what a class means,
 §7.2.2 for what actually happens. [S][W]</p>
 </blockquote>
-<p>The vendor codec defines a fixed set of AP2 error classes (C++ RTTI types in the codec, mirrored as
+<p>The reference implementation defines a fixed set of AP2 error classes (declared classes, mirrored as
 named members in the managed type system). These are the definitional error categories; the wire
 carries a numeric code (§7.2.2) that maps onto them. [S]</p>
 <table>
@@ -4141,13 +4118,13 @@ wire format forbids a retry; nothing here performs one. [W]</p>
 <td><code>0x00AC</code></td>
 <td><strong>not supported</strong> — the function code is unused on this panel, <strong>or is specific to a different firmware revision</strong></td>
 <td>wire behaviour and the vendor catalog agree, <strong>and the revision case is now firmware-attested</strong> — see below</td>
-<td>[W][D][F]</td>
+<td>[W][D][S]</td>
 </tr>
 <tr>
 <td><code>0x0002</code></td>
 <td><strong>invalid command</strong> — the command is not valid for the addressed object (seen on <code>POINT_CMD_ALARM 0x0244</code> and on <code>CMD_ALARM_DISABLE 0x0247</code> addressed to a point name that does not exist; the documented example is commanding a non-virtual LDI or LAI point). <strong>Also returned for an over-length <code>0x0136 P2_ROUTE</code></strong>, see below</td>
 <td>wire behaviour and the vendor catalog agree, plus firmware</td>
-<td>[W][D][F]</td>
+<td>[W][D][S]</td>
 </tr>
 <tr>
 <td><code>0x0009</code></td>
@@ -4185,10 +4162,10 @@ So "not supported" is not a single global judgement about the function code —
 <strong>it is the answer from one particular translation table</strong>, which is exactly why
 the same opcode can be refused by one panel and answered by another. The
 revision reading of this error was documentary until now; it is the structure
-the firmware actually implements. [F]</p>
+the device side actually implements. [S]</p>
 <p>The same function special-cases <code>0x0136 AP2_P2_ROUTE</code> ahead of any table lookup
 and enforces its length bound inline — payload ≤ 249 bytes, total ≤ 253 (§6.8) —
-writing <strong><code>0x0002</code></strong> if the frame exceeds it. [F]</p>
+writing <strong><code>0x0002</code></strong> if the frame exceeds it. [S]</p>
 <p><strong><code>0x0E10</code>–<code>0x0E17</code> is the FLN error band.</strong> Every code in it reports a fault in
 the field-level network, the device, or the physical point — invalid FLN number,
 invalid drop number, device failed, invalid point number, physical point failed,
@@ -4994,7 +4971,7 @@ another type has been seen. The practical rule: a decoder must take the TLV from
 its position in the structure and must <strong>never</strong> test <code>textType == 0x01</code> to
 decide whether one is present — a parser that does will desynchronise on an
 empty field, which is exactly how twelve point bodies in this corpus fail to
-decode. <code>textType</code> is a <strong>[OPEN]</strong> discriminator: the firmware's own string
+decode. <code>textType</code> is a <strong>[OPEN]</strong> discriminator: the device-side string
 handling distinguishes RAD-50 from ASCII (§8.4), which is the obvious candidate
 for what it selects, but no non-<code>0x01</code> value with content exists here to
 confirm it.</p>
@@ -5482,9 +5459,9 @@ char:   &quot; ABCDEFGHIJKLMNOPQRSTUVWXYZ$.?0123456789&quot;
 <p>Three characters <code>c0 c1 c2</code> (each mapped to its index 0–39) pack into one unsigned 16-bit word: [S]</p>
 <pre><code>word = ((c0 * 40) + c1) * 40 + c2
 </code></pre>
-<p>The maximum packed word is <code>39*40*40 + 39*40 + 39 = 63999</code> (<code>0xF9FF</code>), so every RAD-50 word fits a <code>u16</code>. To unpack, decode <code>c2 = word % 40</code>, <code>c1 = (word / 40) % 40</code>, <code>c0 = (word / 40 / 40) % 40</code>, then map each index back through the alphabet. Names whose character count is not a multiple of 3 are padded with the space character (index 0) in the trailing position(s) — the packer leaves unused positions at index 0 and zero-fills whole trailing words, which is the same thing. [C] <strong>Each packed word goes on the wire big-endian</strong>: the codec builds the word natively and then writes it through its 2-byte primitive with the byte-reversal flag set, exactly as it does for every other multi-byte field (§8.3). [C] An n-character field therefore occupies <strong>2 × ceil(n / 3) bytes</strong>, so a 6-character name is 4 bytes and a 12-character name is 8. [C] RAD-50 appears only on pre-IP field-controller and supervisor revisions, so an implementer targeting P2-over-TCP normally encounters ASCII (§8.4.2) and treats a RAD-50-packed peer as an out-of-scope legacy revision. [S][I]</p>
+<p>The maximum packed word is <code>39*40*40 + 39*40 + 39 = 63999</code> (<code>0xF9FF</code>), so every RAD-50 word fits a <code>u16</code>. To unpack, decode <code>c2 = word % 40</code>, <code>c1 = (word / 40) % 40</code>, <code>c0 = (word / 40 / 40) % 40</code>, then map each index back through the alphabet. Names whose character count is not a multiple of 3 are padded with the space character (index 0) in the trailing position(s) — the packer leaves unused positions at index 0 and zero-fills whole trailing words, which is the same thing. [S] <strong>Each packed word goes on the wire big-endian</strong>: the reference implementation builds the word natively and then writes it through its 2-byte primitive with the byte-reversal flag set, exactly as it does for every other multi-byte field (§8.3). [S] An n-character field therefore occupies <strong>2 × ceil(n / 3) bytes</strong>, so a 6-character name is 4 bytes and a 12-character name is 8. [S] RAD-50 appears only on pre-IP field-controller and supervisor revisions, so an implementer targeting P2-over-TCP normally encounters ASCII (§8.4.2) and treats a RAD-50-packed peer as an out-of-scope legacy revision. [S][I]</p>
 <p>Only the 40 alphabet characters are representable: uppercase letters, digits, space, and the three symbols <code>$ . ?</code>. Lowercase and other punctuation cannot be RAD-50-encoded, which is consistent with the uppercase-only, restricted character sets of legacy name fields. [S][I]</p>
-<p><strong>Two encoder rules that a decoder-only reading of the alphabet misses.</strong> The packer <strong>uppercases its input first</strong> — a lowercase name is silently folded to uppercase, not rejected — so an implementer must uppercase before comparing a round-tripped name with the original. And <strong><code>?</code> (index 29) is refused on encode</strong>: the packer returns an error for it exactly as it does for a character outside the alphabet, which makes <code>?</code> a decode-only symbol. An over-length source is rejected before a single byte is written, rather than truncated. [C]</p>
+<p><strong>Two encoder rules that a decoder-only reading of the alphabet misses.</strong> The packer <strong>uppercases its input first</strong> — a lowercase name is silently folded to uppercase, not rejected — so an implementer must uppercase before comparing a round-tripped name with the original. And <strong><code>?</code> (index 29) is refused on encode</strong>: the packer returns an error for it exactly as it does for a character outside the alphabet, which makes <code>?</code> a decode-only symbol. An over-length source is rejected before a single byte is written, rather than truncated. [S]</p>
 <h4 id="842-ascii-wd">8.4.2 ASCII [W][D]</h4>
 <p>All P2/IP revisions carry plain ASCII in both the length-prefixed TLVs (§8.1) and the NUL-terminated routing slots (§6). This is the encoding observed throughout the TCP/5033 wire traffic. A TCP/5033 implementation is ASCII end-to-end; it does not need a RAD-50 codec to interoperate with current panels. [W][D]</p>
 <h4 id="843-field-length-budgets-by-encoding-d">8.4.3 Field length budgets by encoding [D]</h4>
@@ -6158,7 +6135,7 @@ the census says what one particular supervisor happened to ask during the
 captures. Neither answers the question an implementer actually has, which is
 whether a controller will do anything with a given function code.</p>
 <p>There is a third source, and it sits on the other end of the wire. Controller
-firmware images carry <strong>tables pairing a 16-bit function code with a 16-bit
+the device-side definitions carry <strong>tables pairing a 16-bit function code with a 16-bit
 id</strong>, laid out as 4-byte records:</p>
 <pre><code>  00 c1 02 20     id 0x00c1  &lt;-  opcode 0x0220
   00 c1 02 29     id 0x00c1  &lt;-  opcode 0x0229
@@ -6167,9 +6144,9 @@ id</strong>, laid out as 4-byte records:</p>
 </code></pre>
 <p>The same table is present in images built for <strong>two different instruction sets</strong>
 — 68000-family and PowerPC — at the same size and with the same contents. That
-is what identifies it as protocol data rather than compiled code. [F]</p>
+is what identifies it as protocol data rather than compiled code. [S]</p>
 <p><strong>What the id is for.</strong> An earlier reading of this section called these dispatch
-tables. Disassembly shows otherwise, and the difference matters. The lookup
+tables. The implementation shows otherwise, and the difference matters. The lookup
 result is not a jump target: it is handed to a two-byte write against a
 serialisation buffer object — one carrying a base pointer, a write cursor, a
 capacity and an overflow flag — which memcpys it and advances the cursor. <strong>The
@@ -6209,7 +6186,7 @@ group. Group <code>0xC1</code> is the catch-all — 144 of 317 opcodes, across e
 and needs no second stage; 61 groups contain a single opcode each, skewed toward
 the specific and destructive (<code>SET_NODE_STATE</code>, <code>CABINET_ADD</code>/<code>REMOVE</code>,
 <code>CABINET_COLDSTART</code>, <code>CABINET_MEMORY_MODIFY</code>, the point limit and totaliser
-commands). [F]</p>
+commands). [S]</p>
 <p><strong>The translation runs both ways, and the duplicates are a parameter.</strong> A second
 function decodes: it reads a group byte, reads a 16-bit ordinal, and scans the
 same table the other way — matching the ordinal and returning the opcode. Which
@@ -6222,13 +6199,13 @@ operation that decoding 9 or 11 leaves clear. <strong>The duplicate ordinal carr
 on/off argument</strong>, rather than the body carrying it. The encoder's first-match
 scan always produces the flag-set form; the second form exists for the decoder.
 So a group's ordinals are dense and small because they enumerate <em>operation
-variants</em>, not opcodes. [F]</p>
+variants</em>, not opcodes. [S]</p>
 <p><strong>Add and copy share an ordinal.</strong> Only two groups reuse an ordinal across
 different opcodes, and the pattern is the same each time — <code>ALARM_MODE_ADD</code> with
 <code>ALARM_MODE_COPY</code>, <code>ALARM_SETUP</code> with <code>ALARM_SETUP_COPY</code>, <code>ALARM_MESSAGE_ADD</code>
 with <code>ALARM_MESSAGE_COPY</code>. The encoding cannot tell an add from its copy variant,
 which is consistent with copy being "add, with a source" and distinguished by the
-body — the same conclusion this section reaches from the other direction. [F]</p>
+body — the same conclusion this section reaches from the other direction. [S]</p>
 <h4 id="a-panel-only-opcode-band-0x10020x1005">A panel-only opcode band: <code>0x1002</code>–<code>0x1005</code></h4>
 <p>One group pairs four otherwise-unknown opcodes with named alarm operations at
 identical ordinals:</p>
@@ -6270,14 +6247,14 @@ as a parallel numbering of the alarm setup/remove and alarm-mode add/delete
 operations. Stated at the confidence the evidence supports: <strong>grouped with</strong>, not
 <strong>identical to</strong> — a shared ordinal shows the decoder treats them as the same
 variant, which is weaker than shared semantics. A tool should not emit them:
-nothing has been observed accepting one. [F]</p>
+nothing has been observed accepting one. [S]</p>
 <p><strong>Why this matters to an implementer, given it is never transmitted.</strong> §9.1.1
 records the supervisor carrying a second 16-bit selector per operation that
 likewise appears in no captured body. Both ends of the wire maintain a
 sub-operation number, and <strong>neither serialises it</strong>. So where several operations
 share one wire opcode, a receiver is not reading a sub-code off the frame — it
 is dispatching on the body. Build a decoder the same way: key on
-<code>(opcode, body shape)</code>, never on a sub-field that is not there. [W][F]</p>
+<code>(opcode, body shape)</code>, never on a sub-field that is not there. [W][S]</p>
 <p><strong>There is more than one table, and a class code selects between them.</strong> The
 firmware stores each table's length in a 16-bit word immediately after it, so
 the layout is exact rather than inferred — in one image, ten tables laid end to
@@ -6331,8 +6308,8 @@ end, 513 records in total, each stored count matching its span:</p>
 </tbody>
 </table>
 <p>The selector comes from a method on the calling object, and the default table
-applies when no group-specific one matches. [F]</p>
-<p>Presence in these tables says the panel firmware <em>knows</em> the function code and
+applies when no group-specific one matches. [S]</p>
+<p>Presence in these tables says the device side <em>knows</em> the function code and
 carries a translation for it. It does not by itself prove the panel implements
 the operation — for that, §9.5's rule still holds: classify by what the panel
 did when asked.</p>
@@ -6341,14 +6318,14 @@ SV5, PPC, LON and MECF product lines, <strong>164 function codes appear both in 
 panel's opcode tables (in at least 28 of the 42 images) and in the supervisor
 enumeration</strong>. For sets of that size drawn from a 16-bit space, chance overlap
 would be about 2.5. Those 164 are the subset of the catalog that is confirmed
-implemented at both ends. [F][S]</p>
+implemented at both ends. [S]</p>
 <p><strong>A caution on reading the tables directly.</strong> The blob holds several adjacent
 sub-tables that do not share a 4-byte phase, and its tail reverses the field
 order to <code>(code, handler)</code>. An extractor that assumes one layout will mis-split
 a minority of records. This is why the count above is stated as the intersection
 with an independent source rather than as a raw table read: 234 further codes
-appear in the firmware tables alone, and those are candidates, not findings.</p>
-<h4 id="the-supervisor-vocabulary-has-real-gaps-and-the-firmware-measures-them">The supervisor vocabulary has real gaps, and the firmware measures them</h4>
+appear in the device-side opcode tables alone, and those are candidates, not findings.</p>
+<h4 id="the-supervisor-vocabulary-has-real-gaps-and-the-device-side-tables-measure-them">The supervisor vocabulary has real gaps, and the device-side tables measure them</h4>
 <p><strong>Correction.</strong> An earlier edition of this subsection asserted that seven
 function codes seen on the wire — <code>0x0203</code>, <code>0x0204</code>, <code>0x0260</code>, <code>0x0274</code>,
 <code>0x0508</code>, <code>0x4500</code>, <code>0x5038</code> — were missing from the supervisor enumeration, and
@@ -6360,8 +6337,8 @@ The conclusion below is unchanged, but it needed different evidence, and the
 correct evidence is considerably stronger.</p>
 <p>Resolving every opcode value known from any source across the three independent
 authorities — the supervisor's <code>AP2_Function_Code</code> enumeration (630 values under
-641 names, eleven of which are aliases), the ten count-validated panel-firmware
-dispatch tables of one image, and the wire census: [W][S][F]</p>
+641 names, eleven of which are aliases), the ten count-validated device-side
+dispatch tables of a single platform, and the wire census: [W][S]</p>
 <table>
 <thead>
 <tr>
@@ -6375,7 +6352,7 @@ dispatch tables of one image, and the wire census: [W][S][F]</p>
 <td style="text-align: right;">338</td>
 </tr>
 <tr>
-<td>enum + firmware, not on the wire</td>
+<td>enum + device-side, not on the wire</td>
 <td style="text-align: right;">157</td>
 </tr>
 <tr>
@@ -6383,15 +6360,15 @@ dispatch tables of one image, and the wire census: [W][S][F]</p>
 <td style="text-align: right;"><strong>78</strong></td>
 </tr>
 <tr>
-<td>enum + wire, not in the firmware tables</td>
+<td>enum + wire, not in the device-side opcode tables</td>
 <td style="text-align: right;">57</td>
 </tr>
 <tr>
-<td><strong>firmware only</strong></td>
+<td><strong>device-side only</strong></td>
 <td style="text-align: right;"><strong>82</strong></td>
 </tr>
 <tr>
-<td>firmware + wire, not in the enum</td>
+<td>device-side + wire, not in the enum</td>
 <td style="text-align: right;"><strong>0</strong></td>
 </tr>
 <tr>
@@ -6405,32 +6382,32 @@ dispatch tables of one image, and the wire census: [W][S][F]</p>
 </tbody>
 </table>
 <p>Three things follow, and the middle one is the point:</p>
-<p><strong>82 opcodes are in the panel firmware and not in the supervisor enumeration.</strong>
+<p><strong>82 opcodes are in the device-side opcode tables and not in the supervisor enumeration.</strong>
 That is the measured width of the gap. The panel's vocabulary is not a subset of
-the supervisor's; a name list derived from supervisor binaries is a list of what
-a supervisor knows how to <em>ask for</em>, and it is 82 codes short of what this panel
-image knows how to <em>answer</em>. This is the concrete form of the rule in §9.5:
+the supervisor's; the supervisor's name list is a list of what
+a supervisor knows how to <em>ask for</em>, and it is 82 codes short of what the device
+side knows how to <em>answer</em>. This is the concrete form of the rule in §9.5:
 <strong>classify an operation by what the panel did with it, never by its absence from
 a derived name list.</strong></p>
 <p><strong>Fifteen wire values are in neither authority</strong> — and the panel answered eight
 of them with structured success responses (§9.5). They are absent from the enum
-<em>and</em> from this image's tables, which is exactly what one expects when the
-captured panel and the disassembled image are different devices.</p>
-<p><strong>No opcode is in the firmware tables and on the wire but missing from the
-enum.</strong> Where the panel image and the wire agree that an operation exists, the
+<em>and</em> from that definition set, which is exactly what one expects when the
+captured panel and the reference platform are different devices.</p>
+<p><strong>No opcode is in the device-side opcode tables and on the wire but missing from the
+enum.</strong> Where the device side and the wire agree that an operation exists, the
 enumeration knows about it. The enumeration is incomplete as a specification,
 but it is not arbitrary.</p>
-<p>One scope note that applies to all three: the firmware column is <strong>a single
-image</strong>. An opcode absent from it may well be present in another panel
-generation, so "firmware only" and "wire only" are statements about this image,
-not about APOGEE panels in general. [F]</p>
+<p>One scope note that applies to all three: the device-side column is <strong>a single
+platform</strong>. An opcode absent from it may well be present in another panel
+generation, so "device-side only" and "wire only" are statements about that
+platform, not about APOGEE panels in general. [S]</p>
 <h4 id="the-high-bands-are-a-later-protocol-generation">The high bands are a later protocol generation</h4>
-<p>Coverage by the firmware tables splits sharply by the function code's high byte:</p>
+<p>Coverage by the device-side opcode tables splits sharply by the function code's high byte:</p>
 <table>
 <thead>
 <tr>
 <th>High byte</th>
-<th>Present in these images</th>
+<th>Present in that platform</th>
 </tr>
 </thead>
 <tbody>
@@ -6444,10 +6421,10 @@ not about APOGEE panels in general. [F]</p>
 </tr>
 </tbody>
 </table>
-<p>That is not a gap in the extraction. These images are revision 2.6 and earlier;
+<p>That is not a gap in the survey. That platform is revision 2.6 and earlier;
 the absent bands are present in the newer supervisor stack and are answered by
 current panels on the wire. <strong>The <code>0x46xx</code>, <code>0x48xx</code> and <code>0x50xx</code> families are a
-later addition to the protocol.</strong> [F][W]</p>
+later addition to the protocol.</strong> [S][W]</p>
 <p>For the unnamed <code>0x4646</code>–<code>0x4650</code> block this settles one question and reframes
 another: these images cannot name it, and its absence from them is evidence of
 the block's age rather than of its non-existence.</p>
@@ -6472,7 +6449,7 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_SET_GLOBAL_DATA</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0031</td>
@@ -6500,7 +6477,7 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_SET_NODE_STATE</td>
 <td>-</td>
 <td><strong>DESTRUCTIVE</strong> (set node state)</td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0035</td>
@@ -6556,14 +6533,14 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_CABINET_TIMEOUT_NORMAL</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x003F</td>
 <td>AP2_CABINET_TIMEOUT_EXTENDED</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0041</td>
@@ -6577,28 +6554,28 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_CABINET_REMOVE</td>
 <td>-</td>
 <td><strong>DESTRUCTIVE</strong> (remove cabinet from node table)</td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0044</td>
 <td>AP2_CABINET_MAKE_READY</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0046</td>
 <td>AP2_CABINET_ONLINE</td>
 <td>-</td>
 <td><strong>DESTRUCTIVE</strong> (force cabinet online)</td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0047</td>
 <td>AP2_CABINET_OFFLINE</td>
 <td>-</td>
 <td><strong>DESTRUCTIVE</strong> (force cabinet offline)</td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0050</td>
@@ -6619,7 +6596,7 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_REPORT_PRINTER_LOG</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0059</td>
@@ -6682,98 +6659,98 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_CABINET_SET_MMI1_BAUDRATE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0121</td>
 <td>AP2_CABINET_SET_MMI2_BAUDRATE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0123</td>
 <td>AP2_CABINET_SET_FLN1_BAUDRATE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0124</td>
 <td>AP2_CABINET_SET_FLN2_BAUDRATE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0125</td>
 <td>AP2_CABINET_SET_FLN3_BAUDRATE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0126</td>
 <td>AP2_CABINET_SET_BLN_BAUDRATE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0127</td>
 <td>AP2_CABINET_SET_PBUS_STATE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0128</td>
 <td>AP2_CABINET_SET_BLN_ADDRESS</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0129</td>
 <td>AP2_CABINET_SET_MODEM_STATE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x012A</td>
 <td>AP2_CABINET_COLDSTART_DISPLAY</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x012B</td>
 <td>AP2_CABINET_COLDSTART_CLEAR_HISTORY</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x012F</td>
 <td>AP2_CABINET_MEMORY_MODIFY</td>
 <td>-</td>
 <td><strong>DESTRUCTIVE</strong> (modify panel memory)</td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0130</td>
 <td>AP2_CABINET_MEMORY_DISPLAY</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0131</td>
 <td>AP2_CABINET_MEMORY_AVAILABLE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x400E</td>
@@ -6808,14 +6785,14 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_BLN_DIAGNOSTICS_DISPLAY</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x005C</td>
 <td>AP2_RESET_BLN_DIAGNOSTIC_COUNTERS</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 </tbody>
 </table>
@@ -6906,7 +6883,7 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_ROUTE_OBJECT</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0310</td>
@@ -6934,7 +6911,7 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_PBUS_MODULE_DISPLAY</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0142</td>
@@ -6969,21 +6946,21 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_POINT_ADD</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0201</td>
 <td>AP2_POINT_ADD_LDO</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0202</td>
 <td>AP2_POINT_ADD_LDI</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0203</td>
@@ -7004,49 +6981,49 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_POINT_ADD_L2SL</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0206</td>
 <td>AP2_POINT_ADD_L2SP</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0207</td>
 <td>AP2_POINT_ADD_LFSSL</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0208</td>
 <td>AP2_POINT_ADD_LFSSP</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0209</td>
 <td>AP2_POINT_ADD_LOOAL</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x020A</td>
 <td>AP2_POINT_ADD_LOOAP</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x020B</td>
 <td>AP2_POINT_ADD_LPACI</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x020C</td>
@@ -7088,21 +7065,21 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_POINT_LOG_ALARM</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0222</td>
 <td>AP2_POINT_LOG_CTRL_STAT</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0223</td>
 <td>AP2_POINT_LOG_FAILED</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0224</td>
@@ -7116,35 +7093,35 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_POINT_LOG_PRIORITY</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0226</td>
 <td>AP2_POINT_LOG_DISABLED</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0227</td>
 <td>AP2_POINT_LOG_TYPE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0228</td>
 <td>AP2_POINT_LOG_TROUBLE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0229</td>
 <td>AP2_POINT_LOG_ANY</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x022A</td>
@@ -7186,14 +7163,14 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_POINT_CMD_ENABLE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0243</td>
 <td>AP2_POINT_CMD_DISABLE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0244</td>
@@ -7228,42 +7205,42 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_POINT_CMD_INIT_LPACI</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0249</td>
 <td>AP2_POINT_CMD_LOWLIMIT</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x024A</td>
 <td>AP2_POINT_CMD_HIGHLIMIT</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x024B</td>
 <td>AP2_POINT_CMD_TOTALIZER</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x024C</td>
 <td>AP2_POINT_CMD_INTO_TROUBLE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x024D</td>
 <td>AP2_POINT_CMD_OUTOF_TROUBLE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x024E</td>
@@ -7284,14 +7261,14 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_POINT_LOOK</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0262</td>
 <td>AP2_POINT_DEFINITION_DISPLAY</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0263</td>
@@ -7305,35 +7282,35 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_POINT_DEFINITION_BYADDR_DISPLAY</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0265</td>
 <td>AP2_POINT_QUERY_NAME</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x02E0</td>
 <td>AP2_POINT_TOTAL_ENABLE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x02E1</td>
 <td>AP2_POINT_TOTAL_DISABLE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x02E2</td>
 <td>AP2_POINT_TOTAL_DISPLAY</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0300</td>
@@ -7347,7 +7324,7 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_POINT_SAVE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 </tbody>
 </table>
@@ -7396,7 +7373,7 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_XREF_COV_DISPLAY</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 </tbody>
 </table>
@@ -7501,7 +7478,7 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_TREND_MULTIPOINT_DISPLAY</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0298</td>
@@ -7536,28 +7513,28 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_TREND_LOOK</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x029D</td>
 <td>AP2_TREND_QUERY_SINGLE_NAME</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x029E</td>
 <td>AP2_TREND_QUERY_NAMES</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x029F</td>
 <td>AP2_TREND_QUERY_TRENDS</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x02A0</td>
@@ -7655,35 +7632,35 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_TOD_POINT_REMOVE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x4502</td>
 <td>AP2_TOD_POINT_ENABLE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x4503</td>
 <td>AP2_TOD_POINT_DISABLE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x4504</td>
 <td>AP2_TOD_CMD_ADD</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x4505</td>
 <td>AP2_TOD_CMD_REMOVE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x4506</td>
@@ -7697,14 +7674,14 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_TOD_POINT_DISPLAY</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x450F</td>
 <td>AP2_TOD_CMD_DISPLAY</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 </tbody>
 </table>
@@ -7725,7 +7702,7 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_MESSAGE_SEND / AP2_MESSAGE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0306</td>
@@ -7886,21 +7863,21 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_PPCL_SEARCH_NAME_TYPE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x4109</td>
 <td>AP2_PPCL_QUERY_PROGRAM</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x410A</td>
 <td>AP2_PPCL_PROGRAM_DISPLAY</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x410B</td>
@@ -7914,7 +7891,7 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_PPCL_COPY_LINE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x410D</td>
@@ -7928,35 +7905,35 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_PPCL_LOOK_LINES</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x410F</td>
 <td>AP2_PPCL_PDL_RESET</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x4110</td>
 <td>AP2_PPCL_PDL_INIT</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x4111</td>
 <td>AP2_PPCL_PDL_DISPLAY</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x412A</td>
 <td>AP2_PPCL_PROGRAM_DISPLAY_UNRESOLVED</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x4134</td>
@@ -8082,21 +8059,21 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_P1_ROUTE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0314</td>
 <td>AP2_P1_LINETEST</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0317</td>
 <td>AP2_P1_RESET_COUNTERS</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x4230</td>
@@ -8117,7 +8094,7 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_P1_DIAGNOSTICS_LOG</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 </tbody>
 </table>
@@ -8138,7 +8115,7 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_OPEN_ENVELOPE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x031B</td>
@@ -8334,14 +8311,14 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_EMS_DIAL_ENABLE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0361</td>
 <td>AP2_EMS_DIAL_DISABLE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0362</td>
@@ -8369,14 +8346,14 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_EMS_ENTRY_REPLACE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0366</td>
 <td>AP2_EMS_DB_GET_DIALFLAGS</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0367</td>
@@ -8516,35 +8493,35 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_ALARM_REMOVE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0502</td>
 <td>AP2_ALARM_POINT_QUERY_LIST_EALARMABLE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0503</td>
 <td>AP2_ALARM_POINT_QUERY_REC_EALARMABLE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0504</td>
 <td>AP2_ALARM_POINT_SETUP_QUERY_LIST</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0505</td>
 <td>AP2_ALARM_POINT_SETUP_QUERY_RECORD</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0506</td>
@@ -8586,21 +8563,21 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_ALARM_SETUP_DISPLAY_BY_MODE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x050C</td>
 <td>AP2_ALARM_SETUP_DISPLAY_BY_CATEGORY</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x050D</td>
 <td>AP2_ALARM_SETUP_DISPLAY</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0520</td>
@@ -8614,42 +8591,42 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_ALARM_MODE_COPY</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0522</td>
 <td>AP2_ALARM_MODE_LISTBY_SETPOINT_NAME</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0523</td>
 <td>AP2_ALARM_MODE_LISTBY_PRIORITY</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0524</td>
 <td>AP2_ALARM_MODE_LISTBY_SETPOINT_VALUE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0525</td>
 <td>AP2_ALARM_MODE_DEFINITION_DISPLAY</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0526</td>
 <td>AP2_ALARM_MODE_LOOK</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0528</td>
@@ -8663,35 +8640,35 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_ALARM_MODE_QUERY_RECORD</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x052B</td>
 <td>AP2_ALARM_MODE_DELETE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x052C</td>
 <td>AP2_ALARM_MODE_LISTBY_CATEGORY</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x052D</td>
 <td>AP2_ALARM_MODE_LISTBY_MESSAGE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0530</td>
 <td>AP2_ALARM_MODE_QUERY_LIST</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0540</td>
@@ -8880,14 +8857,14 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_CAL_DATE_ADD</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0601</td>
 <td>AP2_CAL_DATE_RESET</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0602</td>
@@ -8901,21 +8878,21 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_CAL_DB_RESET</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0604</td>
 <td>AP2_CAL_DB_DISPLAY</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0605</td>
 <td>AP2_CAL_DB_GET_HOL_SPEC</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0606</td>
@@ -8929,14 +8906,14 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_DST_YEAR_ADD</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0611</td>
 <td>AP2_DST_YEAR_DELETE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0612</td>
@@ -8950,21 +8927,21 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_DST_DB_DELETE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0614</td>
 <td>AP2_DST_DB_DISPLAY</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0615</td>
 <td>AP2_DST_DB_GET</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 </tbody>
 </table>
@@ -9034,14 +9011,14 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_UPL_DEL_ALARM_SETUP</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0963</td>
 <td>AP2_UPL_DEL_ALARM_MODE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0964</td>
@@ -9097,7 +9074,7 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_UPL_DEL_ALARM_MESSAGE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0971</td>
@@ -9111,14 +9088,14 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_UPL_ADDED_ALARM_SETUP</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0973</td>
 <td>AP2_UPL_ADDED_ALARM_MODE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x0974</td>
@@ -9174,7 +9151,7 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_UPL_ADDED_ALARM_MESSAGE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x097C</td>
@@ -9307,14 +9284,14 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_UPL_DEL_PORT</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x099E</td>
 <td>AP2_UPL_ADDED_PORT</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x099F</td>
@@ -9328,14 +9305,14 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_UPL_DEL_PARTNER</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x09A2</td>
 <td>AP2_UPL_ADDED_PARTNER</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x09A3</td>
@@ -9370,14 +9347,14 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_UPL_DEL_UC</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x09AA</td>
 <td>AP2_UPL_ADDED_UC</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x09AB</td>
@@ -9391,42 +9368,42 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_UPL_DEL_TOD_POINT</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x09B2</td>
 <td>AP2_UPL_ADDED_TOD_POINT</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x09B3</td>
 <td>AP2_UPL_ALL_TOD_POINT</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x09B5</td>
 <td>AP2_UPL_DEL_TOD_CMD</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x09B6</td>
 <td>AP2_UPL_ADDED_TOD_CMD</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x09B7</td>
 <td>AP2_UPL_ALL_TOD_CMD</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x09B9</td>
@@ -10112,7 +10089,7 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_TEC_COPY</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x4203</td>
@@ -10126,21 +10103,21 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_CONTROLLER_REMOVE / AP2_TEC_REMOVE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x4205</td>
 <td>AP2_TEC_LOOK / AP2_CONTROLLER_LOOK</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x4206</td>
 <td>AP2_TEC_QUERY_RECORD / AP2_CONTROLLER_QUERY</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x4207</td>
@@ -10161,21 +10138,21 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_TEC_MEMBER_LOG</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x4211</td>
 <td>AP2_TEC_REPORT_LOG</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x4212</td>
 <td>AP2_TEC_REPORT_QUERY_LIST</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x4220</td>
@@ -10203,7 +10180,7 @@ the block's age rather than of its non-existence.</p>
 <td>AP2_TEC_RESTORE_INIT_VALUE</td>
 <td>-</td>
 <td></td>
-<td>[F]</td>
+<td>[S]</td>
 </tr>
 <tr>
 <td>0x4224</td>
@@ -12088,7 +12065,7 @@ far: [W][S]</p>
 <tr>
 <td><code>Sensor_type</code></td>
 <td style="text-align: right;"><strong>1</strong></td>
-<td>originally derived rather than fitted — 1 is the only width giving the wire-measured 17-byte <code>Physical_address_AI</code>. <strong>Now directly attested</strong>: the panel's own encoder writes it with the one-byte primitive, masked <code>&amp; 0xff</code> (§10.4.2) [F]</td>
+<td>originally derived rather than fitted — 1 is the only width giving the wire-measured 17-byte <code>Physical_address_AI</code>. <strong>Now directly attested</strong>: the panel's own encoder writes it with the one-byte primitive, masked <code>&amp; 0xff</code> (§10.4.2) [S]</td>
 </tr>
 <tr>
 <td><code>Alarm_mode_type</code></td>
@@ -13599,11 +13576,11 @@ silent. Two of the fifteen are now settled anyway, by other means:</p>
   <code>Oval {height, diameter}</code>, two <code>f32</code> each — so the tag cannot change the
   framing, only the labels on the two floats. Of 60 <code>0x0986</code> TEC responses, 59
   carry <code>no_duct</code> and one carries a duct, tagged <code>1</code>. An earlier edition left the
-  <em>labels</em> open on that single observation; the tag map is read from the codec's
+  <em>labels</em> open on that single observation; the tag map is read from the reference implementation's
   own jump table (§10.4.6) and <code>Duct_type</code> is <code>0</code> <code>Rectangle</code>, <code>1</code> <code>Circle</code>,
   <code>2</code> <code>Oval</code>, so the one duct in this corpus is a <strong><code>Circle</code></strong> and its two floats
   are <code>pad</code> and <code>diameter</code>. One observation was never the evidence that
-  mattered. [S][C][W]</li>
+  mattered. [S][W]</li>
 </ul>
 <blockquote>
 <p>A single transcription discrepancy causes both failures at once. The arm
@@ -13830,13 +13807,13 @@ It does not settle it: 12 also closes both bodies, which is exactly the
 length field that happens to absorb the difference. The catalog computes 9
 field-by-field and the panel's own encoder writes those widths in that order, and
 neither supports 12, so 9 stands on those two — now with the wire excluding five
-of the seven candidates rather than saying nothing at all. [W][S][F]</p>
+of the seven candidates rather than saying nothing at all. [W][S]</p>
 <p>It is
 9 bytes, because a pulse-accumulator address carries a <code>gain</code> f32 that a digital
 one does not. <strong>The controller's own encoder writes exactly that</strong>, in this
 order and with these widths — <code>u8 lan, u8 drop, u16 point, f32 gain, u8
 count_both_edges</code> — so the one width in this table that no capture could reach
-is attested by the firmware that produces it. [F]</p>
+is attested by the component that produces it. [S]</p>
 <p><strong>The same encoder settles the tag, and it settles it the way §10.4.2 feared.</strong>
 The <code>Physical_address_*</code> encoder writes the tag byte and then emits the address
 <strong>only when that tag is zero</strong>:</p>
@@ -13849,7 +13826,7 @@ if (tag == 0) {                    //  &lt;-- tag 0 IS the real_addr arm
 the empty <code>virtual_addr</code> arm is <code>1</code>. That was inferred here from arm order and
 wire widths; it is now read off the code, on both sides — the panel's encoder
 above, and the supervisor's decoder, which compares against <code>1</code> and takes
-<code>virtual_addr</code>. [F][C]</p>
+<code>virtual_addr</code>. [S]</p>
 <p><strong>And it is declaration order after all</strong>, which is worth saying because an
 earlier edition of this section drew the opposite conclusion. <code>Physical_address_*</code>
 declares <code>real_addr</code> first, so tag <code>0</code> being the address arm <em>is</em> the ordinal
@@ -13861,7 +13838,7 @@ the same source). Two CHOICEs covering the same virtual/physical distinction
 number their tags oppositely because they <em>declare</em> them oppositely, not because
 either departs from a convention. What an implementer must not do is carry a tag
 assignment from one CHOICE to another that "means the same thing" — read each
-one's own arm order, or its entry in §10.4.6. [C][S]</p>
+one's own arm order, or its entry in §10.4.6. [S]</p>
 <p>The distinction the flattening destroyed is also semantic and worth keeping: the
 digital-output boolean is <code>inverted</code> and the digital-input one is
 <code>normally_closed</code>. Same width, same position, different meaning — a decoder that
@@ -14404,7 +14381,7 @@ every declared arm has a tag, which is the only kind a reader can use, since a
 map missing an arm cannot select the arm it is missing. The two without a
 complete map, <code>NetworkVariable_</code> and <code>Point_extension2_type</code>, are named as a
 field type by <strong>no structure in the catalog</strong>: nothing can reach them, so nothing
-is blocked by them. [C]</p>
+is blocked by them. [S]</p>
 <p>Each reader was checked against the ones already known before being believed. The
 encoder route reproduced the decoder map on <strong>twelve of twelve</strong> CHOICEs where
 both exist, with no contradiction and one superset (<code>BAC_Point_Base</code>'s ninth arm,
@@ -14412,13 +14389,13 @@ which its <code>Decode</code> never lays out). The compare-chain route agreed <s
 times with no contradiction, and its 38 new two-armed maps agree with the 38
 partial maps the jump-table reader had already produced — <strong>38 of 38 on the tag
 they share</strong>. And one of the 38 is checkable against the wire rather than against
-the codec: <code>Physical_address_AI</code> comes back <code>0</code> = <code>real_addr</code>, which §10.4.2
-established from captured bytes long before. [C][W]</p>
+the reference implementation: <code>Physical_address_AI</code> comes back <code>0</code> = <code>real_addr</code>, which §10.4.2
+established from captured bytes long before. [S][W]</p>
 <p><strong>The rule: the tag is the position in the declared arm list — unless the arm set
 mirrors an external enumeration, in which case it carries that enumeration's
 values.</strong> Sixty-six of the seventy-one complete maps are positional. Five are
 not, and every one of the five is a case where the arms are really something
-else's type codes: [C]</p>
+else's type codes: [S]</p>
 <table>
 <thead>
 <tr>
@@ -14465,16 +14442,16 @@ event-type case is sharper still, because it is the <em>gap</em> that agrees:
 command-failure, 4 floating-limit, 5 out-of-range, skipping 2 — and ASHRAE 135
 numbers change-of-value 2, an event type this CHOICE declares no arm for. The
 encoder sends tag 2 to the default label. An implementer decoding a BACnet-side
-CHOICE should treat the tag as the BACnet code and not count arms. [C][I]</p>
+CHOICE should treat the tag as the BACnet code and not count arms. [S][I]</p>
 <p><strong>A trap worth naming, because it nearly went into this document.</strong> The tag is
-not the index into the arm list as the codec writes it: the generated selector
+not the index into the arm list as the reference implementation writes it: the generated selector
 switches on <code>tag - base</code>, with <code>base</code> the lowest tag value, so a reader that
 takes the jump-table index for the tag is off by <code>base</code> for the whole type.
 <code>All_points</code> has base 1 and <code>event_parameter_Tag_</code> has base 1, and read naively
 <code>All_points</code>' sixteen tags all came back one too low — a self-consistent, entirely wrong map that only failed against the
 independently wire-derived values of §10.4.1. Where a decoder derives arm
-selection from any generated artifact, it must account for that offset. [C]</p>
-<p><strong>Three CHOICEs looked as though the codec never coded them, and it did.</strong>
+selection from any generated artifact, it must account for that offset. [S]</p>
+<p><strong>Three CHOICEs looked as though the reference implementation never coded them, and it did.</strong>
 <code>localStateText_</code>, <code>event_parameter_Tag_</code> and <code>scale_</code> carry a constructor and
 nothing else — no <code>Decode</code>, no <code>Encode</code> — and each blocked operations in §10.9
 for that reason. In every case the selection is compiled into the one type that
@@ -14483,7 +14460,7 @@ holds the CHOICE: <code>scale_</code> into <code>Analog_Team_Scale</code>'s deco
 <code>event_parameter_Tag_</code> into <code>BAC_EEO_Object</code>'s. A CHOICE having no methods says
 nothing about whether its numbering is recoverable; it says only that the
 compiler had a single call site to inline into. All three are read values, and
-none needed a capture. [C]</p>
+none needed a capture. [S]</p>
 <p>One caution for anyone repeating this. A parent can hold <strong>several</strong> CHOICEs —
 <code>BAC_EEO_Object</code> holds two — and a reader that looks for "a switch preceded by a
 load of <code>tag_</code>" will attribute the first one it finds to whichever CHOICE it was
@@ -14493,7 +14470,7 @@ pair <code>&lt;field&gt;</code> then <code>tag_</code>, and discard any map that
 rather than publishing it. The same two guards catch the mirror-image error
 inside a CHOICE's own decoder, where <strong>decoding an arm loads that arm's own
 sub-CHOICE tag</strong> — take the last <code>tag_</code> in the method and you read a nested
-selection as the outer one. [C]</p>
+selection as the outer one. [S]</p>
 <p><strong>Two-armed CHOICEs, and why an earlier edition of §10.9 assumed instead of
 reading.</strong> Fifty-six of the seventy-three CHOICEs have exactly two arms, and for
 those the compiler emits no jump table — a compare and a branch is enough:</p>
@@ -14515,7 +14492,7 @@ two-armed CHOICE is positional, with one exception in the whole type system:
 <code>Pdl_display_data</code> numbers its two arms 1 and 2. That exception matters more than
 it looks — it is the counterexample to the reasoning the register used to justify
 the assumption, which was that with only two arms an ordinal reading cannot go
-wrong. It can. [C]</p>
+wrong. It can. [S]</p>
 <h3 id="105-cabinet_display--firmware--identity-block-0x010c">10.5 CABINET_DISPLAY — firmware / identity block (0x010C)</h3>
 <p><code>AP2_CABINET_DISPLAY</code> response (0x010C) is the panel's full firmware-and-identity block — the single richest unauthenticated read in the protocol (230/231 B on the wire; observed returning a firmware string such as <code>PME1252 / PXME V&lt;rev&gt; APOGEE / &lt;link date&gt;</code>). Field order is the wire order, and the layout below is now wire-confirmed — the on-wire field order matches the struct in this section exactly. [W]</p>
 <table>
@@ -14906,7 +14883,7 @@ structure in daily use and one nobody has ever observed: [W]</p>
 <tr>
 <td><code>Node_Choice</code></td>
 <td><code>0x0034 SET_NODE_STATE</code> and the cabinet online/offline family</td>
-<td><strong>never observed</strong> — the opcode appears in the panel firmware table but in no capture</td>
+<td><strong>never observed</strong> — the opcode appears in the device-side opcode table but in no capture</td>
 </tr>
 <tr>
 <td><code>Cov_data</code></td>
@@ -15277,7 +15254,7 @@ operations, and the only thing missing from all 7), <code>BAC_Point_Base</code> 
 <code>event_parameter_Tag_</code> (2) — and a previous edition of this section named the
 capture each one needed: a <code>MEMBER_DESC_UPLOAD</code> response for the first, a BACnet
 event-enrollment object for the third. <strong>Neither was taken.</strong> All three were read
-out of the vendor codec's <em>encoder</em> methods, a place the earlier recovery passes
+out of the reference implementation's <em>encoder</em> methods, a place the earlier recovery passes
 had not looked because they read decoders (§10.4.6). Two of the three can be
 checked against ASHRAE 135 rather than against the vendor, and both hold.</p>
 <p>Read that against the paragraph immediately below, which withdraws the same kind
@@ -15299,7 +15276,7 @@ that could not see them was looking for a constant before the branch — which t
 compiler does not emit for <code>tag == 0</code> (§10.4.6). Handling that closes 38 of the
 39, and the register reaches the same total with the two-arm fallback deleted
 from its code. <strong>Every CHOICE reachable from an operation now has a tag map read from
-the codec.</strong> Two CHOICEs still have no complete map, <code>NetworkVariable_</code> and
+the reference implementation.</strong> Two CHOICEs still have no complete map, <code>NetworkVariable_</code> and
 <code>Point_extension2_type</code>, and no structure in the catalog names either as a field
 type.</p>
 <p><strong>A claim this section used to make, withdrawn.</strong> Earlier editions reported
@@ -15319,10 +15296,10 @@ what was missing was the step from an enum to its base. [S]</p>
 deserves suspicion. <strong>Thirty-seven</strong> of the types the chain resolves are also
 pinned independently elsewhere in this document — thirty-seven agreements and
 <strong>zero</strong> disagreements, each tested with its own value withheld. <code>Baud_rate</code> = 2
-and <code>Sensor_type</code> = 1 come back at the values the wire and the panel firmware
+and <code>Sensor_type</code> = 1 come back at the values the wire and the device-side definitions
 gave them separately (§16.1.3). The vendor's generated encoder reserves exactly
 these widths before writing each field, which states the leaf widths in code
-rather than in a name. [C] And over the whole body corpus the parse outcome is
+rather than in a name. [S] And over the whole body corpus the parse outcome is
 <strong>unchanged</strong> — no body that parsed before fails now. That last one cannot
 <em>confirm</em> the widths, because the corpus does not exercise these types (which is
 why they were blocked in the first place); it can only falsify them, and it does
@@ -15501,7 +15478,7 @@ way", wrongly ruled out. [S]</p>
 <h3 id="1010-the-full-structure-set-is-enumerable">10.10 The full structure set is enumerable</h3>
 <p>The ~30 structures above cover the read/command/COV core, the firmware/identity block, the session block, and one representative of each remaining major family (upload, PPCL, trend, TEC, alarm, node-management). The remaining ~1,110 structures follow the same conventions — ordered typed fields, the shared sub-types of §10.2, counted arrays, and CHOICE unions — and each maps one-to-one to a <code>*_Request</code> / <code>*_Response</code> pair for an opcode in the §9 catalog. For any opcode not detailed here, its body is the like-named ASDU structure (e.g. <code>AP2_&lt;name&gt;_Request</code> / <code>AP2_&lt;name&gt;_Response</code>), readable from the structure library with the §10.1 type mapping. [S]</p>
 <p><strong>On "the exact byte offsets of an <code>All_points</code> arm", which an earlier edition left open.</strong> The question has no answer, and not for want of evidence: <strong>no arm of <code>All_points</code> has a fixed width.</strong> Every one of the sixteen contains at least one variable-length string, so absolute byte offsets do not exist for any of them, on any panel, in any capture. What exists is field order plus a width for every scalar — and since the enum-base pass pinned the last 31 of those (§10.9), order-plus-widths <em>is</em> the packing. A decoder walks the fields and arrives at the right byte; it cannot index to a constant offset, and no capture would let it. State that as a property of the encoding rather than as a gap. [S]</p>
-<p>The two things the earlier text asked for both arrived, which is worth recording next to the retraction. <strong>Codec-level evidence</strong>: the vendor's own encoders give width, byte order and string mode for 120 layouts (§10.4.6, §6.8). <strong>Measured interiors</strong>: §8.5 confirms six of the sixteen arms to the byte from the wire (a seventh, <code>lpaci</code>, is <em>observed</em> but its interior width is still narrowed only to <code>{9, 12}</code> — being exercised and being pinned are different things), and §10.4.4 now gives all nine <code>Alarm_object</code> arms field by field from the catalog, with the three that were independently wire-measured agreeing. What remains genuinely unmeasured is narrower and is stated where it belongs — ten <code>All_points</code> arms this site does not run (§8.5), and the alarm band's asserted values (§12.3.3). [W][S][C]</p>
+<p>The two things the earlier text asked for both arrived, which is worth recording next to the retraction. <strong>Codec-level evidence</strong>: the vendor's own encoders give width, byte order and string mode for 120 layouts (§10.4.6, §6.8). <strong>Measured interiors</strong>: §8.5 confirms six of the sixteen arms to the byte from the wire (a seventh, <code>lpaci</code>, is <em>observed</em> but its interior width is still narrowed only to <code>{9, 12}</code> — being exercised and being pinned are different things), and §10.4.4 now gives all nine <code>Alarm_object</code> arms field by field from the catalog, with the three that were independently wire-measured agreeing. What remains genuinely unmeasured is narrower and is stated where it belongs — ten <code>All_points</code> arms this site does not run (§8.5), and the alarm band's asserted values (§12.3.3). [W][S]</p>
 <h2 id="11-point-model">11. Point Model</h2>
 <p>The point is the atomic data object of a P2 system. Every value an operator reads or commands, every input a control program references, every quantity a trend logs, resolves to a point. This section specifies the logical point taxonomy, how a logical point decomposes into physical hardware terminations, how the FLN device layer self-describes its points, and the analog/enumerated scaling model. The runtime value carried for a point on the wire is specified in §12 (COV); the alarm attributes are specified in §13.</p>
 <h3 id="111-the-three-point-layers">11.1 The three point layers</h3>
@@ -15971,7 +15948,7 @@ doubled, each half with its own COV limit: [S]</p>
   opposite.</strong> Declaration order puts <code>virtual_pt</code> first, which would make tag
   <code>0</code> the empty arm, while the <code>Physical_address_*</code> CHOICEs pair the same two
   concepts the other way round (§10.4.2: there tag <code>0</code> is the arm that <em>has</em> an
-  address). Both are now attested rather than assumed: [C]</li>
+  address). Both are now attested rather than assumed: [S]</li>
 </ul>
 <table>
 <thead>
@@ -15997,7 +15974,7 @@ doubled, each half with its own COV limit: [S]</p>
 <p>So <strong>each follows its own declaration order</strong>, and the inversion is in the
   declarations themselves, not in one of them breaking a convention. A decoder
   cannot carry an assumption from one to the other: in <code>scale_</code> the <em>virtual</em>
-  case is tag <code>0</code>, and in a physical address the <em>physical</em> case is. [C][S]</p>
+  case is tag <code>0</code>, and in a physical address the <em>physical</em> case is. [S]</p>
 <p>This was <code>[OPEN]</code> for want of a capture — <code>scale_</code>'s only carrier,
   <code>AP2_MEMBER_DESC_ADD_ANALOG</code> (0x4002), appears nowhere in the corpus and
   0x4010 is present as 19 requests with no reply. It did not need one. The
@@ -16005,7 +15982,7 @@ doubled, each half with its own COV limit: [S]</p>
   no encoder of its own, its parent inlines the selection: <code>tag == 0</code> branches to
   the <code>virtual_pt</code> arm and <code>tag == 1</code> to the block that reads <code>eng_units</code>,
   <code>eng_cov_limit</code>, <code>si_units</code> and <code>si_cov_limit</code> — the physical arm's four
-  fields, in the declared order. [C]</p>
+  fields, in the declared order. [S]</p>
 <p>The units <em>strings</em> are not in this record. A point's own type (<code>LAI_type</code>,
 <code>LAO_type</code>, <code>LPACI_type</code>) carries a single <code>Analog_units = { eng_units: TEXT_,
 cov_limit }</code>, and the analog point-definition body carries the English and SI
@@ -17335,9 +17312,9 @@ this site's configuration is <strong>[OPEN]</strong>. [W]</p>
 Treat their rendering as unverified rather than confirmed. [W][OPEN]</p>
 <p>A cross-check falls out of the same walk and is worth recording: <code>highlight_enabled</code>
 and <code>autobye_enabled</code> are among <strong>twenty</strong> <code>BOOLEAN_</code> fields never true anywhere
-in the corpus, which is exactly what §16.1.3 predicts from the firmware — that
+in the corpus, which is exactly what §16.1.3 predicts — that
 the port encoder writes those two as literal constants. Two independent sources,
-same answer. [W][F]</p>
+same answer. [W][S]</p>
 <h4 id="1233-wire-layout-and-the-open-offsets">12.3.3 Wire layout and the open offsets</h4>
 <p>The <code>COV_ANNUNCIATE</code> (<code>0x0274</code>) body is now wire-confirmed. The body opens with a <code>count</code> (u16) of points reported, then, <strong>per point</strong>, a <code>name_response</code> (its three sub-fields, §8.5) followed by the value and condition block: a 2-byte <code>name_space</code> (observed constant <code>00 00</code> = system), the <strong>name TLV</strong> <code>01 00 &lt;len&gt; &lt;point-name&gt;</code>, an <strong>empty <code>suffix</code> TLV</strong> <code>01 00 00</code> (the §8.1 empty-string TLV — <em>not</em> a "value marker"; it is non-empty only for FLN subpoints, e.g. <code>01 00 09 "ROOM TEMP"</code>), then the present-value <strong><code>f32</code> big-endian</strong>, then a <strong>fixed 10-byte condition/priority block</strong> carrying fields #3–#12 one byte each. The name TLV therefore begins at body offset <strong>+4</strong> (after <code>count</code> + <code>name_space</code>), not +2. [W]</p>
 <pre><code>&lt;count u16&gt;                               -&gt; number of points in this push
@@ -17360,7 +17337,7 @@ same answer. [W][F]</p>
 </code></pre>
 <p>Worked examples (sanitized): a normal sensor <code>OATEMP.BN</code>, value <code>42 9b 62 3a</code> (≈ 77.69), block all-zero at NONE priority; a normal analog point with <code>control_status</code> (+1) = <code>0x04</code> and everything else zero; a point <strong>commanded at OPER</strong> shows the block opening <code>23 02 …</code> — <code>point_priority</code> (+0) = <code>0x23</code> (OPER) and <code>control_status</code> (+1) = <code>0x02</code>; and a <strong>failed sensor</strong> (<code>…RET AIR TEMP</code>, value <code>c2 79 ff ff</code> ≈ −62.5) shows non-zero bytes deeper in the block (a flag byte in the +7..+8 region asserted). A reader needing only the present value takes the <code>f32</code> and may ignore the block. [W]</p>
 <blockquote>
-<p><strong>[W/F — values pinned; the alarm band is declared but unobserved here]</strong> The 10-byte trailing block's <strong>position, size, and field order are established</strong> (the <code>Annunciate_request</code> ASDU defines fields #3–#12, exactly ten one-byte fields follow the value, and that fits the wire bit-for-bit). <strong>The controller's own encoder confirms it independently:</strong> the function that serialises this body emits <code>u16 | TEXT_ | TEXT_ | f32 |</code> and then <strong>exactly ten calls to the one-byte write primitive</strong>, consecutively, with nothing between them — so "ten one-byte fields after the value" is not an inference reconciling a schema against a byte count, it is what the panel is compiled to write. [F] Newer command/abnormal-state captures confirm the <strong>first two bytes' asserted values</strong>: <code>point_priority</code> (+0) ∈ {<code>0x00</code> NONE, <code>0x20</code> EMER, <code>0x23</code> OPER} tracking who holds the point (<code>0x20</code>/emer seen on BACnet-integration points commanded to 1.0), and <code>control_status</code> (+1) observed taking <code>{0x00, 0x02, 0x03, 0x04, 0x06}</code> (e.g. <code>0x02</code> when the point is under an active operator command, <code>0x04</code> on a normal analog input). A failed sensor asserts a flag byte in the OOS/failed region (+2..+8). [W]</p>
+<p><strong>[W/F — values pinned; the alarm band is declared but unobserved here]</strong> The 10-byte trailing block's <strong>position, size, and field order are established</strong> (the <code>Annunciate_request</code> ASDU defines fields #3–#12, exactly ten one-byte fields follow the value, and that fits the wire bit-for-bit). <strong>The controller's own encoder confirms it independently:</strong> the function that serialises this body emits <code>u16 | TEXT_ | TEXT_ | f32 |</code> and then <strong>exactly ten calls to the one-byte write primitive</strong>, consecutively, with nothing between them — so "ten one-byte fields after the value" is not an inference reconciling a schema against a byte count, it is what the panel is compiled to write. [S] Newer command/abnormal-state captures confirm the <strong>first two bytes' asserted values</strong>: <code>point_priority</code> (+0) ∈ {<code>0x00</code> NONE, <code>0x20</code> EMER, <code>0x23</code> OPER} tracking who holds the point (<code>0x20</code>/emer seen on BACnet-integration points commanded to 1.0), and <code>control_status</code> (+1) observed taking <code>{0x00, 0x02, 0x03, 0x04, 0x06}</code> (e.g. <code>0x02</code> when the point is under an active operator command, <code>0x04</code> on a normal analog input). A failed sensor asserts a flag byte in the OOS/failed region (+2..+8). [W]</p>
 </blockquote>
 <p><strong><code>control_status</code> (+1) can be read, and the reading checks itself.</strong> The type system names this byte's enumeration <code>0 remote / 1 tool_override / 2 by_priority / 3 config_only / 4 input_only / 5 manual_override / 6 undefined</code> (Appendix A; §11.3.1 for what <code>manual_override</code> means to an operator). Six of the seven values occur here (counts below); <strong>two of them can be
 characterised <em>from the wire alone</em></strong> — <code>0x02</code> on a point under an active
@@ -17458,7 +17435,7 @@ that describes exactly that condition: <code>by_priority</code> for a point held
 </tr>
 </tbody>
 </table>
-<p>The familiar operator-facing ladder is <strong>OPER (35) &gt; SMOKE (34) &gt; EMER (32) &gt; PDL (5) &gt; NONE (0)</strong>; the <code>host_2..host_6</code> band (10–30) and <code>tec_ovrd</code> (1) fill the intermediate rungs, and a later band (BACnet priorities 101–116) maps the 16 BACnet command-priority slots. [S] A command at a given priority overrides only equal-or-lower holders; a release lowers the holder to NONE so a control program can reacquire. [D] This same priority byte is the <code>scope_byte</code> of a scoped command request (§8.2) and the command-priority field of the point-definition header. [W] At the codec layer command priority is a single byte (<code>GetPriority → BYTE</code>). [S]</p>
+<p>The familiar operator-facing ladder is <strong>OPER (35) &gt; SMOKE (34) &gt; EMER (32) &gt; PDL (5) &gt; NONE (0)</strong>; the <code>host_2..host_6</code> band (10–30) and <code>tec_ovrd</code> (1) fill the intermediate rungs, and a later band (BACnet priorities 101–116) maps the 16 BACnet command-priority slots. [S] A command at a given priority overrides only equal-or-lower holders; a release lowers the holder to NONE so a control program can reacquire. [D] This same priority byte is the <code>scope_byte</code> of a scoped command request (§8.2) and the command-priority field of the point-definition header. [W] At the reference implementation layer command priority is a single byte (<code>GetPriority → BYTE</code>). [S]</p>
 <h3 id="125-cov-behavior-and-tuning">12.5 COV behavior and tuning</h3>
 <ul>
 <li><strong>EU deadband (COV limit / resolution).</strong> An analog point reports a change only when the value moves by at least one <strong>COV limit</strong> — the engineering-units resolution of the subscription. The COV limit is floored at the point's slope: it cannot be finer than one raw count mapped through the slope (a smaller configured value is clamped up). For a pulse accumulator (LPACI) the floor is one pulse. [D] The COV limit is expressed in dual form — engineering value and equivalent raw count — because it maps through the slope to a raw-count resolution; "1.0 (32)" means one engineering unit = 32 raw counts. [D]</li>
@@ -19182,13 +19159,13 @@ none of them was — a statement about the 60-record analysis sample (§1.4.1.1)
 which stopped before it reached the fifth panel. What genuinely stays
 unexercised is narrower: <strong><code>Port_type</code> reads 0 on all 95</strong>, so its second member
 still never appears. <strong>[OPEN]</strong> [W]</p>
-<p>The variation lands exactly where the firmware says it should, which is the
-useful part. §16.1's next paragraph reports that the encoder writes
+<p>The variation lands exactly where the device-side definitions say it should, which is the
+useful part. §16.1's next paragraph reports that the reference encoder writes
 <code>highlight_enabled</code> and <code>autobye_enabled</code> as literal constants while fetching
 <code>alarm_printing_enabled</code> and <code>report_printing_enabled</code> from the object. <strong>The two
 constants read zero on all 95 records and the two fetched fields are precisely
 the two that vary</strong> — an independent wire confirmation of a claim that had rested
-on the binary alone. [W][F]</p>
+on the binary alone. [W][S]</p>
 <p><strong>Two of the four booleans are not fields at all.</strong> The panel's port encoder
 writes <code>highlight_enabled</code> and <code>autobye_enabled</code> as <strong>literal zero</strong> — not read
 from the port record, written as a constant — while <code>alarm_printing_enabled</code> and
@@ -19196,7 +19173,7 @@ from the port record, written as a constant — while <code>alarm_printing_enabl
 in all <strong>95</strong> records is not a sample of a quiet site; <strong>this firmware cannot
 emit anything else</strong> — and the table above shows the other two doing the
 opposite on the one panel that has printing configured. A decoder should carry them as reserved-zero rather than as
-state, and a virtual panel should write zero. [F]</p>
+state, and a virtual panel should write zero. [S]</p>
 <p>One thing worth noting for §17: this is an <strong>unauthenticated read that
 enumerates a panel's console and management ports by name</strong> — the Telnet port
 among them — and returns the site identifier in <code>my_site_id</code> and again inside
@@ -19874,7 +19851,7 @@ between models.</p>
 </tr>
 </tbody>
 </table>
-<p>The panel reports a <strong>firmware-revision string and a separate hardware string</strong>; together they form the firmware+hardware identity. That identity selects the wire <strong>STRING_TYPE</strong> — whether name/string fields are encoded in <strong>RAD-50</strong> or <strong>ASCII</strong> (cross-ref §8 — the codec and the 40-character RAD-50 alphabet). A client decoding name fields must key its codec on the reported identity rather than assume one encoding. [D/W]</p>
+<p>The panel reports a <strong>firmware-revision string and a separate hardware string</strong>; together they form the firmware+hardware identity. That identity selects the wire <strong>STRING_TYPE</strong> — whether name/string fields are encoded in <strong>RAD-50</strong> or <strong>ASCII</strong> (cross-ref §8 — the reference implementation and the 40-character RAD-50 alphabet). A client decoding name fields must key its codec on the reported identity rather than assume one encoding. [D/W]</p>
 <p><strong>The rule is narrow, and it is matchable from the identity string itself.</strong> The
 revision library is a table of <code>(REV_STRING, CAB_TYPE, STRING_TYPE)</code> in two
 kinds — <strong>836 firmware-revision entries</strong> and <strong>52 hardware-revision entries</strong> —
@@ -19933,13 +19910,13 @@ not "12.41 &gt; 12.6". Compare revisions component-wise as strings-of-digits, or
 panel at 12.9 sorts below one at 12.41. [D]</p>
 <h4 id="1651-what-a-panel-actually-runs">16.5.1 What a panel actually runs</h4>
 <p>Useful context for anyone modelling panel behaviour, and none of it is
-guessable from the wire: [F]</p>
+guessable from the wire: [S]</p>
 <ul>
 <li><strong>The control processor is a Motorola 68000, and the operating system is
   pSOS+</strong> — the Integrated Systems real-time kernel, banner <code>PSOS+ S68000
   V2.0.E</code>, copyright 1988–1992, with its configuration symbols (<code>KC_PSOSCODE</code>,
   <code>KC_RN0SADR</code>) present in the image. Confirmed two ways: the banner appears in
-  26 of 42 shipped images, and <strong>28 of 42 disassemble coherently as 68000</strong> and
+  26 of 42 platforms, and <strong>28 of 42 are coherent 68000 targets</strong> and
   not at all as PowerPC.</li>
 <li><strong>The later generation is PowerPC.</strong> Two of the 42 shipped images are — the
   3.2 MB <code>V1</code> and the 2.5 MB French MEC, decoding at 40% and 11% instruction
@@ -19961,7 +19938,7 @@ kernel timer tick, not a polling loop; the <strong>~600-request database sweep
 answered in ~8 seconds while heartbeats continue on other connections</strong> (§16.1.1)
 is separate tasks on separate priorities rather than one loop multiplexing. A
 virtual panel that services both from a single thread will pass a functional
-test and fail a timing one. [F][I]</p>
+test and fail a timing one. [S][I]</p>
 <p><strong>Firmware-keyed compatibility knobs.</strong> Two legacy compatibility settings are gated by firmware identity: [D]</p>
 <ul>
 <li><strong>Legacy P2 Host ID field</strong> — an older host-identity field retained for back-compatibility with pre-IP supervisors.</li>
@@ -23651,7 +23628,7 @@ specific test that would confirm or falsify it.</p>
    <strong>No capture was needed for any of it</strong>, and two editions of this register
    asked for two specific ones — a <code>MEMBER_DESC_UPLOAD</code> response for
    <code>localStateText_</code>, a BACnet event-enrollment object for
-   <code>event_parameter_Tag_</code>. Both were answered by reading the vendor codec's
+   <code>event_parameter_Tag_</code>. Both were answered by reading the reference implementation's
    <em>encoders</em>, which write the same tag their decoders read and which the
    earlier passes had not looked at. <code>BAC_Point_Base</code>'s ninth arm went the same
    way: <code>multi_value</code> = <strong>19</strong> is now read rather than inferred from the
@@ -23711,15 +23688,7 @@ reader can weigh provenance. The tags are:</p>
 </tr>
 <tr>
 <td><strong>[S]</strong></td>
-<td>Struct/metadata-derived — from the AP2 function-code enumeration or the ASDU structure definitions. Definitional truth for field names, types, and order, but not by itself proof of the on-wire byte offset.</td>
-</tr>
-<tr>
-<td><strong>[F]</strong></td>
-<td>Firmware-attested — the value or behavior is carried in the controller firmware itself, in a panel image rather than in a supervisor-side binary. Stronger than [S] for the question <em>does a panel actually implement this</em>, because [S] describes only what a supervisor knows how to ask for.</td>
-</tr>
-<tr>
-<td><strong>[C]</strong></td>
-<td>Codec-attested — read out of the vendor's own compiled P2 codec, the encoder or decoder that lays the bytes down, supervisor side. Definitive for field width, byte order, padding and string encoding, because the arithmetic is in the instruction stream. Weaker than [F] for <em>does a panel implement this</em>; weaker than [W] because a link the codec serves may never have been captured.</td>
+<td>Specification-derived — from the protocol's own definitions: the function-code enumeration and its opcode tables, the ASDU structure definitions, and the value enums. Definitional truth for field names, types, and order, but not by itself proof of the on-wire byte offset.</td>
 </tr>
 <tr>
 <td><strong>[D]</strong></td>
