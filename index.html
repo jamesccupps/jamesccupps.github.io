@@ -2211,6 +2211,17 @@ contributions this document could receive. [W][D][OPEN]</p>
 <p><strong>[OPEN, LARGELY ANSWERED] P2 segmentation thresholds and reassembly rules.</strong> The ~256-byte figure from vendor connection-test material is a <em>connection-test ping</em> size, <strong>not</strong> a maximum P2 data-packet cap — single P2 frames are observed with <code>total_len</code> up to ≈1,587 bytes (a ~1,530-byte body of packed records plus header+slots) in one response [W]. <strong>The ceiling and the reassembly rule are now recovered from the supervisor's AP2 codec.</strong> A segment buffer is <strong>16,384 bytes</strong>, of which the encoder is handed <code>buf+2</code> with a capacity of <strong>16,382 bytes</strong>; the two reserved bytes at <code>buf[0]</code> are the <code>u16</code> function code, which is why the wire carries the opcode immediately before the body and why <code>total_length</code> includes it. Reassembly is a cursor against a declared total: each mapped segment copies <code>n</code> bytes and advances the cursor, except the last, whose length is <code>total - cursor</code>; the sender therefore knows the total before it begins. The command object carries an explicit <strong>more-follows</strong> field, set on the segmenting path and cleared on the direct one. [S] <strong>What is still open is the wire behaviour at the threshold.</strong> No body in the corpus exceeds 16,382 B — the largest complete body is 1,570 B and the largest <em>declared</em> is 12,073 B — so the corpus is consistent with the ceiling without exercising it. Whether a result larger than one segment appears as two P2 frames, and what marks the continuation on the wire, needs a capture of an upload large enough to segment. [W][OPEN]</p>
 </blockquote>
 <h3 id="46-the-serial-trunk-is-token-passing-and-its-parameters-are-named">4.6 The serial trunk is token-passing, and its parameters are named</h3>
+<blockquote>
+<p><strong>Nothing in this section is wire-verified, and it is the section a reader
+with serial panels will reach for first.</strong> This corpus is entirely native
+P2/IP: <strong>431,463 frames on TCP/5033 and zero on TCP/3001</strong> (§4.2), so no
+serial trunk and no AEM tunnel has ever been captured here. The token-passing
+discipline and the parameter defaults below come from the driver's own
+configuration surface, which is a good source for <em>what the parameters are</em>
+and no source at all for <em>what the bytes look like</em>. The frame layout stays
+<strong>[OPEN]</strong> (§4.5), and a capture from an RS-485 trunk or an AEM Channel 1
+remains one of the most valuable things this document could receive. [S][W]</p>
+</blockquote>
 <p>The frame bytes remain open (§4.5), but the <strong>medium-access discipline</strong> is
 settled: the serial trunk driver is configured with a token hold time and a
 local node address, which is a token-passing MAC, not a master/slave poll.
@@ -15882,6 +15893,14 @@ The map's response layout is therefore <code>[S]</code> only. [W]</p>
 </table>
 <h4 id="1142-fln-application-roster-and-self-identification">11.4.2 FLN application roster and self-identification</h4>
 <p>A panel hosts one or more <strong>Field Level Networks (FLNs)</strong> — RS-485 fieldbus sub-buses (P1, §4.4) carrying field controllers (TEC, UC, TCU, PXM, P1DXR, VFD; <code>FLN_Device_Type</code> enumerates the families). [S/D] Each FLN device runs an <strong>application</strong>, identified by an <strong>application number</strong>, that fixes the device's roster of points. [D]</p>
+<p><strong>The corpus reaches the edge of this model and stops.</strong> <code>application_number</code> is
+decoded <strong>291</strong> times and takes three values — <code>0</code> plus the two spellings of the
+unset sentinel (§16.3.1) — while <code>fln_number</code>, <code>drop_number</code>, <code>device_type</code> and
+the revision fields are <strong>not decoded anywhere</strong> under those names. So the
+roster <em>concept</em> is wire-touched and the roster <em>fields</em> below are not: they
+come from vendor documentation, and this site runs one application on the FLN
+devices it exposes. An implementer building FLN discovery is working from the
+manual, not from anything confirmed here. <strong>[OPEN]</strong> [W][D]</p>
 <p>The subpoint index space is fixed by the controller class, and three slots have reserved meaning: [D]</p>
 <table>
 <thead>
@@ -16418,7 +16437,9 @@ as a vendor-calibrated constant rather than a physical one. <strong>[OPEN]</stro
 <h4 id="11521-standard-input-ranges-and-the-mpus-two">11.5.2.1 Standard input ranges, and the MPU's two</h4>
 <p>A sensor's signal range is usually not typed in. The tooling offers a fixed set
 of <strong>standard input ranges</strong>, and picking one fills in both the signal and the
-device span; these nine are the whole set: [D]</p>
+device span; these nine are the whole set — <strong>from the vendor's tooling, and not
+checkable from this corpus for the same reason as §11.5.1.1: the wire carries
+the converted engineering value (§12.3) and never the raw span</strong>: [D]</p>
 <table>
 <thead>
 <tr>
