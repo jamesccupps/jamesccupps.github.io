@@ -4123,7 +4123,7 @@ wire format forbids a retry; nothing here performs one. [W]</p>
 <tr>
 <td><code>0x0002</code></td>
 <td><strong>invalid command</strong> — the command is not valid for the addressed object (seen on <code>POINT_CMD_ALARM 0x0244</code> and on <code>CMD_ALARM_DISABLE 0x0247</code> addressed to a point name that does not exist; the documented example is commanding a non-virtual LDI or LAI point). <strong>Also returned for an over-length <code>0x0136 P2_ROUTE</code></strong>, see below</td>
-<td>wire behaviour and the vendor catalog agree, plus firmware</td>
+<td>wire behaviour, the vendor catalog and the device-side definitions agree</td>
 <td>[W][D][S]</td>
 </tr>
 <tr>
