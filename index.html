@@ -2576,6 +2576,16 @@ absence of a reply means the peer is down. [W]</p>
 <p><strong>Beacon-myth correction.</strong> A previously asserted "APOGEE multicast beacon at <strong>233.89.188.1</strong>" does <strong>not exist</strong> as a P2 mechanism [I]. That assertion was a misattribution: the traffic in question was unrelated gateway/network-appliance traffic (UniFi-class), mislabeled by an early dissector. The only multicast P2 uses is the <strong>off-by-default</strong> availability group at <strong>234.5.6.7 / UDP 8</strong> above. Independent confirmations: the vendor field-panel/LocalNet configuration documents <code>234.5.6.7:8</code> as the group [D]; and on a live network with multicast disabled, no <code>233.89.188.1</code> P2 traffic is present in capture [W]. Any tool keyed to <code>233.89.188.1</code> for P2 discovery is wrong.</p>
 </blockquote>
 <h3 id="53-node-name-table-replication-the-self-organizing-bln">5.3 Node-name-table replication (the self-organizing BLN)</h3>
+<blockquote>
+<p><strong>Heavily observed, with two gaps.</strong> The pull path is exercised — <code>0x4634
+REPL_PULL</code> carries <strong>10,017</strong> bodies, <code>0x4635 REPL_PULL_MORE</code> <strong>130</strong>, and
+<code>0x4636 REPL_CHANGES</code> <strong>180</strong> — and the table's contents are visible:
+<code>node_name</code> is decoded <strong>209,957</strong> times across <strong>154 distinct</strong> values, with
+<code>grain_type</code> and <code>repl_cmd_type</code> on 1,421 records each. But <code>0x4633
+REPL_NOTIFY</code> and <code>0x464C REPL_DIAG_NODELIST</code> carry <strong>no bodies at all</strong>, so the
+<em>notification</em> half of the mechanism described below is type-system only while
+the <em>pull</em> half is wire-confirmed. <strong>[OPEN]</strong> [W][D]</p>
+</blockquote>
 <p>BLN membership is carried in a <strong>node-name table</strong> (name ↔ IP, with state) that is <strong>entered once on any one panel and auto-replicates to every panel on the BLN</strong> [D]. Each panel continuously monitors every other peer and <strong>temporarily disables communication to any peer that becomes unavailable</strong>, resuming when the peer returns [D]. This is the application-layer membership model built on top of the EPing/multicast liveness layer — there is no central master; the table is the shared, replicated source of truth for "who is on this BLN and at what IP."</p>
 <p>The replication of shared/global data (the node-name table, plus alarm destinations, user accounts, state-text tables, etc.) runs on a notify + poll + cycle schedule with dead-node tombstoning:</p>
 <table>
@@ -5374,6 +5384,51 @@ separate <code>u32</code> time base plus a <code>u16</code> zone offset used for
 stamp. [W][S]</p>
 <h3 id="84-string-character-encoding--rad-50-vs-ascii">8.4 String character encoding — RAD-50 vs ASCII</h3>
 <p>String content inside a TLV (§8.1) is carried in one of two character encodings, selected <strong>per firmware platform</strong>, not per frame. The encoding in force is a fixed property of the device's firmware revision (<code>STRING_TYPE = RAD50 | ASCII</code>, keyed per platform class in the firmware revision library). A node uses one string encoding for its whole revision. [D]</p>
+<p><strong>Every node in this corpus is on the ASCII side of that switch, and a good
+deal of what it sends could not be RAD-50 at all.</strong> Of <strong>1,204,087</strong> <code>TEXT_</code>
+strings decoded from the wire, <strong>189,257 (15.7%)</strong> contain at least one
+character RAD-50 cannot represent — its alphabet is 40 symbols: space, <code>A</code>–<code>Z</code>,
+<code>$</code>, <code>.</code>, digits, and one unused code. The blockers are not exotic: [W]</p>
+<table>
+<thead>
+<tr>
+<th>character</th>
+<th style="text-align: right;">strings</th>
+<th>why it appears</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>-</code></td>
+<td style="text-align: right;">82,638</td>
+<td>ordinary in point names (§3.4)</td>
+</tr>
+<tr>
+<td>vertical bar</td>
+<td style="text-align: right;">41,960</td>
+<td>the node/port separator of §3.3 — structural, not optional</td>
+</tr>
+<tr>
+<td><code>*</code></td>
+<td style="text-align: right;">35,810</td>
+<td>the wildcard selector of §10.2.3</td>
+</tr>
+<tr>
+<td>lowercase</td>
+<td style="text-align: right;">63,985</td>
+<td>node and object names are not upper-cased on the wire</td>
+</tr>
+</tbody>
+</table>
+<p>The remaining 84.3% <em>could</em> be encoded either way, so the corpus cannot show a
+RAD-50 node — it can only show that none of these nodes is one. <strong>The practical
+consequence is narrow and worth stating</strong>: <code>|</code> is the address separator and <code>*</code>
+is the wildcard, so <strong>any node speaking RAD-50 could not express an address or a
+wildcard in a string field at all</strong>. Whatever RAD-50 is for on those platforms,
+it is not for the fields this corpus carries. A decoder should read <code>TEXT_</code> as
+ASCII and treat RAD-50 as a storage encoding it may meet in a panel database
+(§16.2), not on the wire. <strong>[OPEN]</strong> for what a RAD-50 platform actually puts in
+these fields — no such node appears here. [W][D]</p>
 <h4 id="841-the-rad-50-codec-s">8.4.1 The RAD-50 codec [S]</h4>
 <p>RAD-50 packs three characters into a single 16-bit word, drawing from a fixed 40-character alphabet. The alphabet (index → character) is: [S]</p>
 <pre><code>index:  0                                              39
@@ -16550,6 +16605,13 @@ decodable.</strong></p>
 <p>The four rare DataMate values are all confined to drive/VFD applications and are legible from their own rows: <strong>12</strong> marks the application-number subpoint (<code>PTNUM 2</code>, "APPLICATION") and drive parameter-number/limit points; <strong>10</strong> and <strong>34</strong> are momentary command points carrying action labels rather than states (<code>RST ON</code>/<code>RSTOFF</code>, <code>RESET</code>/<code>NO</code>) — which is why <code>PTYPE 34</code> is <code>RESET FAULT</code> and has nothing to do with command-priority 34 = smoke; <strong>11</strong> occurs once, on a parameter-data read. Twenty rows in total. [W]</p>
 </blockquote>
 <h4 id="1154-logical-type--bacnet-object-type-optional-cross-reference">11.5.4 Logical type → BACnet object type (optional cross-reference)</h4>
+<blockquote>
+<p><strong>No BACnet object-type field is decoded anywhere in the corpus</strong> — not
+<code>object_Type</code>, <code>object_Identifier</code>, nor any spelling of them. The mapping below
+is the vendor's, and this corpus neither confirms nor contradicts a single row
+of it. It is offered as a cross-reference for someone bridging the two models,
+which is what the heading says, and not as observed behaviour. [D][W]</p>
+</blockquote>
 <p>Where a P2 point is exposed on a BACnet/IP interface, its logical type maps to a BACnet object type; the physical/virtual flag selects the I/O-object versus value-object form. [D] (BACnet exposure is a separate stack; this map is provided only for implementers bridging the two.)</p>
 <table>
 <thead>
@@ -18861,6 +18923,14 @@ end of every successful enumeration.</strong> [W]</p>
 <hr>
 <h2 id="16-database-bulk-transfer-on-disk-p2-format-application-catalog--firmware">16. Database, Bulk Transfer, On-Disk (.P2) Format, Application Catalog &amp; Firmware</h2>
 <h3 id="161-bulk-database-transfer">16.1 Bulk database transfer</h3>
+<blockquote>
+<p><strong>No bulk-database-transfer opcode carries a body in this corpus.</strong> The
+mechanism below is described from the type system and vendor material; nothing
+here shows a panel performing one. The on-disk form of the same data <em>is</em>
+wire-independent evidence and is decoded in §16.2 from 36 panel databases —
+read that section for what the records look like, and this one for how the
+transfer is meant to work. <strong>[OPEN]</strong> [S][W]</p>
+</blockquote>
 <p>A panel database is moved across P2 <strong>record-by-record</strong>, not as a single monolithic blob. Each record is its own request that returns either a success (dir <code>0x01</code>) or a 2-byte fault/error code (dir <code>0x05</code>), corroborating the directory-byte/error model of §7. The transfer is organized into sections gated by firmware revision — a section unsupported by a panel's firmware is skipped or rejected per-record rather than aborting the whole transfer. [D/W]</p>
 <p>The transfer surface is the <code>UPL_*</code> / <code>DBCHANGE_*</code> / <code>*_DB_GET</code> / <code>*_DB_REPLACE</code> opcode families: the <code>0x09xx</code> <code>UPL_ALL_*</code>/<code>UPL_ADDED_*</code>/<code>UPL_DEL_*</code> block enumerates each object class (points, PPCL, TEC, trend, EQS, SSTO, TOD), and per-domain <code>*_DB_GET</code>/<code>*_DB_REPLACE</code> pairs move whole sub-databases (e.g. <code>0x0337/0x0338</code> <code>USER_ACCT_DB_GET/REPLACE</code>, <code>0x0357/0x0358</code> <code>ACCESS_GROUPS_DB_*</code>, <code>0x0362/0x0363</code> <code>EMS_DB_*</code>, <code>0x040A/0x040B</code> <code>ENUM_TYPE_DB_GET/REPLACE</code>, the <code>0x06xx</code> <code>CAL_DB_*</code>/<code>DST_DB_*</code> calendar blocks). <code>0x0950 AP2_DOWNLOAD_ME</code> initiates a download <em>to</em> a panel. [S]</p>
 <p>The replication-direction mechanics (notify/pull/changes push) live in the <code>0x46xx</code> EBLN family and are specified in §5.3 (replication). [S]</p>
