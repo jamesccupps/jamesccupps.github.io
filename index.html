@@ -17061,6 +17061,87 @@ the panel evidently tolerates it. A client should send <code>0x00FF</code>. [W][
 <li><strong>Operator-Disabled</strong> — <code>operator_disabled</code> true; value and condition frozen against operator and program (the point may still transition to failed). [S/D]</li>
 </ul>
 <p>These are the semantic meaning of the per-point status the COV report conveys; <code>alarm_state</code> (normal/alarm/high/low/trouble) and <code>alarm_priority</code> ride alongside for points that are in alarm. [S]</p>
+<p><strong>Which of them an implementer will actually meet.</strong> The taxonomy above is the
+type system's and the vendor's; this is the wire, over every <code>BOOLEAN_</code> in the
+corpus rather than a sample: [W]</p>
+<table>
+<thead>
+<tr>
+<th>state</th>
+<th>field</th>
+<th style="text-align: right;">true</th>
+<th style="text-align: right;">of</th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Failed</td>
+<td><code>failed</code></td>
+<td style="text-align: right;"><strong>8,875</strong></td>
+<td style="text-align: right;">364,038</td>
+<td>the one an implementer will certainly meet</td>
+</tr>
+<tr>
+<td>Out-of-Service</td>
+<td><code>out_of_service</code></td>
+<td style="text-align: right;"><strong>1,074</strong></td>
+<td style="text-align: right;">154,319</td>
+<td>on the COV push</td>
+</tr>
+<tr>
+<td>Operator-Disabled</td>
+<td><code>operator_disabled</code></td>
+<td style="text-align: right;">50</td>
+<td style="text-align: right;">129,972</td>
+<td></td>
+</tr>
+<tr>
+<td>Alarm-by-Command</td>
+<td><code>commanded_to_alarm</code></td>
+<td style="text-align: right;"><strong>3</strong></td>
+<td style="text-align: right;">129,972</td>
+<td>real, but barely — cf. §12.3.3's 9 alarms in 120,763</td>
+</tr>
+<tr>
+<td>Program-Disabled</td>
+<td><code>program_disabled</code></td>
+<td style="text-align: right;"><strong>0</strong></td>
+<td style="text-align: right;">129,972</td>
+<td>never asserted here</td>
+</tr>
+<tr>
+<td>Proofing</td>
+<td><code>proof_on</code></td>
+<td style="text-align: right;"><strong>0</strong></td>
+<td style="text-align: right;">120,763</td>
+<td>never asserted here — but see below</td>
+</tr>
+<tr>
+<td><em>(alarm detail)</em></td>
+<td><code>in_trouble</code></td>
+<td style="text-align: right;"><strong>0</strong></td>
+<td style="text-align: right;">9,209</td>
+<td>never asserted here</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Proofing is the one to read carefully.</strong> The field this taxonomy names for it,
+<code>proof_on</code>, is false on <strong>all 120,763</strong> COV pushes. A <em>different</em> field,
+<code>proof_pending</code>, is true <strong>124 times</strong> in <code>Trend_data</code> records. So the proofing
+state does occur at this site, and the COV push is not where it shows up. An
+implementer rendering "Proofing" from <code>proof_on</code> alone will never display it;
+one reading trend records will. Whether that is a property of the protocol or of
+this site's configuration is <strong>[OPEN]</strong>. [W]</p>
+<p><strong>Three decodes are therefore untested.</strong> <code>program_disabled</code>, <code>proof_on</code> and
+<code>in_trouble</code> are correctly <em>placed</em> — the bodies around them consume exactly, and
+§10.1's alignment checks pass — but no body has ever carried them non-zero here.
+Treat their rendering as unverified rather than confirmed. [W][OPEN]</p>
+<p>A cross-check falls out of the same walk and is worth recording: <code>highlight_enabled</code>
+and <code>autobye_enabled</code> are among <strong>twenty</strong> <code>BOOLEAN_</code> fields never true anywhere
+in the corpus, which is exactly what §16.1.3 predicts from the firmware — that
+the port encoder writes those two as literal constants. Two independent sources,
+same answer. [W][F]</p>
 <h4 id="1233-wire-layout-and-the-open-offsets">12.3.3 Wire layout and the open offsets</h4>
 <p>The <code>COV_ANNUNCIATE</code> (<code>0x0274</code>) body is now wire-confirmed. The body opens with a <code>count</code> (u16) of points reported, then, <strong>per point</strong>, a <code>name_response</code> (its three sub-fields, §8.5) followed by the value and condition block: a 2-byte <code>name_space</code> (observed constant <code>00 00</code> = system), the <strong>name TLV</strong> <code>01 00 &lt;len&gt; &lt;point-name&gt;</code>, an <strong>empty <code>suffix</code> TLV</strong> <code>01 00 00</code> (the §8.1 empty-string TLV — <em>not</em> a "value marker"; it is non-empty only for FLN subpoints, e.g. <code>01 00 09 "ROOM TEMP"</code>), then the present-value <strong><code>f32</code> big-endian</strong>, then a <strong>fixed 10-byte condition/priority block</strong> carrying fields #3–#12 one byte each. The name TLV therefore begins at body offset <strong>+4</strong> (after <code>count</code> + <code>name_space</code>), not +2. [W]</p>
 <pre><code>&lt;count u16&gt;                               -&gt; number of points in this push
