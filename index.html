@@ -4652,11 +4652,20 @@ sections. This is the whole sequence, from TCP connect to steady state. [W][S]</
 <li>
 <p><strong>Send <code>0x4640</code> (<code>EBLN_PING</code> / IdentifyBlock) as the first frame.</strong> There is
    no separate handshake opcode: establishment <em>is</em> this exchange (§6.2). Frame
-   it on the <strong>second-channel</strong> class matching the peer's generation — <code>0x2E</code>
-   legacy, <code>0x2F</code> modern (§6.6) — with <code>dir = 0x00</code>, slots <code>[0]</code> and <code>[2]</code> both
-   the BLN name, <code>[1]</code> the destination node name, <code>[3]</code> your own identity. The
-   body is the <code>eBLN_Node</code> block of §10.6: three name TLVs then exactly 16 bytes.</p>
+   it with <code>dir = 0x00</code>, slots <code>[0]</code> and <code>[2]</code> both the BLN name, <code>[1]</code> the
+   destination node name, <code>[3]</code> your own identity, and <strong><code>msg_type</code> computed
+   from those four slots</strong> — see step 5. The body is the <code>eBLN_Node</code> block of
+   §10.6: three name TLVs then exactly 16 bytes.</p>
 </li>
+</ol>
+<blockquote>
+<p>An earlier edition of this step said to "frame it on the second-channel
+class matching the peer's generation — <code>0x2E</code> legacy, <code>0x2F</code> modern". There
+is no such choice to make: <code>msg_type</code> is a header length (§6.2), and
+<code>0x2E</code>/<code>0x2F</code> are simply what <code>13 + slot bytes</code> comes to when the node names
+are those lengths. Compute it.</p>
+</blockquote>
+<ol start="3">
 <li>
 <p><strong>The BLN name is the gate, and it is checked before anything else.</strong> A
    wrong BLN name draws a <strong>TCP RST</strong> from a panel or a graceful <strong>FIN</strong> from a
