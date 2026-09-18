@@ -5035,6 +5035,12 @@ consistency, not a wire-proven width.</p>
 |------- TLV &quot;SYST&quot; --| |- selector -|
                         scope_byte=0x23, then wildcard mask 3F FF FF FF
 </code></pre>
+<blockquote>
+<p>The example shows <code>0x23</code>, but that is the <strong>less common</strong> value. It is the
+<code>point_priority</code> field of the table below, and a plain read carries <strong><code>0x00</code></strong>
+— 17,650 requests against 1,061. §6.1's worked <code>0x0220</code> read shows the <code>0x00</code>
+form. Copy the field, not the example's value.</p>
+</blockquote>
 <p><strong>This block is a <code>User_profile</code>, and reading it as one explains every field.</strong>
 The structure catalog defines <code>User_profile</code> as <code>user_logon : TEXT_</code>,
 <code>point_priority : Point_priority</code>, <code>access_class : BITSTRING32</code> — a name, a
