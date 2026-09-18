@@ -18010,6 +18010,14 @@ function, both <code>SSTO</code> forms, <code>TOD</code>/<code>TODMOD</code>, th
 programs</strong>, not about the language: an absent keyword is one nobody here
 wrote, and a parser must still accept all 66. It does say which half of the
 language a decoder will meet first. [W][S]</p>
+<p><strong>The 66 are the APOGEE / Insight-era vocabulary, which is what this corpus
+contains.</strong> The PXC.A generation (PXC4/5/7.A) is documented separately, in the
+<em>Proprietary</em> Program Control Language manual (A6V10374898 — note the rename
+from <em>Powers</em>), which <strong>adds</strong> <code>GETVAL</code> / <code>SETVAL</code> for BACnet property access
+and <strong>removes ten statements</strong> as obsolete. Neither appears here: <code>GETVAL</code> and
+<code>SETVAL</code> occur in <strong>zero</strong> of the 2,644 lines, which is what a pre-PXC.A site
+should look like. A parser meant to cover both generations needs that manual
+as well as this section. [W][D]</p>
 </blockquote>
 <p>PPCL statements fall into functional categories; the panel stores each statement with a <strong>token byte</strong> identifying the statement type. The complete token set is the 71-entry statement-type table (vendor enum <code>PPCL_statement_type</code>, members prefixed <code>WHOP*</code> = "what-opcode"); it is reproduced in full in the appendix (cross-ref Appendix — PPCL statement-type token table). [S] The functional grouping: [D/S]</p>
 <table>
@@ -18139,6 +18147,53 @@ operator has two spellings</strong> — a bare word and a dot-delimited form —
 are reserved, so a tokenizer must accept <code>.GT.</code> and <code>GT</code> as the same operator.
 And <strong>the dotted forms include <code>.ROOT.</code></strong>, an operator with no bare-word
 comparison analogue, which a grammar derived only from the word list will miss.</p>
+<h4 id="resident-points-and-status-words--referenced-by-programs-absent-from-the-point-database">Resident points and status words — referenced by programs, absent from the point database</h4>
+<p>A PPCL program also names values the <strong>panel itself</strong> maintains. They are not
+point-database entries, they are not returned by a point enumerate, and a client
+that resolves every name in a program against the point list will fail on them.
+<strong>Twelve occur in this corpus's own recovered program source</strong> — the counts are
+over the 2,644 lines of the note above: [W][D]</p>
+<table>
+<thead>
+<tr>
+<th>Kind</th>
+<th>Words</th>
+<th>Observed here</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Clock / calendar</td>
+<td><code>TIME</code> (military), <code>CRTIME</code> (decimal hours), <code>DAY</code>, <code>DAYOFM</code>, <code>MONTH</code></td>
+<td><code>DAY</code> 109, <code>CRTIME</code> 22, <code>TIME</code> 8</td>
+</tr>
+<tr>
+<td>Interval timers</td>
+<td><code>SECNDS</code>, <code>SECND1</code>–<code>SECND7</code></td>
+<td><code>SECND1</code> 3, <code>SECND3</code> 2, <code>SECND4</code> 2, <code>SECND2</code> 1</td>
+</tr>
+<tr>
+<td>Point status</td>
+<td><code>OK</code>, <code>FAILED</code>, <code>HAND</code>, <code>LOW</code>, <code>DEAD</code>, <code>STATE</code></td>
+<td><code>LOW</code> 28, <code>FAILED</code> 6</td>
+</tr>
+<tr>
+<td>Alarm state</td>
+<td><code>ALMACK</code>, <code>ALMCNT</code>, <code>ALMCT2</code>, <code>ALMPRI</code></td>
+<td><code>ALMCNT</code> 8</td>
+</tr>
+<tr>
+<td>Accumulator / scope</td>
+<td><code>TOTAL</code>, <code>LOCAL</code>, <code>$BATT</code>, <code>$PDL</code></td>
+<td><code>TOTAL</code> 16, <code>LOCAL</code> 8</td>
+</tr>
+</tbody>
+</table>
+<p><strong>The implementer consequence is the whole reason this is here.</strong> Reading a
+program back with <code>UPL_ALL_PPCL</code> (<code>0x0985</code>, §14.5.1) gives source that
+references these freely. They must be recognised as panel-resident and skipped,
+not reported as dangling references — and equally not <em>rejected</em>, which is the
+same mistake §14.3's reserved-word note warns about from the other direction.</p>
 <h4 id="oip--a-program-can-execute-operator-functions"><code>OIP</code> — a program can execute operator functions</h4>
 <p>§14.3's frequency table shows <code>OIP</code> used 152 times across the corpus and absent
 from the statement-type enum. It is a reserved word, and its role is specific:
@@ -18267,6 +18322,18 @@ be used in one PPCL statement."</em> An operand is a point reference or a consta
 an operator is each arithmetic, relational or logical operation the expression
 performs. A statement can therefore exceed neither, and a generator that checks
 only the operand count will emit lines a panel rejects. [D]</p>
+<blockquote>
+<p><strong>And the operand limit is 13, not 16, on the older firmware families —
+including the generation this corpus was captured from.</strong> The <em>Powers Process
+Control Language User's Manual</em> (125-1896 Rev. 5) states an <code>IF</code> may test a
+maximum of <strong>13 operands</strong>; the Desigo CC PPCL Editor documentation states
+<strong>16 operands and 32 operators</strong>. Both are published and <strong>neither retracts
+the other</strong>, so they are best read as the limits of two different compilers.
+A generator should apply 16 only where it knows it is targeting the newer
+editor, and <strong>13 otherwise</strong> — a statement near either limit should be split
+regardless, because a 14-operand <code>IF</code> is unreadable whichever figure is
+right. [D]</p>
+</blockquote>
 <p><strong>Three more constraints a program writer has to satisfy, from the compiler's
 own error set:</strong> [D]</p>
 <ul>
