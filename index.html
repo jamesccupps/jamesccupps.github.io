@@ -547,6 +547,11 @@
                 </div>
                 <div class="project-row multilink">
                     <span class="tag">[BAS]</span>
+                    <a class="name-link" href="https://github.com/jamesccupps/PPCL" target="_blank" rel="noopener">PPCL Workbench</a>
+                    <span class="desc">Read, lint, debug and write Siemens PPCL &mdash; zero-dependency Python, runs locally &mdash; <a class="doc-link" href="https://github.com/jamesccupps/PPCL/blob/main/docs/PPCL-REFERENCE.md" target="_blank" rel="noopener">language reference</a></span>
+                </div>
+                <div class="project-row multilink">
+                    <span class="tag">[BAS]</span>
                     <a class="name-link" href="https://jamesccupps.github.io/CoolingTowerSim/" target="_blank" rel="noopener">Cooling Tower Sim</a>
                     <span class="desc">Browser-based condenser-water loop control bench &mdash; <a class="doc-link" href="https://github.com/jamesccupps/CoolingTowerSim" target="_blank" rel="noopener">source</a></span>
                 </div>
@@ -18122,7 +18127,7 @@ generating or parsing PPCL source (§14). [W][D]</p>
 </tr>
 <tr>
 <td>Comparison, word form</td>
-<td><code>EQ</code> <code>NE</code> <code>LT</code> <code>LE</code> <code>GT</code> <code>GE</code> <code>EQUAL</code> <code>LESS</code></td>
+<td><code>EQ</code> <code>NE</code> <code>LT</code> <code>LE</code> <code>GT</code> <code>GE</code></td>
 </tr>
 <tr>
 <td>Logical, word form</td>
@@ -18142,6 +18147,20 @@ generating or parsing PPCL source (§14). [W][D]</p>
 </tr>
 </tbody>
 </table>
+<blockquote>
+<p><strong>Correction: <code>EQUAL</code> and <code>LESS</code> are not keywords, and an earlier edition of
+this table listed them.</strong> They are the <em>English descriptions</em> of <code>EQ</code> and
+<code>LT</code>. The vendor's precedence table has two columns — a description column
+reading "Equal to / Not equal to / Greater than / Greater than or equal to /
+Less than / Less than or equal to" and an operator column reading
+<code>EQ NE GT GE LT LE</code> — and the first column was read as tokens. Neither word
+occurs as a bare uppercase token anywhere in the vendor PPCL glossary. A
+tokenizer that accepts them accepts something no panel compiles. [D]</p>
+<p>The same table is the source of a second, independent documentation error
+worth knowing about: it gives <strong><code>ARC(value1)</code></strong> for arc-tangent, where the
+function is <strong><code>ATN</code></strong>. Anything generated from that row alone will be
+rejected. [D]</p>
+</blockquote>
 <p>Two things an implementer should take from this. <strong>Every comparison and logical
 operator has two spellings</strong> — a bare word and a dot-delimited form — and both
 are reserved, so a tokenizer must accept <code>.GT.</code> and <code>GT</code> as the same operator.
