@@ -18130,6 +18130,10 @@ generating or parsing PPCL source (§14). [W][D]</p>
 <td><code>EQ</code> <code>NE</code> <code>LT</code> <code>LE</code> <code>GT</code> <code>GE</code></td>
 </tr>
 <tr>
+<td>Reserved names with no documented syntax</td>
+<td><code>EQUAL</code> <code>LESS</code></td>
+</tr>
+<tr>
 <td>Logical, word form</td>
 <td><code>AND</code> <code>OR</code> <code>NAND</code> <code>XOR</code></td>
 </tr>
@@ -18148,66 +18152,208 @@ generating or parsing PPCL source (§14). [W][D]</p>
 </tbody>
 </table>
 <blockquote>
-<p><strong>Correction: <code>EQUAL</code> and <code>LESS</code> are not keywords, and an earlier edition of
-this table listed them.</strong> They are the <em>English descriptions</em> of <code>EQ</code> and
-<code>LT</code>. The vendor's precedence table has two columns — a description column
-reading "Equal to / Not equal to / Greater than / Greater than or equal to /
-Less than / Less than or equal to" and an operator column reading
-<code>EQ NE GT GE LT LE</code> — and the first column was read as tokens. Neither word
-occurs as a bare uppercase token anywhere in the vendor PPCL glossary. A
-tokenizer that accepts them accepts something no panel compiles. [D]</p>
-<p>The same table is the source of a second, independent documentation error
-worth knowing about: it gives <strong><code>ARC(value1)</code></strong> for arc-tangent, where the
-function is <strong><code>ATN</code></strong>. Anything generated from that row alone will be
-rejected. [D]</p>
+<p><strong><code>EQUAL</code> and <code>LESS</code> are reserved, but they are not operators — and this
+table has had them wrong in both directions.</strong> An early edition listed them
+among the comparison operators, which no vendor source supports. A later one
+removed them as imaginary, which was also wrong. What they are is <strong>names a
+point may not take</strong>.</p>
+<p>The source that settles it is the Program Editor's <strong>enumerated reserved-word
+page</strong>, and what makes it decisive is its <em>shape</em>: 113 atomic entries laid out
+in two columns, and <strong>not one cell containing prose</strong>. There is no description
+column on it to misread. Both words hold their own alphabetical cell —
+<code>… EPHONE EQ EQUAL EXP FAILED …</code> and <code>… INITTO LE LESS LINK LLIMIT …</code> — with
+<code>EQ</code>, <code>LE</code> and <code>LT</code> enumerated separately alongside them. [D]</p>
+<p><strong>No syntax is documented for either.</strong> No manual shows a statement using
+<code>EQUAL</code> or <code>LESS</code>; outside the reserved-word lists they occur only in comment
+prose in worked examples. A tokenizer that maps <code>EQUAL</code> onto <code>EQ</code> is inventing
+an operator, and one that rejects a <em>program</em> for containing the word is
+enforcing a rule that applies to point names. Reserve them; do not parse
+them. [D]</p>
+<p><strong>The two failures are mirror images, and the second is the more instructive.</strong>
+Reading a description column as tokens manufactures words that do not exist —
+the Desigo glossary titles its topics <code>Equal To - EQ</code> and <code>Less Than - LT</code>,
+and that is exactly what happened here first. But the correction then applied
+that explanation to a table that has no description column, and deleted two
+real words. <strong>Before concluding that a word is a description read as a token,
+establish that the table it came from has a description column.</strong> The test is
+mechanical: a bare enumeration has no cell containing a space. [D]</p>
+<p>One error in the Desigo table does stand, and it is worth keeping because it
+was found independently from two directions: it gives <strong><code>ARC(value1)</code></strong> for
+arc-tangent where the function is <strong><code>ATN</code></strong>. <code>ARC</code> appears nowhere in the
+enumerated reserved-word list; <code>ATN</code> is in it. Anything generated from that
+row alone will be rejected. [D]</p>
+<p><strong>A live disagreement between two vendor enumerations, recorded rather than
+resolved.</strong> The Insight-era list reserves <code>NODE1</code> through <code>NODE99</code>; the
+Desigo-era glossary gives <code>NODE0</code> through <code>NODE99</code>. Both are published and
+neither retracts the other. This document keeps <strong><code>NODE0</code>–<code>NODE99</code>, one
+hundred names</strong>, because node 0 is a real drop address (§3.4) and because the
+asymmetry favours it: over-reserving costs a spurious warning on a name nobody
+chose, while under-reserving means never flagging a name the panel may refuse.
+[D]</p>
 </blockquote>
 <p>Two things an implementer should take from this. <strong>Every comparison and logical
 operator has two spellings</strong> — a bare word and a dot-delimited form — and both
 are reserved, so a tokenizer must accept <code>.GT.</code> and <code>GT</code> as the same operator.
 And <strong>the dotted forms include <code>.ROOT.</code></strong>, an operator with no bare-word
 comparison analogue, which a grammar derived only from the word list will miss.</p>
-<h4 id="resident-points-and-status-words--referenced-by-programs-absent-from-the-point-database">Resident points and status words — referenced by programs, absent from the point database</h4>
-<p>A PPCL program also names values the <strong>panel itself</strong> maintains. They are not
-point-database entries, they are not returned by a point enumerate, and a client
-that resolves every name in a program against the point list will fail on them.
-<strong>Twelve occur in this corpus's own recovered program source</strong> — the counts are
-over the 2,644 lines of the note above: [W][D]</p>
+<h4 id="resident-points-status-values-and-declarations--named-by-programs-absent-from-the-point-database">Resident points, status values and declarations — named by programs, absent from the point database</h4>
+<p>A PPCL program also names things the <strong>panel itself</strong> provides. None of them are
+point-database entries, none are returned by a point enumerate, and a client that
+resolves every name in a program against the point list will fail on all of
+them. [W][D]</p>
+<p><strong>They are four different kinds of thing, and a client that treats them alike
+reads statements wrong:</strong></p>
 <table>
 <thead>
 <tr>
 <th>Kind</th>
 <th>Words</th>
-<th>Observed here</th>
+<th>What a reader must do with it</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>Clock / calendar</td>
-<td><code>TIME</code> (military), <code>CRTIME</code> (decimal hours), <code>DAY</code>, <code>DAYOFM</code>, <code>MONTH</code></td>
-<td><code>DAY</code> 109, <code>CRTIME</code> 22, <code>TIME</code> 8</td>
+<td><strong>Resident point</strong> — a value the panel maintains</td>
+<td><code>TIME</code> (military), <code>CRTIME</code> (decimal hours), <code>DAY</code>, <code>DAYOFM</code>, <code>MONTH</code>, <code>SECNDS</code>, <code>SECND1</code>–<code>SECND7</code>, <code>NODE0</code>–<code>NODE99</code>, <code>$BATT</code>, <code>$PDL</code></td>
+<td>read as a value; do not resolve against the point list</td>
 </tr>
 <tr>
-<td>Interval timers</td>
-<td><code>SECNDS</code>, <code>SECND1</code>–<code>SECND7</code></td>
-<td><code>SECND1</code> 3, <code>SECND3</code> 2, <code>SECND4</code> 2, <code>SECND2</code> 1</td>
+<td><strong>Status value</strong> — a constant compared against, not a point</td>
+<td><code>OK</code>, <code>FAILED</code>, <code>HAND</code>, <code>LOW</code>, <code>DEAD</code>, <code>STATE</code>, <code>ALMACK</code>, <code>ALMCNT</code>, <code>ALMCT2</code>, <code>ALMPRI</code></td>
+<td>it appears on the <em>right</em> of a comparison; never a target</td>
 </tr>
 <tr>
-<td>Point status</td>
-<td><code>OK</code>, <code>FAILED</code>, <code>HAND</code>, <code>LOW</code>, <code>DEAD</code>, <code>STATE</code></td>
-<td><code>LOW</code> 28, <code>FAILED</code> 6</td>
+<td><strong>Special function</strong> — takes an argument</td>
+<td><code>TOTAL(point)</code></td>
+<td>a call, not a name</td>
 </tr>
 <tr>
-<td>Alarm state</td>
-<td><code>ALMACK</code>, <code>ALMCNT</code>, <code>ALMCT2</code>, <code>ALMPRI</code></td>
-<td><code>ALMCNT</code> 8</td>
-</tr>
-<tr>
-<td>Accumulator / scope</td>
-<td><code>TOTAL</code>, <code>LOCAL</code>, <code>$BATT</code>, <code>$PDL</code></td>
-<td><code>TOTAL</code> 16, <code>LOCAL</code> 8</td>
+<td><strong>Declaration keyword</strong> — never a value at all</td>
+<td><code>LOCAL</code></td>
+<td>introduces a statement; §14.3's statement table already lists it as one</td>
 </tr>
 </tbody>
 </table>
+<p><code>LOCAL</code> is the one that bites. It introduces a <code>LOCAL</code> declaration and is never
+something a program reads, so seeing it in source is evidence of a declaration,
+not of a resident value. This document listed it as both — as a program-control
+statement in the table above and as an accumulator here — sixty lines apart.</p>
+<h5 id="what-this-corpus-actually-contains-counted-by-position">What this corpus actually contains, counted by position</h5>
+<p>The earlier edition of this section said "twelve occur in this corpus's own
+recovered program source" and gave a count for each. <strong>Four of the twelve have
+zero value references</strong>, and the reason is a counting method rather than a
+misreading: the figures came from a word-boundary match, and in a word-boundary
+match <code>.</code> is a boundary — so a word appearing as a <strong>dotted segment of a point
+name</strong> was counted as a reference to the resident value. That is precisely the
+trap §14.4 describes, applied to this document's own evidence. Recounted by
+syntactic position over the same 2,644 lines: [W]</p>
+<table>
+<thead>
+<tr>
+<th>Word</th>
+<th style="text-align: right;">in a quoted name</th>
+<th style="text-align: right;">a call</th>
+<th style="text-align: right;"><strong>a value</strong></th>
+<th style="text-align: right;">in a comment</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>CRTIME</code></td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;"><strong>22</strong></td>
+<td style="text-align: right;">0</td>
+</tr>
+<tr>
+<td><code>DAY</code></td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;"><strong>13</strong></td>
+<td style="text-align: right;">22</td>
+</tr>
+<tr>
+<td><code>TIME</code></td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;"><strong>7</strong></td>
+<td style="text-align: right;">1</td>
+</tr>
+<tr>
+<td><code>FAILED</code></td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;"><strong>6</strong></td>
+<td style="text-align: right;">0</td>
+</tr>
+<tr>
+<td><code>SECND1</code></td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;"><strong>3</strong></td>
+<td style="text-align: right;">0</td>
+</tr>
+<tr>
+<td><code>SECND3</code></td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;"><strong>2</strong></td>
+<td style="text-align: right;">0</td>
+</tr>
+<tr>
+<td><code>SECND4</code></td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;"><strong>2</strong></td>
+<td style="text-align: right;">0</td>
+</tr>
+<tr>
+<td><code>SECND2</code></td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;"><strong>1</strong></td>
+<td style="text-align: right;">0</td>
+</tr>
+<tr>
+<td><code>TOTAL</code></td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">16</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+</tr>
+<tr>
+<td><code>LOCAL</code></td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">4</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">4</td>
+</tr>
+<tr>
+<td><code>ALMCNT</code></td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">8</td>
+</tr>
+<tr>
+<td><code>LOW</code></td>
+<td style="text-align: right;">4</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+</tr>
+</tbody>
+</table>
+<p>So <strong>eight resident values are referenced here, 56 times</strong>; <code>TOTAL</code> and <code>LOCAL</code>
+appear only in the roles the table above gives them; and <code>ALMCNT</code> and <code>LOW</code>
+are not referenced as values at all — <code>ALMCNT</code>'s eight occurrences are comment
+prose and <code>LOW</code>'s four are inside quoted point names. <strong>A published figure of
+<code>LOW</code> 28 was counting a name segment.</strong> [W]</p>
+<p><strong>The general lesson for a client, which is why the recount is here rather than
+in a changelog:</strong> deciding whether a word is a language reference or part of a
+name requires knowing <em>where in the statement it sits</em>. Quoted, called,
+compared-against and commented are four different answers, and a regex that
+matches the word alone cannot tell them apart. [W]</p>
 <p><strong>The implementer consequence is the whole reason this is here.</strong> Reading a
 program back with <code>UPL_ALL_PPCL</code> (<code>0x0985</code>, §14.5.1) gives source that
 references these freely. They must be recognised as panel-resident and skipped,
