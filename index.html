@@ -13159,7 +13159,7 @@ distinguishing and does not attempt all 64. [D]</p>
 </tr>
 </tbody>
 </table>
-<p>The point types are the L-type vocabulary: ldi=Digital Input, ldo=Digital Output, lai=Analog Input, lao=Analog Output, l2sl/l2sp=2-State Latched/Pulsed, looal/looap=On/Off/Auto Latched/Pulsed, lfssl/lfssp=Fast-Slow-Speed Latched/Pulsed, lpaci=Pulse-Accumulator/Counter Input, ldao=Dual Analog Output, lenum=Enumerated, lfmssl/lfmssp=Fast-Multi-Speed variants, ppcl_lai=PPCL-resident analog. Analog points carry per-point Slope + Intercept for engineering-unit conversion, applied by the client from the point table — not carried on each value frame. Both are <strong>on the wire</strong>, inside the analog form of <code>real_addr_</code> (§10.4.2), so a client reading a point definition has the scaling without a separate lookup. [S][W]</p>
+<p>The point types are the L-type vocabulary: ldi=Digital Input, ldo=Digital Output, lai=Analog Input, lao=Analog Output, l2sl/l2sp=2-State Latched/Pulsed, looal/looap=On/Off/Auto Latched/Pulsed, lpaci=Pulse-Accumulator/Counter Input, ldao=Dual Analog Output, lenum=Enumerated, ppcl_lai=PPCL-resident analog. <strong>The two speed families are two-speed and three-speed respectively, and the difference is load-bearing:</strong> <code>lfssl</code>/<code>lfssp</code> are <strong>Fast/Slow/Stop</strong> — a <em>two</em>-speed starter, latched and pulsed — while <code>lfmssl</code>/<code>lfmssp</code> are <strong>Fast/Medium/Slow/Stop</strong>, four-state control of a <em>three</em>-speed starter with proof indication. Fifteen Program Editor command pages name all four together (<em>"used to change LFSSL, LFSSP, LFMSSL, or LFMSSP points"</em> on <code>FAST</code>, <code>SLOW</code>, <code>EMFAST</code>, <code>EMSLOW</code> and the <code>FAST</code>/<code>SLOW</code>/<code>OFF</code> status indicators), while 125-1896 Rev. 5 titles its table <em>"The 11 Point Types"</em> and names only the two. The enum placing the three-speed pair at <strong>22/23</strong>, after the original block, is what a later addition looks like — the same shape as the 13-vs-16 operand split (§14.4). [D][S] Analog points carry per-point Slope + Intercept for engineering-unit conversion, applied by the client from the point table — not carried on each value frame. Both are <strong>on the wire</strong>, inside the analog form of <code>real_addr_</code> (§10.4.2), so a client reading a point definition has the scaling without a separate lookup. [S][W]</p>
 <h4 id="1041-all_points--the-point-choice-and-how-to-read-its-tag">10.4.1 <code>All_points</code> — the point CHOICE, and how to read its tag</h4>
 <p>Most point-bearing bodies do not carry a point <em>structure</em> directly; they carry
 <code>All_points</code>, a tagged union whose arms are the sixteen logical point types:</p>
@@ -18182,14 +18182,22 @@ was found independently from two directions: it gives <strong><code>ARC(value1)<
 arc-tangent where the function is <strong><code>ATN</code></strong>. <code>ARC</code> appears nowhere in the
 enumerated reserved-word list; <code>ATN</code> is in it. Anything generated from that
 row alone will be rejected. [D]</p>
-<p><strong>A live disagreement between two vendor enumerations, recorded rather than
-resolved.</strong> The Insight-era list reserves <code>NODE1</code> through <code>NODE99</code>; the
-Desigo-era glossary gives <code>NODE0</code> through <code>NODE99</code>. Both are published and
-neither retracts the other. This document keeps <strong><code>NODE0</code>–<code>NODE99</code>, one
-hundred names</strong>, because node 0 is a real drop address (§3.4) and because the
-asymmetry favours it: over-reserving costs a spurious warning on a name nobody
-chose, while under-reserving means never flagging a name the panel may refuse.
-[D]</p>
+<p><strong>The range is <code>NODE0</code>–<code>NODE99</code>, one hundred names — and the one source that
+says otherwise is a typo.</strong> This reserved-word page gives <code>NODE1 through
+NODE99</code>. Every other statement of the range, <em>including three inside the same
+Program Editor book</em>, gives <code>NODE0</code>: the dedicated resident-point topic is
+titled <strong>Node Number Resident Points — NODE0 through NODE99</strong>, its prose says
+<em>"acceptable node numbers for the NODE resident point range from 0 through
+99"</em> and <em>"the node number must be between 0 and 99"</em>, and the Program Editor
+glossary, the PPCL Debugger help and the Desigo CC engineering help all agree.
+Four sources to one, three of them in the outlier's own book, and node 0 is a
+real drop address (§3.4). [D]</p>
+<p><strong>Worth pairing with the correction above, because it cuts the other way.</strong>
+This same page is the <em>sole</em> source that settles <code>LESS</code> — and it is wrong
+about <code>NODE</code>. A page can be uniquely right about one fact and wrong about
+another, so neither observation licenses a verdict on the other. Weigh each
+claim on its own corroboration, not on the reputation of the page carrying
+it. [D]</p>
 </blockquote>
 <p>Two things an implementer should take from this. <strong>Every comparison and logical
 operator has two spellings</strong> — a bare word and a dot-delimited form — and both
@@ -18415,8 +18423,12 @@ which 4,731 are statements</strong>: [W]</p>
 </tbody>
 </table>
 <p><strong>No statement keyword in the corpus exceeds six characters.</strong> The length
-distribution of the leading keyword over all 4,731 statement lines is
-2 ×2,132, 3 ×637, 4 ×745, 5 ×297, <strong>6 ×480, and nothing longer</strong>. Six is a hard
+distribution over the <strong>4,291 keyword-led lines</strong> is 2 ×2,132, 3 ×637, 4 ×745,
+5 ×297, <strong>6 ×480, and nothing longer</strong>. Taking in the 440 assignment lines as
+well — whose leading token is a point name — gives 1 ×7, 2 ×2,135, 3 ×668,
+4 ×858, 5 ×385, 6 ×678: <strong>still nothing longer than six</strong>, so the ceiling holds
+across both forms and is in fact better attested than the keyword figures alone
+show. Six is a hard
 ceiling, not a tendency — the same six-character limit §14.2 describes for
 legacy point references applies to the keyword field itself. An implementer
 should match on the six-character form and treat the enum names as identifiers,
@@ -18430,10 +18442,30 @@ RETURN   38   DAY      38   NIGHT    36   RELEAS   31   DEFINE   18
 INITTO   15   LSTSQR   14   EMON     12   ONPWRT   11   ENABLE    8
 LOCAL     6   DISABL    3   TODMOD    2   SSTO      2
 </code></pre>
-<p>Twenty-nine distinct statements account for all 4,731 lines. The long tail of
-the token set — the emergency, PDL, phone, alarm-limit and COV-control families
-— appears in none of these programs, which says something about what production
-control logic is made of but nothing about what the language supports.</p>
+<p>Those twenty-nine account for <strong>4,291 of the 4,731 statement lines</strong>. The long
+tail of the token set — the emergency, PDL, phone, alarm-limit and COV-control
+families — appears in none of these programs, which says something about what
+production control logic is made of but nothing about what the language
+supports.</p>
+<h5 id="the-other-440-lines-have-no-keyword-at-all">The other 440 lines have no keyword at all</h5>
+<p><strong>9.3% of statement lines are assignments</strong>, and their leading token is a point
+name: [W]</p>
+<pre><code>&lt;point&gt; = &lt;expression&gt;
+</code></pre>
+<p>Every one of the 440 takes that form — <code>&lt;n&gt; = &lt;n&gt; + 1</code>, <code>&lt;n&gt; = 12.5</code>,
+<code>&lt;n&gt; = &lt;n&gt; / (&lt;n&gt; + &lt;n&gt;) / &lt;n&gt;</code> and so on. The statement-type enum names this
+<code>WHOPASSIGN</code>, and §14.3's category table lists <code>ASSIGN</code>, but <strong>no program writes
+the word</strong>: the <code>=</code> is the statement.</p>
+<p><strong>This is the same trap as the enum spellings above, one level up.</strong> A parser
+built by matching the twenty-nine keywords — or all seventy-one — against the
+first token of a line succeeds on ten lines in eleven and then fails, and it
+fails on <em>ordinary arithmetic</em>, which is the most common thing a control program
+does after branching. The rule an implementer needs is: <strong>if the leading token
+is not a keyword, the line is an assignment, and the token is a point name.</strong></p>
+<p>An earlier edition of this section said the twenty-nine accounted for <em>all</em>
+4,731 lines. They do not, and the arithmetic said so: both tabulations here sum
+to 4,291 against a stated 4,731. Re-derived by <code>ppcl_census.py</code>, which
+reproduces the 64 programs and the 4,731 exactly.</p>
 <p><strong><code>OIP</code> is used 152 times and is not in the vendor statement-type enum.</strong> Its
 form is <code>OIP (&lt;identifier&gt;, "&lt;point name&gt;")</code> — independently confirmed by the
 compiler's own error text, which names <em>"syntax error in OIP statement,
@@ -18443,8 +18475,86 @@ itself records that not every statement is named in it.</p>
 <p>This is the same situation as the EBLN opcodes of §5.3.1 and resolves the same
 way: <strong>absence from a vendor enum is not evidence that something is not real.</strong>
 A statement appearing 152 times across a production corpus is real; a parser
-that rejects it because the enum lacks it will fail on ordinary programs. What
-<code>OIP</code> <em>does</em> is not established here and is not guessed. [W] <strong>[OPEN]</strong></p>
+that rejects it because the enum lacks it will fail on ordinary programs.</p>
+<h5 id="what-oip-does--no-longer-open">What <code>OIP</code> does — no longer open</h5>
+<p>The vendor's Program Editor documentation describes it in full, and it closes
+what earlier editions of this section left unresolved: [D]</p>
+<pre><code>OIP(Trigger, Sequence)
+</code></pre>
+<p><strong>It mimics an operator sequence typed at a terminal</strong>, and so "executes most
+operator functions from within a PPCL program" — reports, displays, messages,
+point-priority changes and auto-dial among them.</p>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Trigger</td>
+<td>an <code>LDO</code>, <code>LDI</code> or local variable. Executes <strong>once</strong> when it turns ON; must go OFF and back ON to fire again</td>
+</tr>
+<tr>
+<td>Sequence</td>
+<td>a double-quoted keystroke string; <strong>one <code>/</code> per menu level advanced</strong>, and the slash acts as the carriage return</td>
+</tr>
+<tr>
+<td>Length</td>
+<td><strong>must not exceed 60 characters including the slashes</strong></td>
+</tr>
+<tr>
+<td>First pass</td>
+<td>does <strong>not</strong> execute after a power failure, an <code>ENABLE</code>, or a database load until the trigger toggles</td>
+</tr>
+<tr>
+<td><code>LDO</code> subpoint</td>
+<td>command it with the <strong>numbers <code>1</code> or <code>0</code></strong>; any other text makes the statement fail</td>
+</tr>
+<tr>
+<td>The <code>@</code> prefix</td>
+<td><strong>asymmetric.</strong> A <em>trigger</em> whose name begins with a digit needs <code>@</code>; a point named <em>inside the keystroke sequence</em> must <strong>not</strong> have it</td>
+</tr>
+<tr>
+<td>Evaluation</td>
+<td>must run on <strong>every pass</strong>, or the trigger change is missed</td>
+</tr>
+<tr>
+<td>Restrictions</td>
+<td>cannot perform a <code>LOOP</code>; shows <strong><code>FAILED</code></strong> if the sequence was entered incorrectly</td>
+</tr>
+<tr>
+<td>Staggering</td>
+<td>never share one trigger across several <code>OIP</code>s — one sequence would start before the previous finished</td>
+</tr>
+</tbody>
+</table>
+<p><strong>The 60 is single-sourced but well corroborated</strong>, and it is worth saying how,
+because an earlier edition of this section recorded it as a two-source split
+against a reported 80. There is no 80: that figure was the MMI line length,
+and the reading that produced it has been withdrawn. [D]</p>
+<p>The evidence for 60 runs three ways:</p>
+<ul>
+<li><strong>The statement.</strong> <em>"The sequence must not exceed 60 characters (including
+  slashes) in length"</em> — the only length figure on any of the five OIP topics
+  in the Program Editor help, repeated verbatim in two other vendor sources. [D]</li>
+<li><strong>158 OIP statements</strong> across three manual-derived corpora, longest sequence
+  <strong>56</strong>. If the ceiling were 80, some of 158 would sit in the 61–80 band. [D]</li>
+<li><strong>This corpus, independently, and from the wire rather than an editor.</strong> 43
+  OIP statements carry a quoted sequence; lengths run 14 to <strong>39</strong>, median 29,
+  and <strong>none exceeds 60 or falls in the 61–80 band</strong>. [W]</li>
+</ul>
+<p>Four corpora, none reaching 60, and one documentary statement. Generate to
+60.</p>
+<p><strong><code>OIP</code> is removed on PXC.A.</strong> A6V10374898 states it plainly: the statement is
+no longer supported, the PXC.A runtime treats it as invalid, and <strong>no
+replacement is provided</strong>. A decoder meeting a program written for an older
+panel will still see it. [D]</p>
+<p><strong>The §17 consequence sharpens.</strong> A client that can add a program line
+(<code>0x4100 AP2_PPCL_ADD_LINE</code>) can, through <code>OIP</code>, reach the operator console's
+report, priority-change, messaging and auto-dial functions. Program editing and
+operator command are one capability, not two. [W][D]</p>
 <h3 id="144-expressions-operator-precedence-and-the-command-parameter-array">14.4 Expressions, operator precedence, and the command parameter array</h3>
 <p><strong>Operator precedence</strong>, highest to lowest (a conformant compiler/decompiler must honor this chain): [D]</p>
 <pre><code>( )                         parentheses                       (highest)
@@ -18466,13 +18576,36 @@ written <code>(value1.ROOT.value2)</code> — a form worth noting because it is 
 everything around it, and a tokenizer that treats <code>.</code> as a decimal point or a
 name separator will mis-lex it. [D]</p>
 <p><strong>Built-in functions.</strong> The language provides a small fixed set of numeric functions, callable in any
-expression: the arithmetic/transcendental set <strong><code>ROOT</code></strong> (square root, also written <code>SQRT</code>), <strong><code>LN</code></strong>
-(natural log), and the trigonometric <strong><code>SIN</code></strong> / <strong><code>COS</code></strong> / <strong><code>TAN</code></strong> / <strong><code>ATN</code></strong> (arctangent); an
+expression: the arithmetic/transcendental set <strong><code>ROOT</code></strong> (square root, also written <code>SQRT</code>),
+<strong><code>LOG</code></strong> (logarithm) and <strong><code>EXP</code></strong> (exponential), and the trigonometric <strong><code>SIN</code></strong> / <strong><code>COS</code></strong> /
+<strong><code>TAN</code></strong> / <strong><code>ATN</code></strong> (arctangent); an
 accumulator function <strong><code>TOTAL</code></strong>; and a regression/adaptive group — <strong><code>LSTSQR</code></strong> (least-squares fit),
 its helpers <strong><code>LSQ2</code></strong> / <strong><code>LSQDAT</code></strong>, and the adaptive-control functions <strong><code>ADAPTM</code></strong> / <strong><code>ADAPTS</code></strong>.
 The point-selection operators <strong><code>MIN</code></strong> / <strong><code>MAX</code></strong> (and the point-command statements <code>MIN</code>/<code>MAX</code> of
-§14.3) round out the math vocabulary. A function binds tighter than the arithmetic operators (it sits
+§14.3) round out the math vocabulary.</p>
+<p>A function binds tighter than the arithmetic operators (it sits
 just below parentheses in the precedence chain above). [S/D]</p>
+<blockquote>
+<p><strong>An earlier edition listed <code>LN</code> for natural log. There is no such function</strong>
+— it appears in no vendor manual, and a generator emitting it produces a line
+no panel compiles. [D]</p>
+<p><strong>The reason given for removing it was wrong, though, and the correction is
+worth more than the word.</strong> It argued that <code>LN</code>'s absence from the enumerated
+reserved-word list was decisive — the same list that settled <code>EQUAL</code> and
+<code>LESS</code> (§14.3), read in the opposite direction. <strong>That inference does not
+hold, because the enumerations are incomplete and differ in both
+directions.</strong> Twelve words sit on 125-1896 Rev. 5 chapter 5's list and not on
+the Program Editor's — <code>ALMACK</code>, <code>ALMPRI</code>, <code>DEAD</code>, <code>DEFINE</code>, <code>DISCOV</code>,
+<code>ENCOV</code>, <code>HAND</code>, <code>LOCAL</code>, <code>LOW</code>, <code>NOR</code>, <code>OK</code>, <code>STATE</code> — and <code>LESS</code> sits on
+the Program Editor's and not on 125-1896's. §14.3 itself carries three of
+those twelve, taken from the Desigo glossary. [D]</p>
+<p><strong>So the two directions are not symmetric, and that is the rule to keep.</strong>
+A word's <strong>presence</strong> in a bare enumeration is strong evidence it exists: a
+cell had to be filled in. Its <strong>absence</strong> is weak: a cell can simply be
+missing, and here twelve are. Use these lists to confirm, never to refute.
+It is the same lesson as <code>NODE0</code> (§14.3) reaching the same page from the
+other side. [D]</p>
+</blockquote>
 <p><strong>The 16-slot command parameter array.</strong> A point-command statement (ON/OFF/SET/AUTO/etc.) carries an ordered parameter array of up to <strong>16 slots</strong>. Each of the following consumes exactly one slot:</p>
 <ul>
 <li>a target-point reference,</li>
@@ -19075,25 +19208,61 @@ behaviour. <strong>[OPEN]</strong> [S][W]</p>
 <p><code>Recharacterization_value</code> (per-member override): <code>member_number</code> (UNSIGNED16) + <code>logical_value</code> (FLOAT_) + <code>point_priority</code> (Point_priority — the §8 ladder) + <code>control_status</code>. So an EQS zone commands each member at an explicit priority, exactly like a PPCL <code>@</code>-command. [S]</p>
 <h3 id="1531-ssto--start-stop-time-optimization">15.3.1 SSTO — start-stop time optimization</h3>
 <p>SSTO is referenced both by PPCL (<code>SSTO</code>, <code>SSTOCOEF</code> statements, §14.3) and by the EQS SSTO opcode family above. SSTO computes an optimized equipment start time (and night-setback strategy) from learned coefficients so the zone reaches occupied setpoint by the scheduled occupancy time. The <code>SSTO_GENERAL/START/STOP/NIGHT</code> four-way split (visible across the setup/look/display opcode rows) corresponds to the four configuration blocks: general parameters, optimized-start, optimized-stop, and night-cycle. [D/S]</p>
-<p><strong>SSTO is adaptive, and that is why it has stored coefficients at all.</strong> The
-vendor describes it as starting heating or cooling as late as possible before
-occupancy and stopping it as early as possible before the zone empties — and,
-crucially, that when it starts or stops too early or too late <strong>the logic
-remembers the error and adjusts</strong>. So the coefficient blocks a client reads or
-writes are not static tuning constants: they are the panel's learned state, and
-overwriting them discards what the zone has learned about its own thermal
-response. A tool that round-trips an SSTO configuration must preserve them
-byte-for-byte rather than re-deriving them from the setpoints. [D]</p>
+<p><strong>SSTO is adaptive, and that is why it has stored state at all.</strong> The vendor
+describes it as starting heating or cooling as late as possible before occupancy
+and stopping it as early as possible before the zone empties — and, crucially,
+that when it starts or stops too early or too late <strong>the logic remembers the
+error and adjusts</strong>. A tool that round-trips an SSTO configuration must preserve
+that learned state rather than re-deriving it from the setpoints. [D]</p>
+<p><strong>But the learned state is not where an earlier edition of this section pointed,
+and the difference decides whether a round-trip is safe.</strong> [D]</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>what it is</th>
+<th>round-trip rule</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SSTOCO</code> / <code>SSTOCOEF</code> <strong>coef1…coef4</strong></td>
+<td><strong>engineer-entered constants</strong> — the zone's configured thermal parameters</td>
+<td>ordinary configuration; re-writing what you read is harmless</td>
+</tr>
+<tr>
+<td>the <code>SSTO</code> statement's <strong>AST / ASP</strong> arguments</td>
+<td><strong>the panel's learned adjustment.</strong> Entered as <strong>zero</strong>, and the panel <em>prints its own current learned value into those slots every time the statement is displayed</em></td>
+<td><strong>this is the hazard</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>The hazard is specific and it is a writing hazard, not a reading one.</strong> Program
+source retrieved with <code>UPL_ALL_PPCL</code> (<code>0x0985</code>, §14.5.1) comes back with the
+panel's learned adjustment already substituted into the argument list. A tool
+that uploads program text, edits an unrelated line and writes the whole program
+back has just converted a self-tuning value into a hard-coded constant — and the
+zone stops adapting, silently, with source that looks exactly like what the
+engineer wrote. <strong>A writer replaying uploaded program text must re-zero AST and
+ASP</strong>, or it nails the adjustment down. [D]</p>
+<p><strong>Corroborated here, weakly but in the right direction.</strong> The 64-program corpus
+carries two <code>SSTO</code> statements, and their final two arguments are
+<code>109.2282, -77.6882</code> and <code>226.3325, -250.152</code> — four-decimal values, one of each
+pair negative. That is not the shape of a hand-entered setpoint, and it is the
+shape of something a panel computed. Two samples cannot prove the values move
+over time; they are consistent with the vendor's account and with nothing else
+offered. [W][D]</p>
 <p><strong>The opcodes are wire-observed; the adaptive claim is not, and cannot be tested
 here.</strong> All four SSTO families appear in the corpus — <code>DBCHANGE_SSTO_*</code>,
 <code>UPL_ADDED_SSTO_*</code>, <code>UPL_ALL_SSTO_*</code> and <code>EQS_SSTO_SETUP_*</code> — and their bodies
 decode, so the structures above are <code>[W]</code>-supported. <strong>The behavioural claim is
-not.</strong> Demonstrating that the coefficients are <em>learned</em> would need the same
-zone's blocks read at two separated times and seen to differ; the corpus carries
-62 SSTO records in which most fields take only two distinct values, which is
-equally consistent with a couple of zones whose coefficients simply did not move
-during the capture window. So preserve them byte-for-byte on the strength of the
-vendor's description, not of anything measured here. <strong>[OPEN]</strong> [W][D]</p>
+not.</strong> Demonstrating that a value is <em>learned</em> would need the same zone read at
+two separated times and seen to differ; the corpus carries 62 SSTO records in
+which most fields take only two distinct values, which is equally consistent
+with a couple of zones whose state simply did not move during the capture
+window. The two PPCL-side samples above point the same way without settling it
+either. So preserve the learned slots on the strength of the vendor's
+description, not of anything measured here. <strong>[OPEN]</strong> [W][D]</p>
 <p><strong>The zone model those blocks hang off.</strong> An EQS <strong>zone</strong> is a schedulable
 building resource — typically a room or a floor — and is composed of points plus
 three things: its <strong>operating modes</strong> (the mode states the zone runs in), a
