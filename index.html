@@ -630,6 +630,7 @@
 <li><a href="#15-lineage-informative">1.5 Lineage (informative)</a></li>
 <li><a href="#16-conformance-levels">1.6 Conformance levels</a></li>
 <li><a href="#17-what-this-document-does-not-give-you">1.7 What this document does not give you</a></li>
+<li><a href="#17a-what-else-is-public-and-why-this-document-exists">1.7a What else is public, and why this document exists</a></li>
 <li><a href="#2-architecture--layering">2. Architecture &amp; Layering</a></li>
 <li><a href="#21-the-layered-stack">2.1 The layered stack</a></li>
 <li><a href="#22-node-roles-and-the-object-hierarchy">2.2 Node roles and the object hierarchy</a></li>
@@ -1032,6 +1033,37 @@ catalog. Where a claim is <code>[W]</code> <strong>and</strong> the alternatives
 of 60 bodies consume at width 2, 0 of 60 at width 1" — a second site cannot
 overturn it either. The claims to treat carefully are the <code>[W]</code> ones asserting
 that a value is <em>stable</em>; §1.4.1.1 says why.</p>
+<h3 id="17a-what-else-is-public-and-why-this-document-exists">1.7a What else is public, and why this document exists</h3>
+<p>A reasonable first question is whether any of this is already written down. It
+is not, and the vendor said so in public.</p>
+<p>On a controls engineering forum in <strong>November 2001</strong>, an engineer at a
+protocol-gateway manufacturer asked plainly: <em>is the P2 protocol open, and where
+can the specification be obtained?</em> The reply came the next day from a systems
+architect in Siemens Building Technologies' own building-automation division:</p>
+<blockquote>
+<p><strong>Alas, it is not open</strong> — perhaps more because I didn't document it very well
+than because it's any big secret.</p>
+</blockquote>
+<p>A second respondent: <em>"anything but open. Getting any info on that is like
+pulling teeth."</em> [D]</p>
+<p>Twenty-five years later the position is unchanged. Searching the open web,
+GitHub, GitLab, PyPI, SourceForge and the Wireshark plugin ecosystem finds <strong>no
+published wire specification and no other open-source implementation</strong> of either
+P1 or P2. Searching the public ICS packet-capture collections — netresec,
+IMPACT, 4SICS, the university and national-laboratory datasets — finds Modbus,
+S7, DNP3 and BACnet, and <strong>no P2 capture at all</strong>. [D]</p>
+<p><strong>What does exist is commercial.</strong> At least three vendors ship working P2
+implementations: a software gateway presenting P2 panels and TEC devices as
+BACnet devices over both RS-485 and Ethernet; a native P2 driver for a
+third-party supervisory platform; and a general protocol-gateway line listing
+P1, FLN, P2 and XNET among the legacy families it converts. Their feature lists
+are useful as a capability census — see §11.7 — and none of them publishes a
+byte of wire format. <strong>A product that speaks P2 proves the protocol is
+implementable, not that anyone has written down how.</strong> [D]</p>
+<p>So this document is not a restatement of a specification that exists elsewhere.
+Where an external source <em>does</em> say something — the four-variant taxonomy of
+§2, the RAD-50/ASCII split of §8.4, the P1 datalink of §4.4.1 — it is noted, and
+in each case it agrees with what the wire shows.</p>
 <h2 id="2-architecture--layering">2. Architecture &amp; Layering</h2>
 <h3 id="21-the-layered-stack">2.1 The layered stack</h3>
 <p>A P2/IP node is best understood as a small stack of layers. From bottom to top:</p>
@@ -1954,8 +1986,124 @@ listener that accepts only one or two peers is not conformant.</p>
 </tbody>
 </table>
 <p>The 8-slot model means a panel can be told to listen on an alternate port (e.g. to deconflict with a co-resident supervisor product on the same host, which is the origin of the site-specific TCP/5034 second listener); slot 1 always defaults to 5033 and is the canonical port. A client should default to 5033 and treat any other value as site configuration. See §2.1.5 for why the <code>|PORT</code> suffix that appears inside identity strings (e.g. <code>NODE1|5034</code>) is part of the <em>identity string</em> and is <strong>not</strong> a live port indicator — the same suffixed identity rides whichever TCP port actually carried the frame [W].</p>
+<h5 id="the-one-documented-exception-to-bln-wide-port-uniformity">The one documented exception to BLN-wide port uniformity</h5>
+<p>The uniformity rule above holds for hardware panels, and the vendor's own
+configuration help states the exception: a <strong>Soft Controller</strong> — a virtual
+field panel running as a Windows service on a workstation — is
+identified on the BLN by a <strong>port number rather than by a node identifier</strong>.
+The help is explicit that these are alternative identification schemes: a
+hardware Ethernet panel is defined by a <em>Node Identifier</em>, and a Soft
+Controller by a <em>Port Number</em>. [D]</p>
+<table>
+<thead>
+<tr>
+<th>Property</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Soft Controller default port</td>
+<td><strong>TCP/5400</strong></td>
+</tr>
+<tr>
+<td>Recommended range</td>
+<td><strong>5100 – 32767</strong>, on the stated grounds that lower numbers are assigned to other services</td>
+</tr>
+<tr>
+<td>Hard constraint</td>
+<td>must differ from the BLN's Transport Server Port (5033)</td>
+</tr>
+<tr>
+<td>Collision rule</td>
+<td>two Soft Controllers on one workstation may not use ports differing by exactly <strong>100</strong> — 5400 excludes 5300 and 5500, while 5401 is permitted</td>
+</tr>
+</tbody>
+</table>
+<p>The reason is structural rather than arbitrary. Several Soft Controllers share
+one workstation's IP address, so the <code>(IP, 5033)</code> pair that distinguishes
+hardware panels cannot distinguish them; the port carries the identity instead,
+which is why their identity string is <code>SITE:HOST|PORT</code> rather than a node name
+(§3.3.1). [D][I]</p>
+<p><strong>For an implementer this is a discovery consideration, not a framing one.</strong>
+The frame format is unchanged; what changes is that scanning only 5033 finds
+hardware panels and misses every Soft Controller on the BLN. The ±100
+exclusion is the clearest external evidence that a Soft Controller occupies a
+<em>second</em> port at a fixed offset — §3.3.1 reaches the same conclusion from the
+constraint alone. <strong>[OPEN]</strong> — no Soft Controller has been observed
+on the wire here, so the second port's purpose is inferred, not seen.</p>
+<p>Two further configuration facts from the same source, both operational rather
+than protocol: the Transport Server Port is set in a <strong>LocalNet Configuration
+Utility</strong> rather than per panel, and <strong>changing a panel's detected DNS suffix
+coldstarts it</strong> — a configuration edit with a service interruption behind it.
+A node identifier is additionally barred from containing <strong>periods or
+punctuation</strong>, alongside the 15-character limit already recorded in §5.3. [D]</p>
+<h4 id="411-the-rest-of-the-port-surface-a-panel-presents">4.1.1 The rest of the port surface a panel presents</h4>
+<p>5033 is where P2 lives, and it is not the only thing a field panel answers on.
+Siemens' own publicly posted IT-integration white paper lists the ports an
+APOGEE installation needs opened, several of them explicitly <em>"at the field
+panel level"</em>. Reproduced here because a reader capturing or scanning a panel
+will meet them, and because three of them are protocol-adjacent surfaces this
+corpus has never looked at: [D]</p>
+<table>
+<thead>
+<tr>
+<th>Port</th>
+<th>What the vendor says it is for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>TCP 5033</strong></td>
+<td><em>"Communication to field panels occurs over TCP port 5033"</em> — P2 itself</td>
+</tr>
+<tr>
+<td><strong>TCP 3001 / 3002</strong></td>
+<td>connectivity directly to an <strong>AEM</strong> device (§4.2), and support for Ethernet and RS-485 field panels</td>
+</tr>
+<tr>
+<td><strong>TCP 999</strong></td>
+<td><strong>Telnet</strong>, the configuration port of an AEM200</td>
+</tr>
+<tr>
+<td><strong>TCP 100</strong></td>
+<td>retrieves the <strong>list of programs running at the field panel</strong></td>
+</tr>
+<tr>
+<td><strong>TCP 135</strong></td>
+<td>RPC endpoint mapper; panel diagnostics</td>
+</tr>
+<tr>
+<td><strong>UDP 161 / 162</strong></td>
+<td>SNMP, on panels with the SNMP option enabled</td>
+</tr>
+<tr>
+<td><strong>TCP 502</strong></td>
+<td>Modbus TCP, via the Modbus driver</td>
+</tr>
+<tr>
+<td><strong>TCP 5441</strong></td>
+<td><strong>a Siemens tool called "Sniffer" that monitors panel traffic</strong></td>
+</tr>
+<tr>
+<td><strong>TCP 5442</strong></td>
+<td><strong>IPSNIFF</strong> — used by the Insight Async service to talk to field panels</td>
+</tr>
+</tbody>
+</table>
+<p>Two of those deserve naming. <strong>TCP 5441 carries a vendor tool whose stated
+purpose is monitoring panel traffic</strong>, and the white paper points at a separate
+Siemens document titled <em>TCP Port 5441</em> that explains it. <strong>TCP 5442 is
+"IPSNIFF".</strong> Neither has ever been observed in this corpus, which is entirely
+5033/5034 — but a vendor-supplied traffic monitor is, on its face, the most
+interesting unexamined surface on the panel for anyone studying this protocol,
+and a reader who has one should look there before reverse-engineering anything.</p>
+<p>The white-paper table's columns do not align cleanly when extracted, so the two
+rows distinguishing port 100 from port 135 could be the other way round. The
+5033, 5441, 5442 and 999 rows are unambiguous because each names its own port or
+tool. [D][I]</p>
 <p><strong>The 5034 listener and the two-connection pattern.</strong> In the observed Desigo deployment, 5034 is not merely a "site-specific second port" — it is the <strong>supervisor-side inbound listener for the reverse (panel→supervisor) channel</strong>: field panels listen on 5033 for the supervisor's poll/command channel, while the supervisor listens on 5034 for node-originated push/value traffic and node announcements. Each node-pair therefore maintains (at least) two TCP connections — supervisor→panel:5033 and panel→supervisor:5034 — one opened in each direction (§7.3). The exact supervisor port assignment is deployment-specific (it can equally be 5033, and the 8-slot model permits other values), but the <strong>two-listener / two-connection model is the structural pattern</strong>, independent of the specific port numbers. [W]</p>
-<h4 id="411-surrounding-observable-service-footprint">4.1.1 Surrounding observable service footprint</h4>
+<h4 id="412-surrounding-observable-service-footprint">4.1.2 Surrounding observable service footprint</h4>
 <p>A P2/IP panel is a small embedded host that exposes platform services around the P2 port. These are <strong>not P2</strong> and carry no P2 frames; they are listed only as the observable footprint of a real panel, useful for fingerprinting and for understanding what else is on the wire. Only TCP/5033 (and optionally a second supervisor listener) carries P2 itself.</p>
 <table>
 <thead>
@@ -2160,8 +2308,8 @@ contributions this document could receive. [W][D][OPEN]</p>
 </tr>
 <tr>
 <td>Trunks per panel</td>
-<td>3 P1 FLN trunks per APOGEE panel (4 on NCRS-class)</td>
-<td>[D]</td>
+<td>3 P1 FLN trunks per APOGEE panel (4 on NCRS-class), carried on <strong>LAN numbers 1-3</strong></td>
+<td>[D][S]</td>
 </tr>
 <tr>
 <td>Device identity</td>
@@ -2187,6 +2335,119 @@ contributions this document could receive. [W][D][OPEN]</p>
 </table>
 <p>On a modular panel the RS-485 FLN trunks are provided either by built-in ports or by an add-on <strong>RS-485 FLN expansion module</strong> — Siemens' <code>PXX-485.3</code> carries "three RS-485 P1 FLN connections OR one MS/TP FLN connection" per the public <em>PXC Modular Series</em> datasheet. This module sits on the panel's downstream (field) bus and is wholly separate from the upstream ALN/supervisor link that carries P2 — it has no bearing on the P2 wire framing (§6.2). [D]</p>
 <p>A panel may alternatively host a BACnet MS/TP fieldbus in place of P1 (<code>Fln_type_enum</code>: <code>P1</code> = 0, <code>MSTP</code> = 1) [S]. Which one is available tracks the panel's <strong>firmware track</strong>, not the hardware: proprietary-P2/APOGEE firmware (the subject of this spec) drives a <strong>P1 FLN only</strong>, while the separate BACnet firmware build of the same hardware adds the MS/TP option. MS/TP is a different protocol stack and is out of scope for this P2 specification; only the P1/FLN bus is treated here. [D]</p>
+<h5 id="lan-numbering-and-what-occupies-lan-0">LAN numbering, and what occupies LAN 0</h5>
+<p>A panel's fieldbus layout is declared in its own capability document as a
+repeated <code>&lt;FLN LAN="n"&gt;TYPE&lt;/FLN&gt;</code> element (§16.4.1). Across 55 stored panel
+manifests only four layouts occur:</p>
+<table>
+<thead>
+<tr>
+<th>layout</th>
+<th style="text-align: right;">panels</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>LAN0=ISLANDBUS  LAN1=P1  LAN2=P1  LAN3=P1</code></td>
+<td style="text-align: right;">44</td>
+</tr>
+<tr>
+<td><code>LAN0=ISLANDBUS  LAN1=MSTP</code></td>
+<td style="text-align: right;">5</td>
+</tr>
+<tr>
+<td><code>LAN1=P1</code> only</td>
+<td style="text-align: right;">2</td>
+</tr>
+<tr>
+<td><code>LAN1=MSTP</code> only</td>
+<td style="text-align: right;">2</td>
+</tr>
+</tbody>
+</table>
+<p>Three consequences, and the first is the one that bites an implementer:</p>
+<ol>
+<li><strong>The P1 FLN trunks are LAN numbers 1, 2 and 3 — not 0, 1 and 2.</strong> LAN 0 is
+   the panel's <strong>TX-I/O island bus</strong>, which is a module backplane rather than a
+   field trunk, and it is present under either fieldbus configuration. A client
+   that assumes zero-based trunk numbering is off by one on every FLN address.
+   This is confirmed on the wire: the <code>lan</code> field of <code>0x0986 UPL_ALL_TEC</code> and
+   <code>0x0976</code> carries <strong>983 observations across seventeen captures</strong>, values
+   <strong>1 (723), 2 (204), 3 (56)</strong> and <strong>never 0</strong>. [W][S]</li>
+<li><strong>No panel mixes P1 and MS/TP.</strong> An MS/TP panel carries exactly one fieldbus
+   LAN; a P1 panel carries three. This is the observed form of the <code>PXX-485.3</code>
+   line quoted above — three P1 connections <em>or</em> one MS/TP — and it makes "in
+   place of P1" an observation rather than a documentation claim. [S]</li>
+<li><strong><code>ISLANDBUS</code> is not known to be an <code>Fln_type_enum</code> member.</strong> It appears as
+   a type <em>name</em> in the capability document; the enum above is the fieldbus
+   type and carries <code>P1</code> and <code>MSTP</code>. Whether the island bus has an enum value,
+   and what <code>FLN_lan_number</code> = 0 means to a panel that is asked for it, are
+   untested here. <strong>[OPEN]</strong></li>
+</ol>
+<h4 id="441-the-p1-datalink-from-the-equipment-vendors-who-have-to-publish-it">4.4.1 The P1 datalink, from the equipment vendors who have to publish it</h4>
+<p>P2 has no public description (§1.7a). <strong>P1 does</strong>, and from an unexpected
+direction: every VFD, meter and drive maker that sells an APOGEE-compatible
+interface must tell its customers how to wire and address it, so those manuals
+state the datalink outright. The following is consistent across several of them
+and is <strong>not</strong> from Siemens: [D]</p>
+<table>
+<thead>
+<tr>
+<th>Property</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Character format</td>
+<td>asynchronous, <strong>8 data bits, no parity, 1 stop bit</strong></td>
+</tr>
+<tr>
+<td>Duplex</td>
+<td><strong>half duplex</strong>; no handshaking</td>
+</tr>
+<tr>
+<td>Bit order</td>
+<td><strong>LSB first</strong></td>
+</tr>
+<tr>
+<td>Error detection</td>
+<td><strong>CRC-16, transmitted MSB first</strong></td>
+</tr>
+<tr>
+<td>Medium</td>
+<td>RS-485, up to <strong>32 nodes</strong> on a link</td>
+</tr>
+<tr>
+<td>Rate</td>
+<td>typically <strong>4800 bps</strong>; 9600 on some device types</td>
+</tr>
+<tr>
+<td>Access</td>
+<td>strict master/slave — the field cabinet initiates every exchange and a device answers only when addressed</td>
+</tr>
+<tr>
+<td>Device address</td>
+<td><strong>0–99</strong>, with <strong>99 reserved for configuration</strong> and 1–98 for live devices</td>
+</tr>
+<tr>
+<td>Value range</td>
+<td><em>"the largest value that can be transmitted using the P1 protocol is 32767"</em> — a signed 16-bit quantity</td>
+</tr>
+</tbody>
+</table>
+<p>Two of these are datalink facts §4.5 previously listed as unobserved: the <strong>bit
+order</strong> and the <strong>error check</strong>. They are still not wire-measured here — no P1
+capture exists in this corpus — but they are now <em>named</em>, which changes the open
+item from "unknown" to "unverified".</p>
+<p>Note the address range disagrees with §4.4's table above, which gives drop
+addresses <strong>0–31</strong> from Siemens' own material against these manuals' <strong>0–99</strong>.
+Both can be true: 0–31 is the capacity of one trunk, 0–99 the range the address
+field can express. A reader should not assume a drop number above 31 is invalid
+because this document says 32 devices. [D][I]</p>
+<p>These manuals also name a Siemens document this project has never seen: <strong>"the
+Siemens P1 Protocol Design Specification"</strong>. Its existence is worth recording
+even though its contents are not available. [D]</p>
 <h3 id="45-open-items--serial-and-field-bus-framing">4.5 Open items — serial and field-bus framing</h3>
 <blockquote>
 <p><strong>[OPEN, PARTLY ANSWERED] Serial-BLN P2 link framing bytes.</strong> Only the line parameters (8/N/1, baud tiers, trunk numbering) were established for the dedicated serial BLN. <strong>The message layer above the framing is now recovered from controller firmware — see §6.8</strong> — giving the address byte and its position, a compact operation encoding, a 253-byte cap, and the forwarding rule for a message addressed elsewhere. <strong>The message layer is now attested from the supervisor end as well</strong> — the reference implementation builds the same encoding on the supervisor side, agreeing with the panel on the group/ordinal pair and adding the ordinal's byte order (§6.8). [S] What is still unobserved is the <strong>link</strong> layer beneath it: start/sync delimiting, CRC/checksum, and the medium's segmentation, all of which a lower layer has already stripped before the code in §6.8 sees the message. The supervisor's link-layer component was examined for them and does not carry them: it is a transport — ports, partners, sequence numbers, a socket path and a modem path — and it hands the reference implementation's output down without prefixing a P2 header, so the three bytes preceding the group byte are added below it or supplied by the medium. [S] An AEM Channel-1 capture (TCP/3001) remains the way to see them, since the AEM tunnels the serial stream verbatim.</p>
@@ -3137,8 +3398,25 @@ malformed or hostile length prefix. [I] It should equally reject one that is
 too <strong>small</strong>: 13 header bytes plus four NUL terminators is 17, and a request
 adds two opcode bytes for 19, so any <code>total_len</code> below that cannot describe a
 valid frame and a reader that subtracts without checking will underflow. No
-frame in the corpus comes close — the observed range is <strong>31 to 1,622 bytes</strong>,
-median 85 — but the floor is a property of the format, not of the traffic. [W]</p>
+frame in the corpus comes close, and the floor is a property of the format
+rather than of the traffic. The observed range is <strong>31 to 1,622 bytes</strong>, median
+85 — but that 31 is <strong>this project's own malformed probe traffic</strong>, not
+something a vendor node emits: those frames carry a hard-coded <code>msg_type</code> of
+<code>0x33</code> against slots implying 17 to 29, and they are among the 736 exceptions
+§6.2.2 attributes host-by-host to our two research addresses. The smallest
+<strong>well-formed</strong> frame from a supervisor or a panel anywhere in the corpus is
+<strong>41 bytes</strong> — a bare acknowledgement between two short-named peers: <code>dir</code>
+<code>0x01</code>, four slots, zero body. [W]</p>
+<p>There is, in particular, <strong>no bare-opcode frame</strong>. The <code>AP2_DBCHANGE_*</code>
+opcodes a peer sends unsolicited (<code>0x0951</code>, <code>0x0954</code>, <code>0x0955</code>, <code>0x0956</code>,
+<code>0x0959</code> — §9.5) are ordinary requests carrying a <strong>zero-length body</strong>: direction
+byte, four routing slots, the two opcode bytes, and nothing after — 48 bytes
+on the wire at this site, drawing a 46-byte bare acknowledgement. They are not
+a two-byte payload in which the opcode is the whole frame. Such a frame would
+be 14 bytes with no direction byte and no routing slots, which §6.1 does not
+describe, and none exists in 623,164 trusted frames. Nor are these the
+protocol's keepalive; that is <code>0x4640 EBLN_PING</code> (§9.6), which carries an
+<code>eBLN_Node</code> body. [W]</p>
 <h4 id="612-annotated-hex-example">6.1.2 Annotated hex example</h4>
 <p>A request whose four routing slots total 38 bytes, so <code>msg_type</code> reads <code>0x33</code> = 51 = 13 + 38 (§6.2), addressed from supervisor
 identity <code>P2SCAN|5033</code> on BLN <code>BLNNAME</code> to destination node <code>NODE1</code>, carrying opcode <code>0x0220</code>
@@ -4513,11 +4791,50 @@ There is no translation to perform. [S]</p>
 and <code>port_not_found</code> = <strong>0</strong> in the three RACS port enums. The global catalog
 defines no code 0 — its memory error is <code>0x0001</code> and its not-found is <code>0x0003</code>.
 Both are the first-declared member of their enum, which would suggest a generator
-default, except that <code>AP2_Racs_Partner_Delete_Error_enum</code> has exactly one member
-and it is <code>partner_not_found</code> = 3, so the first member is not auto-zeroed. Either
-0 is a real code the catalog omits, or those five enums number from a different
-base. That is a narrow open item: it affects five RACS operations and no code
-this corpus has seen. [S][OPEN]</p>
+default.</p>
+<p><strong>Two readings can now be ruled out, and a third observation replaces them.</strong>
+Reading every one of the sixteen out of the vendor's enum dump rather than the
+two that had been looked at: [S]</p>
+<table>
+<thead>
+<tr>
+<th>enums</th>
+<th>members</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>eleven partner enums (<code>Delete</code>, <code>Display</code>, <code>Log</code>, <code>Look</code>, <code>Enable</code>, <code>Disable</code>, <code>StatLog</code>, <code>StatLog_Reset</code>, <code>Upl_All</code>, <code>Upl_Added</code>, …)</td>
+<td>a single member, <code>partner_not_found</code> = <strong>3</strong></td>
+</tr>
+<tr>
+<td>three port enums (<code>Port_Look</code>, <code>Port_StatLog</code>, <code>Port_StatLog_Reset</code>)</td>
+<td>a single member, <code>port_not_found</code> = <strong>0</strong></td>
+</tr>
+<tr>
+<td><code>Racs_Partner_Add</code></td>
+<td><code>no_ram_available</code> = <strong>0</strong>, <code>invalid_partner_number</code> = 2, <code>partner_already_here</code> = 9</td>
+</tr>
+<tr>
+<td><code>Racs_Partner_Modify</code></td>
+<td><code>no_ram</code> = <strong>0</strong>, <code>invalid_partner_number</code> = 2, <code>partner_not_found</code> = 3</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>Not a generator default.</strong> <code>partner_not_found</code> = 3 is the <em>sole</em> member of
+  eleven separate enums, so a first-declared member is plainly not auto-zeroed.
+  The earlier edition made this point from one enum; it holds across eleven.</li>
+<li><strong>Not a different numbering base.</strong> In the only two enums with more than one
+  member, every non-zero member is the global code <em>verbatim</em> — 2 is
+  <code>invalid_command</code>, 3 is <code>not_found</code>, 9 is <code>already_exists</code>. A base offset
+  would shift those, and it does not.</li>
+</ul>
+<p>What is left is sharper and stranger than "0 is a code the catalog omits":
+<strong>the same concept takes two values in the same type system.</strong> "Not found" is
+<strong>3</strong> for a partner and <strong>0</strong> for a port, in enums that sit side by side. So
+whatever the 0 means, it is not a global code used consistently. It affects
+five RACS operations and no code this corpus has seen. [S][OPEN]</p>
 <h4 id="723-implementation-guidance">7.2.3 Implementation guidance</h4>
 <p>A parser MUST inspect <code>dir</code> before interpreting any post-slot bytes. An error tail and a value block
 can both begin <code>00 03</code>: read as a value block, <code>0x0003</code> ("not found") would fabricate a phantom value
@@ -4986,10 +5303,44 @@ another type has been seen. The practical rule: a decoder must take the TLV from
 its position in the structure and must <strong>never</strong> test <code>textType == 0x01</code> to
 decide whether one is present — a parser that does will desynchronise on an
 empty field, which is exactly how twelve point bodies in this corpus fail to
-decode. <code>textType</code> is a <strong>[OPEN]</strong> discriminator: the device-side string
-handling distinguishes RAD-50 from ASCII (§8.4), which is the obvious candidate
-for what it selects, but no non-<code>0x01</code> value with content exists here to
-confirm it.</p>
+decode.</p>
+<p><strong><code>textType</code> is a declared enumeration, and it is not the RAD-50 selector.</strong> An
+earlier edition left it open and named the firmware's RAD-50/ASCII choice (§8.4)
+as the obvious candidate. The type system settles it: [S]</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;"><code>textType</code></th>
+<th>name</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">0</td>
+<td><code>UNICODE</code></td>
+</tr>
+<tr>
+<td style="text-align: right;"><strong>1</strong></td>
+<td><strong><code>ASCII</code></strong></td>
+</tr>
+<tr>
+<td style="text-align: right;">2</td>
+<td><code>DBCS</code></td>
+</tr>
+</tbody>
+</table>
+<p>So <code>0x01</code> on every non-empty TLV in the corpus means <strong>ASCII</strong>, and the 24 TLVs
+carrying <code>0x00</code> are <strong>empty UNICODE strings</strong> rather than a second spelling of
+the empty string. RAD-50 is not among the three, which fits what §8.4 already
+says about it: the RAD-50/ASCII choice is a property of a <strong>firmware revision</strong>,
+negotiated once, not a per-string discriminator — two different axes that an
+earlier reading had conflated.</p>
+<p>What remains is much narrower: <strong>no non-empty <code>UNICODE</code> or <code>DBCS</code> string exists
+in this corpus</strong>, so whether <code>textLen</code> counts <em>bytes</em> or <em>characters</em> for those
+two is unresolved. For ASCII the two coincide and the question does not arise.
+A decoder meeting a <code>textType</code> of 0 or 2 with content should treat the length as
+bytes — the field is declared over <code>Byte[]</code> — and say that it is assuming.
+<strong>[OPEN]</strong></p>
 <p><strong>The length is two bytes, not one.</strong> An earlier edition of this section
 described the primitive as a fixed 2-byte prefix <code>01 00</code> followed by a
 <em>one-byte</em> length. Every observed TLV is consistent with that reading, because
@@ -5670,7 +6021,52 @@ a separate and shorter budget at 16 (§10.3). [D][W]</p>
 </tr>
 </tbody>
 </table>
-<p><strong>Seven of the sixteen arms are exercised; the other nine stay <code>[OPEN]</code></strong> — <code>looap</code>, <code>l2sp</code>, <code>looal</code>, <code>lfssl</code>, <code>lfssp</code>, <code>ldao</code>, <code>lfmsl</code>, <code>lfmsp</code>, <code>ppcl_lai</code>. An earlier edition said ten and listed <code>lpaci</code> among them; that was true of the 60-body sample and false of the corpus, which carries <strong>two</strong> <code>lpaci</code> bodies (§1.4.1.1). Walking all 444,961 bodies gives the arm counts as <code>lao</code> 13,499, <code>ldo</code> 5,068, <code>lai</code> 3,909, <code>ldi</code> 1,318, <code>lenum</code> 421, <code>l2sl</code> 146, <strong><code>lpaci</code> 2</strong>. [W] That is the same ceiling §10.9 describes: this site runs six point types, and no amount of further reading of this capture set will produce a seventh. [W][OPEN] For the replication change-record framing the interior offsets remain <strong>[OPEN]</strong>; treat byte-offset claims there as inferred.</p>
+<p><strong>Seven of the sixteen arms are exercised.</strong> An earlier edition said ten and listed <code>lpaci</code> among them; that was true of the 60-body sample and false of the corpus, which carries <strong>two</strong> <code>lpaci</code> bodies (§1.4.1.1). Walking all 444,961 bodies gives the arm counts as <code>lao</code> 13,499, <code>ldo</code> 5,068, <code>lai</code> 3,909, <code>ldi</code> 1,318, <code>lenum</code> 421, <code>l2sl</code> 146, <strong><code>lpaci</code> 2</strong>. [W] That is the same ceiling §10.9 describes: this site runs six point types, and no amount of further reading of this capture set will produce a seventh. [W]</p>
+<p><strong>Of the nine unexercised arms, two need no wire confirmation and seven do.</strong> Resolving each arm to the structure it actually reaches, rather than counting arm names: [S]</p>
+<table>
+<thead>
+<tr>
+<th>arm</th>
+<th>reaches</th>
+<th>why it is, or is not, still open</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ppcl_lai</code></td>
+<td><code>LAI_type</code></td>
+<td><strong>the same structure as <code>lai</code></strong>, which 112 bodies consume to the byte. A program-resident calculated value carries the analog arm unchanged, so its interior is confirmed — by those bodies</td>
+</tr>
+<tr>
+<td><code>ldao</code></td>
+<td><code>LDAO_type</code></td>
+<td><strong>declared empty.</strong> The arm consumes zero bytes; there is no interior to mis-offset</td>
+</tr>
+<tr>
+<td><code>looap</code>, <code>looal</code></td>
+<td><code>LOOAP_type</code> (5), <code>LOOAL_type</code> (4)</td>
+<td>genuinely unconfirmed</td>
+</tr>
+<tr>
+<td><code>lfssl</code>, <code>lfssp</code></td>
+<td><code>LFSSL_type</code> (4), <code>LFSSP_type</code> (5)</td>
+<td>genuinely unconfirmed</td>
+</tr>
+<tr>
+<td><code>l2sp</code></td>
+<td><code>L2SP_type</code> (4)</td>
+<td>genuinely unconfirmed</td>
+</tr>
+<tr>
+<td><code>lfmsl</code>, <code>lfmsp</code></td>
+<td><code>LFMSSL_type</code> (8), <code>LFMSSP_type</code> (9)</td>
+<td>genuinely unconfirmed</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Seven arms therefore remain unconfirmed on the wire, not nine.</strong> [S][OPEN]</p>
+<p>Worth reading against §11.7: <strong>four of the seven — <code>looap</code>, <code>looal</code>, <code>lfssl</code>, <code>lfssp</code> — are exactly the point types that carry more than two states</strong> (OFF/ON/AUTO and STOP/SLOW/FAST). The same types are absent from the FLN application catalog's 181,170 points and from every panel-resident record. They are not rare here; they are <strong>absent</strong>, and a reader whose site runs them is reading this section's least-supported claims. [W][S]</p>
+<p>For the replication change-record framing the interior offsets remain <strong>[OPEN]</strong>; treat byte-offset claims there as inferred.</p>
 <p>For the byte-level grammar of each opcode's request and response ASDU, see §9; for the point-model structures (value blocks, multistate enum tables, FLN-device subpoints, slope/intercept scaling) these primitives compose into, see §11.</p>
 <h2 id="9-function-code-opcode-catalog">9. Function-Code (Opcode) Catalog</h2>
 <p>Every P2 request, panel-originated push, and response is dispatched on a single 2-byte field, the <strong>AP2 function code</strong> (the wire opcode). This section catalogs that field. §10 then gives the body (ASDU) structures that follow each opcode.</p>
@@ -5707,6 +6103,18 @@ descriptive (<code>__RpcRegisterCOVxx</code>, <code>__RpcCancelCOVxx</code>, <co
 <code>__RpcMakeNodeOffline</code>, <code>__RpcBACnetWhoIs</code>, <code>__RpcBPing</code>), which makes the CPI
 tier the most legible statement of <em>what operations exist</em> that this protocol
 has. [S]</p>
+<p><strong>This vocabulary is stable across supervisor versions.</strong> The counts above were
+first measured on a single build. Comparing four build generations of the two
+adapter libraries — 2014, 2017, a 2018 patch level, and a 2019 build of a
+different product — the declared command set is identical at every step, by set
+comparison and not merely by count: no operation is added and none is removed.
+One library declares 353 request adaptors (188 request-only, 165
+request-response) and 377 operation classes in all four; the other declares 349
+and 345. An implementer may therefore treat the operation vocabulary of §9.1 as
+fixed for supervisors of this era, rather than as a property of one version.
+[S] What this does <em>not</em> fix is which operations a given panel firmware
+answers — that is a separate question, addressed in §10.9, and a supervisor
+knowing how to ask is not evidence that a panel implements. [I]</p>
 <p><strong>The receive path is narrower than the send path, and by how much is
 measurable.</strong> <code>BLN2CPI</code> dispatches an inbound frame through a chain of <strong>twelve
 range switches</strong>, each of which states its own first opcode and its own length.
@@ -11694,6 +12102,132 @@ them drew a substantive answer: [W]</p>
 each, from research hosts, never from a supervisor or a panel in normal
 operation. That is why they carry no body documentation and no family: nothing
 is known about them beyond the response class.</p>
+<h4 id="953-twenty-six-opcodes-named-from-a-display-string-pool">9.5.3 Twenty-six opcodes named from a display-string pool</h4>
+<p>A separate set of opcodes is <em>named</em> without being observed. A vendor
+diagnostic tool carries a packed pool of <strong>565 command display names</strong> in its
+data section, and the pool's <strong>address order encodes the opcode</strong>: within a
+run, <code>index + opcode</code> is constant, so each successive string is one opcode
+lower. This is the same relation the EBln command pool follows (§10.6), with
+one difference — there is no single base. The pool is a sequence of contiguous
+runs, one per operation family, with jumps between them.</p>
+<p>Fitting it against the operation names this document already carries gives
+<strong>197 anchors</strong>, which segment into <strong>43 runs, 28 of them with three or more
+members</strong>. Within a run's span an unanchored name takes the run's base.</p>
+<p><strong>The derivation is checkable, and it checks.</strong> Fourteen of the forty names it
+binds turn out to have an independent catalog entry whose <em>word order differs</em>,
+so name-matching could not have found them — and all fourteen agree:
+<code>0x4001</code> Team Descriptor Add, <code>0x4002</code>–<code>0x4006</code> the Analog / Digital / LENUM /
+LPACI / L2SL member-descriptor adds, <code>0x0222</code> Point Log Ctrl Status, <code>0x0224</code>
+Point Log Totalized, <code>0x4204</code> Controller Remove, <code>0x5037</code> EQS Display Command
+Table. <code>0x4200</code> sits at a run endpoint and matches the <code>TEC_LOG</code> pairing §10.9.1
+established from 242 bodies. [S]</p>
+<p>The remaining twenty-six name an opcode this document did not:</p>
+<table>
+<thead>
+<tr>
+<th>Opcode</th>
+<th>Name</th>
+<th>Opcode</th>
+<th>Name</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0x0296</code></td>
+<td>Trend Definition Display</td>
+<td><code>0x0297</code></td>
+<td>Trend Multi-Point Display</td>
+</tr>
+<tr>
+<td><code>0x0298</code></td>
+<td>Trend Setup Modify</td>
+<td><code>0x029A</code></td>
+<td>Trend Setup Copy</td>
+</tr>
+<tr>
+<td><code>0x0310</code></td>
+<td>PB Poll</td>
+<td><code>0x0311</code></td>
+<td>Print Error</td>
+</tr>
+<tr>
+<td><code>0x0312</code></td>
+<td>PPCL OIP</td>
+<td><code>0x0502</code></td>
+<td>Alarm Point Query Enh Alarmable</td>
+</tr>
+<tr>
+<td><code>0x0503</code></td>
+<td>Alarm Point Query Record Enh Alarmable</td>
+<td><code>0x0527</code></td>
+<td>Alarm Mode Modify Setup</td>
+</tr>
+<tr>
+<td><code>0x052E</code></td>
+<td>Alarm Mode Log</td>
+<td><code>0x052F</code></td>
+<td>Alarm Mode Check</td>
+</tr>
+<tr>
+<td><code>0x3801</code></td>
+<td>RACS Partner Copy</td>
+<td><code>0x3815</code></td>
+<td>RACS Port Enable</td>
+</tr>
+<tr>
+<td><code>0x3816</code></td>
+<td>RACS Port Log</td>
+<td><code>0x4007</code></td>
+<td>Reference Add</td>
+</tr>
+<tr>
+<td><code>0x4008</code></td>
+<td>Reference Remove</td>
+<td><code>0x4009</code></td>
+<td>Reference Look</td>
+</tr>
+<tr>
+<td><code>0x400A</code></td>
+<td>Reference Log</td>
+<td><code>0x4207</code></td>
+<td>TEC Query List</td>
+</tr>
+<tr>
+<td><code>0x4242</code></td>
+<td>UC Copy</td>
+<td><code>0x4243</code></td>
+<td>UC Modify</td>
+</tr>
+<tr>
+<td><code>0x4246</code></td>
+<td>UC Definition</td>
+<td><code>0x4247</code></td>
+<td>UC Query Record</td>
+</tr>
+<tr>
+<td><code>0x4248</code></td>
+<td>UC Query List</td>
+<td><code>0x4302</code></td>
+<td>LON Copy</td>
+</tr>
+</tbody>
+</table>
+<p>Each completes a family the catalog already carries in part — <code>Reference
+Add/Remove/Look/Log</code> finishing the team-descriptor block that opens at
+<code>0x4001</code>, the <code>UC</code> set at <code>0x4242</code>–<code>0x4248</code>, and <code>TEC Query List</code> filling
+<code>0x4207</code> in a run whose <code>0x4200</code> and <code>0x4204</code> are both independently confirmed.
+[S]</p>
+<p><strong>What this is and is not.</strong> It is a <strong>name</strong> for an opcode, derived from
+position in a display-string pool and validated on fourteen independent cases.
+It is <strong>not</strong> a body definition, a direction, or evidence that a panel
+implements the operation — none of the twenty-six appears in the corpus. Treat
+them as the catalog's naming, not as observed behaviour. [S] <strong>[OPEN]</strong></p>
+<p><strong>Three fifths of the pool stays unbound.</strong> 347 of the 565 names lie outside
+every validated run, in stretches with too few anchors to fit a base.
+Extending a run past its last confirmed member would be extrapolation rather
+than derivation, and this document does not do it. A serial-side capture would
+supply the missing anchors; so would the numeric code the tool prints when a
+panel rejects a command it does not know. <strong>[OPEN]</strong></p>
 <p><strong>The conclusion is narrow and worth stating precisely.</strong> It is <em>not</em> that these
 are secret operations; it is that <strong>the supervisor-side function-code
 enumeration is not a complete inventory of what a panel implements.</strong> Six
@@ -12272,7 +12806,25 @@ silent about a field. [S][W]</p>
 an empty <code>Point_extension2</code> is exactly two bytes, so <code>0x0291</code> and <code>0x02A8</code> carry
 a field the library forgot on a structure that its neighbours all have. What
 remains open is narrow — <strong>the meaning of the two single-byte booleans</strong> on
-<code>0x0987</code> and <code>0x5038</code>. Their width and position are not in doubt. [W][OPEN]</p>
+<code>0x0987</code> and <code>0x5038</code>. Their width and position are not in doubt. Five readings
+are now <strong>excluded</strong>, which is worth stating so the next reader does not
+re-walk them: [W][S]</p>
+<ul>
+<li><strong><code>panel_logging : IsPanelLogging</code></strong>, the trailing field the <code>_Added_</code>
+  siblings declare and the <code>_All_</code> forms omit — the same asymmetry that
+  explained the <code>state_text_id</code> cases above, so it is the obvious candidate.
+  It is <strong>refuted by the wire.</strong> <code>IsPanelLogging</code> is a CHOICE, not a boolean,
+  with a complete map <code>0 loggerOff</code> (<code>NULL_</code>) and <code>1 loggerOn</code>
+  (<code>cabinet_address</code>, <code>id</code>, <code>date_time</code>, <code>reason</code>, <code>valid</code>). Fifty-nine of
+  sixty <code>0x0987</code> bodies carry the value <strong>1 with zero bytes remaining</strong>, and
+  tag 1 requires a payload.</li>
+<li><strong><code>zone_enabled</code>, <code>recmd_after_warmstart</code>, <code>english_units</code> and
+  <code>optimization_osv</code></strong>, all already declared inside <code>Eqs_zone_data</code> — and
+  <strong><code>optimization_enabled</code></strong>, declared on <code>AP2_Upl_All_EQS_Zone_Response</code>
+  itself and consumed before the trailing byte is reached.</li>
+</ul>
+<p>So it is a sixth boolean of the EQS zone object, and the structure library does
+not name it anywhere. <strong>[OPEN]</strong></p>
 <p><strong>These are in the published package.</strong> <code>p2_asdu.OP_TAILS</code> carries all nine and
 <code>p2_body.py</code> applies them after the declared structure, naming them so a reader
 can see they are observed rather than declared. Until this pass the reference
@@ -12793,8 +13345,58 @@ appears exactly where the struct table says it should. A handful of families car
 additional trailing key. The <strong>TEC</strong> family's is now identified: a 2-byte
 <strong><code>application_number</code></strong> after the search struct, with <code>0xFFFF</code> as the wildcard —
 confirmed across four sibling opcodes, one of whose ASDU definitions omits it
-while the wire carries it. The EQS schedule set and trend delete remain
-<strong>[OPEN]</strong>. [W]</p>
+while the wire carries it. <strong>Trend delete was never a resume key at all</strong>, and the mistake is worth
+keeping because it is a decoder failure that looked like a protocol gap. All
+fourteen <code>0x0291 AP2_TREND_SETUP_DELETE</code> requests in the corpus were recorded
+as carrying four undeclared trailing bytes. They carry a <strong>declared</strong> field:
+<code>which_trend</code> is a CHOICE whose <code>specific</code> arm holds a <code>Trend_specifier</code>
+(<code>number_of_samples : UNSIGNED16</code>, <code>trend_type : Trend_type</code>), and <code>Trend_type</code>
+is itself a CHOICE with a complete tag map — <code>0 point_cov</code> (<code>NULL_</code>),
+<code>1 trend_cov</code>, <code>2 time</code>. The last two each carry a four-byte <code>FLOAT_</code>. On the
+wire: [W]</p>
+<table>
+<thead>
+<tr>
+<th><code>trend_type</code></th>
+<th>arm</th>
+<th>payload</th>
+<th style="text-align: right;">bodies</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td><code>point_cov</code></td>
+<td>none — the arm is <code>NULL_</code></td>
+<td style="text-align: right;">6</td>
+</tr>
+<tr>
+<td>1</td>
+<td><code>trend_cov</code></td>
+<td><code>cov_limit</code> = <strong>3.0</strong></td>
+<td style="text-align: right;">2</td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>time</code></td>
+<td><code>seconds_interval</code> = <strong>60.0</strong></td>
+<td style="text-align: right;">4</td>
+</tr>
+</tbody>
+</table>
+<p>Fourteen of fourteen, exactly consumed. The bytes were falling outside the walk
+because the structure catalog carries a <strong>fixed width for <code>which_trend_</code></strong> and
+the walker consulted it before dispatching the CHOICE — and 4 is the right
+width only when <code>Trend_type</code> selects the <code>NULL_</code> arm. Fixed in <code>p2_body.py</code>;
+corpus-wide, exact decodes went 3,933 → 3,939 and errors 26 → 20 with nothing
+else moving. <strong>A CHOICE's width is a function of the arm its tag selects, so a
+fixed width for one can only ever be right for the arms that happen to match
+it.</strong> [W][S]</p>
+<p>The <strong>EQS schedule set</strong> remains <strong>[OPEN]</strong>, and narrower than it was: with the
+CHOICE dispatch corrected, no EQS request opcode in the corpus carries a small
+undeclared tail. What the EQS families do carry is a large <strong>pre-allocated
+request buffer</strong> (§10.1), which is a different thing and must not be read as a
+key. [W]</p>
 <h3 id="103-read--command--cov-core">10.3 Read / command / COV core</h3>
 <p><strong><code>AP2_POINT_LOG_VALUE</code> request (0x0220)</strong> — present-value read. [S][W]</p>
 <table>
@@ -15262,10 +15864,78 @@ reach were added on wire evidence: <code>0x4200</code>, whose opcode is named
 <code>AP2_CONTROLLER_LOG</code> while its request body is <code>AP2_TEC_Log_Request</code> — 247 of
 248 bodies decode cleanly under it and <strong>no other library structure closes even
 one</strong> — and <code>0x0050 AP2_DISK_LOG</code>, whose request is a bare <code>User_profile</code>
-rather than any <code>AP2_*_Request</code> at all. <code>0x4200</code>'s <em>response</em> was not added:
-<code>AP2_TEC_Log_Response</code> truncates on all 242 response bodies, so the declared
-structure is longer than anything on the wire and the pairing stays
-<strong>[OPEN]</strong>. [W]</p>
+rather than any <code>AP2_*_Request</code> at all.</p>
+<p><strong><code>0x4200</code>'s response is now paired too, and the reason it was not is worth
+keeping.</strong> An earlier edition refused it because <code>AP2_TEC_Log_Response</code>
+"truncates on all 242 response bodies, so the declared structure is longer than
+anything on the wire". <strong>Truncation is not misfit.</strong> It means the body ended at
+a <em>field boundary</em>, which is the normal shape of a short response — and over all
+242 bodies in the corpus <strong>every byte of every one is consumed</strong>, with no error
+and no leftover, every one stopping at the same field: <code>tec_body.nrOfrechar_values</code>.
+The panel sends the TEC record without its trailing recharacterization array and
+BACnet flag. That is a short record, not a wrong structure, and refusing the
+pairing left the shipped catalog unable to decode the response at all. [W]</p>
+<p>The honest limit: <strong>five library structures declare this shape field-for-field</strong>
+— <code>AP2_TEC_Log_Response</code>, <code>AP2_TEC_Look_Response</code>,
+<code>AP2_TEC_Query_Record_Response</code>, <code>AP2_TEC_Definition_Response</code> and
+<code>AP2_Upl_All_TEC_Response</code>, all <code>{ team_response : Team_response, tec_body :
+TEC_body }</code>. Identifying the bytes therefore does not identify the <em>name</em>; the
+operation does, and <code>TEC_Log</code> is the one matching the request already paired to
+this opcode. Searching the whole 1,365-structure catalog found nothing else that
+consumes a body exactly. [S][W]</p>
+<h4 id="1091-the-opcodes-with-no-declared-structure-and-why-most-cannot-be-paired">10.9.1 The opcodes with no declared structure, and why most cannot be paired</h4>
+<p>Twenty-nine opcode/direction pairs in the body cache have <strong>no structure at
+all</strong> — the name-matching rule finds none and none was added by hand. Trying
+every structure in the full 1,365-entry catalog against each and counting the
+survivors says which of those are gaps in the catalog and which are gaps in the
+method: [W][S]</p>
+<table>
+<thead>
+<tr>
+<th>outcome</th>
+<th style="text-align: right;">pairs</th>
+<th>what it means</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>nothing fits any structure</td>
+<td style="text-align: right;">2</td>
+<td><code>0x0368</code> and <code>0x0C44</code> requests. A genuinely undeclared shape</td>
+</tr>
+<tr>
+<td>exactly one structure fits</td>
+<td style="text-align: right;">2</td>
+<td><code>0x464E</code> and <code>0x4650</code> responses, both <code>Pdl_display_data</code> — <strong>one body each</strong>, and the name does not belong to the EBLN family. Treat as coincidence until a second body exists</td>
+</tr>
+<tr>
+<td>a tie of 2–44</td>
+<td style="text-align: right;">9</td>
+<td>the bodies are too short or too uniform to discriminate</td>
+</tr>
+<tr>
+<td>a tie of 100+</td>
+<td style="text-align: right;">16</td>
+<td>likewise, and hopelessly so: a 4-byte body is consumed whole by 536 structures</td>
+</tr>
+</tbody>
+</table>
+<p><strong>The method needs long, varied bodies.</strong> It identified <code>0x4200</code>'s response
+because 242 bodies of 72–143 bytes admitted exactly one shape. It cannot
+identify a 12-byte one, and saying so is more useful than another search.</p>
+<p><strong>And thirteen of the twenty-nine are not protocol evidence at all.</strong> Every
+request among <code>0x0510</code>, <code>0x4641</code>–<code>0x4643</code>, <code>0x4647</code> and <code>0x464A</code>–<code>0x4650</code>
+carries the <strong>identical twelve bytes</strong>, which walk cleanly as a bare
+<code>User_profile</code> — the same argument that paired <code>0x0050</code>'s request. It does not
+transfer, because <strong>every one of those requests was emitted by this project's
+own two research hosts</strong>, one or two frames each, during a blind opcode sweep.
+The twelve identical bytes are our prober's preamble, not the protocol's
+request shape. <code>0x0050</code>'s pairing stands on 166 requests from mixed sources;
+these stand on nothing. Attribute by source before reading a shape off the wire
+(§7.1). [W]</p>
+<p><code>0x4633 EBLN_REPL_NOTIFY</code> needs no structure: its forty vendor-emitted requests
+all carry a <strong>zero-length body</strong>, which §9 already lists among the 220
+parameterless requests. The single twelve-byte one is ours. [W]</p>
 <p><strong>The table of blockers is empty, and that is the claim: every operation in the
 catalog that declares a request or a response can be turned into named fields
 from this document alone.</strong> The register read 274 in its first edition and 384 in
@@ -15705,6 +16375,8 @@ independent sources, agreeing down to which types get the optional wrapper.
 <p>Type code <code>0</code> is <code>point_type_undef</code> (no point). The codes are the <code>Point_type</code> enumeration values that travel as a <code>Point_type</code> tag wherever a typed point body appears in an ASDU. [S] The decimal codes are not contiguous (5, 8, 9, 10 and 16–18 are unused), so an implementer must dispatch on the explicit code, never on ordinal position. [S]</p>
 <p><strong>A point type's default enumeration is the negation of its type code.</strong> The enum library that supplies state text (§11.5) keys its per-type defaults as <code>-1</code> LDI, <code>-2</code> LDO, <code>-6</code> L2SL, <code>-7</code> LOOAP, <code>-12</code> L2SP, <code>-13</code> LOOAL, <code>-14</code> LFSSL, <code>-15</code> LFSSP, <code>-19</code> LCTLR, <code>-21</code> LENUM — every one the negation of the code above. Nine of the ten negate a code this table already carried; the tenth is why <code>19</code> is listed as LCTLR rather than unused. <strong>This is now wire-confirmed, and it confirms the field's signedness at the same time:</strong> every point in the corpus whose <code>state_text_table</code> reads a small negative number is the matching type — <code>-1</code> on LDI points and nothing else, <code>-2</code> on LDO points and nothing else — and a supervisor queried independently labels one of those points' text group as the default for its type, with the same signed id in the group's own name. Read unsigned the two values are 65535 and 65534 and bear no relation to the point type. [S][W][D] The analog types (LAI, LAO, LPACI) have no default entry, which is consistent: an analog point has no enumerated states. A decoder can therefore derive a point's default state-text set from its type code alone, and only needs an explicit enum reference when the point overrides the default with a named group.</p>
 <blockquote>
+<p><strong>The converse does not hold, and reading it as though it did is a real defect.</strong> <em>Having</em> a default entry implies enumerated states; <strong>lacking one does not imply analog.</strong> <code>LFMSSL</code> (22) and <code>LFMSSP</code> (23) have <strong>no</strong> <code>-22</code>/<code>-23</code> entry in the library and are <strong>digital four-state</strong> points — the fast/medium/slow/stop families this section lists as digital-only, whose structures carry a <code>state_text_table</code> like every other enumerated type. A reader who infers the analog/digital split from the presence of a default enumeration classifies a four-state motor-speed point as an analog value. <code>p2_scanner.py</code> did exactly that until 2026-09-21; it now carries an explicit exception table for the two. [S][I]</p>
+<p>So there are <strong>seven</strong> point types with more than two states — <code>LOOAP</code>, <code>LOOAL</code>, <code>LFSSL</code>, <code>LFSSP</code>, <code>LENUM</code>, <code>LFMSSL</code>, <code>LFMSSP</code> — and a consumer mapping them onto BACnet needs a multi-state object for all seven. The state <strong>count</strong> for the last two is derived from the mnemonic and agrees with the subpoint table above (the pulsed variant carries one DO per state, 4 DO = 4 states, exactly as <code>LFSSP</code> carries 3 DO for STOP/SLOW/FAST). Their state <strong>text</strong> is unknown: the vendor library supplies no default, so a panel carrying such a point supplies its own table and nothing here should guess it. <strong>[OPEN]</strong></p>
 <p>Implementation caution, a second one. The vendor's commissioning-report definition carries a table of the same mnemonics numbered <code>LDO</code>=2, <code>LDI</code>=3, <code>LAO</code>=4, <code>LAI</code>=5, <code>L2SL</code>=6, <code>L2SP</code>=7, <code>LOOAL</code>=8, <code>LOOAP</code>=9, <code>LFSSL</code>=10, <code>LFSSP</code>=11, <code>LPACI</code>=12, <code>LCTLR</code>=13, <code>LENUM</code>=14. Its own comment identifies these as <strong>procedure numbers matching a help file</strong>, not point types — a third numbering of the same taxonomy, alongside the <code>PTYPE</code> field noted above. It is a document index. Do not cross-map it either. [D]</p>
 <p>Implementation caution, a third one, and the most dangerous of the three. A
 current supervisor product carries <strong>two point-type enumerations side by side</strong>
@@ -16273,11 +16945,70 @@ AHUC current channels are 0–20 mA where MBC, SCU and RCU are 4–20 mA</strong
 moving a point between those two groups moves the engineering zero by exactly
 4 mA. It is not a per-generation fudge factor; it is the live zero appearing in
 engineering units because the two families disagree about whether there is one.</p>
-<p>The one constant this does not account for is <strong><code>25600/24576</code></strong>. No family in
-§11.5.1.1's tables has a 24,576-count span, so a sixth input generation exists
-that those tables do not cover — <code>24,576 = 24 × 1024</code>, against MBC's
-<code>25,600 = 25 × 1024</code>, which makes it look like a near neighbour of the MBC
-rather than a different class. <strong>[OPEN]</strong></p>
+<p><strong><code>25600/24576</code> used to be the loose end here, and it is now closed.</strong> This
+section previously reported that no family in §11.5.1.1's tables has a
+24,576-count span, and inferred a sixth input generation the tables did not
+cover. There is no sixth generation. The vendor's own termination-conversion
+data carries the 24,576 conversions as literal arithmetic, and the intercept
+term names the source zero offset directly:</p>
+<pre><code>slope'     = slope × 2602/24576
+intercept' = intercept + slope × 650 − (2602/24576) × slope × 6144
+                                                            ^^^^
+                                          the source zero offset, in counts
+</code></pre>
+<p>which resolves by arithmetic rather than inference:</p>
+<pre><code>6,144 + 24,576 = 30,720          the span sits under the SAME full scale
+6,144 / 30,720 = 0.20 = 4 / 20   the 4 mA live zero of a 4-20 mA loop
+</code></pre>
+<p><strong>The missing family is <code>UC</code>, the unitary controller.</strong> Every conversion in the
+vendor data carrying 24,576 has <code>UC</code> as its source and <code>P2PXC</code> or <code>P1BIM</code> as
+its target, and <code>UC</code> is absent from the family list above. It is not a sixth
+<em>generation</em> of converter; it is a family the tables never covered. [S]</p>
+<p>With the source family named, its two input channels separate:</p>
+<table>
+<thead>
+<tr>
+<th><code>UC</code> channel</th>
+<th>counts</th>
+<th style="text-align: right;">span</th>
+<th>live zero</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>current (<code>AII</code>, <code>AOI</code>)</td>
+<td>6,144 … 30,720</td>
+<td style="text-align: right;"><strong>24,576</strong></td>
+<td><strong>20.0 %</strong> = 4/20 mA</td>
+</tr>
+<tr>
+<td>voltage (<code>AIV</code>)</td>
+<td>3,584 … 29,184</td>
+<td style="text-align: right;"><strong>25,600</strong></td>
+<td>12.3 %</td>
+</tr>
+</tbody>
+</table>
+<p>The voltage row is why <code>3,584</code> looks familiar: <strong><code>UC</code>'s voltage channel uses
+the very range this section already documents for MBC input.</strong> One family, two
+channel designs, and the tables carried only one of them. <code>25600/24576</code> is
+therefore an ordinary count-span ratio between the two <code>UC</code> channels' scales —
+the single rule above covers it, and the table was missing a row rather than
+the rule being wrong. [S][I]</p>
+<p>One further conversion in the same data is placed but not yet tabulated:
+<code>UC → P2PXC</code>, <code>AOV → AOV</code>, <code>slope × 16383/30720</code> with an identity intercept.
+<code>16,383 = 2¹⁴ − 1</code>, so the target is a <strong>14-bit</strong> analog voltage output on the
+<code>P2PXC</code>. Which table in §11.5 should carry it is unsettled. <strong>[OPEN]</strong></p>
+<p><strong>The sub-type vocabulary itself.</strong> This document names a per-point <em>Sensor
+Type</em> without ever giving its value set. The vendor's termination data
+enumerates it: <code>AI_THERMISTOR</code>, <code>AI_THERMISTOR_1K</code>, <code>AI_THERMISTOR_100K</code>,
+<code>AI_CURRENT</code>, <code>AI_VOLTAGE</code>, <code>AI_PNEUMATIC</code>, <code>AI_RTD_1K</code>, <code>AI_RTD_1K_385</code>,
+<code>AI_NICKEL</code> and <code>AI_ON_TCU</code>, with the short forms <code>AI10K</code>, <code>AI375</code>, <code>AI385</code>
+and <code>AINI1000</code>, and the channel option codes <code>AII</code> / <code>AIV</code> / <code>AIP</code> / <code>AI100K</code>
+and <code>AOI</code> / <code>AOV</code> / <code>AOP</code> / <code>AOV16</code> / <code>AOR</code>, glossed respectively as current,
+voltage, pneumatic and resistance. [S] An implementer needs these because the
+conversion above is keyed by sub-type: the same raw count means a different
+engineering value under <code>AI_RTD_1K</code> than under <code>AI_RTD_1K_385</code>.</p>
 <p>The practical consequence for anyone reading a point database: <strong>a slope and
 intercept are only meaningful alongside the sub-type and the termination
 generation that produced them.</strong> Two points with identical slope/intercept on
@@ -16878,6 +17609,34 @@ analogs. <strong>This is a second, independent check on §10.4.6's tag map</stro
 recovered from the reference implementation and validated against ASHRAE's object-type
 numbering: the arms carry the properties ASHRAE assigns to exactly those object
 types.</p>
+<h4 id="1171-two-outside-checks-on-the-twelve-and-one-correction">11.7.1 Two outside checks on the twelve, and one correction</h4>
+<p><strong>A commercial P2 driver counts twelve too.</strong> A third-party native-P2 driver for
+a supervisory platform advertises support for <em>"all 12 P2 point types, including
+analog, digital and enumerated."</em> That number was reached here from the vendor's
+type system — twelve of the sixteen point types have a typed
+<code>AP2_BAC_Point_Add_&lt;LTYPE&gt;</code> form — and it is reached independently by someone
+who had to implement against real panels. Two routes, same twelve. [D]</p>
+<p><strong>But the panel's own BACnet side does not expose all nine object types.</strong> The
+publicly posted Protocol Implementation Conformance Statement for a current PXC
+lists the standard object types it supports:</p>
+<blockquote>
+<p>Analog Input, Analog Output, Analog Value, Binary Input, Binary Output,
+Binary Value, Calendar, Command, Device, Event Enrollment, File,
+<strong>Multi-state Output, Multi-state Value</strong>, Notification Class, Schedule,
+Trend Log</p>
+</blockquote>
+<p><code>BAC_Point_Base</code> declares nine arms — AI 0, AO 1, AV 2, BI 3, BO 4, BV 5,
+<strong>MI 13</strong>, MO 14, MV 19 (§10.4.6). The shipped controller supports <strong>MO and MV
+and not MI</strong>. So an implementer mapping an enumerated P2 point onto a BACnet
+object should reach for <code>multiStateValue</code>, not <code>multiStateInput</code>: the type
+system permits the latter and the product does not ship it. [D][S]</p>
+<p>The same statement gives two further facts worth having, both about the
+<strong>BACnet</strong> side and neither transferable to P2: the controller serves COV —
+<code>DS-COV-B</code> and <code>DS-COVU-B</code>, subscribed and unsolicited — and it both sends and
+receives <strong>segmented</strong> messages with a window size of 32. <strong>That is BACnet
+segmentation, at the BACnet layer.</strong> It says nothing about §6.7's open question,
+which is about segmentation of a P2 body, and a reader must not carry the one
+across to the other. [D]</p>
 <p><strong>What this says about scope.</strong> §3.2.4 places the BACnet stack out of scope and
 that stands — none of this is needed to speak P2. But the boundary is not where
 it might appear: these are <strong>P2 operations</strong>, in the P2 opcode space, with P2
@@ -20195,6 +20954,34 @@ capture: [S]</p>
 as an open set rather than expect exactly the three elements above. A panel
 that does not implement the operation answers with a refusal naming itself
 rather than an empty document.</p>
+<p><strong>The open-set warning is now a measurement, not a caution.</strong> Fifty-five real
+instances of this document were recovered from stored panel databases, and they
+carry <strong>eighteen</strong> distinct <code>&lt;Services&gt;</code> elements rather than three. In
+descending order of how many panels declare each: <code>FLNTopology</code> (55),
+<code>OperatorActivityLogging</code>, <code>AlarmBuffer</code>, <code>LicenseManager</code>, <code>RENO</code>, <code>TXIO</code>,
+<code>usbTool</code> (53 each), <code>usbModem</code>, <code>usbPrinter</code> (49), <code>TrendDST</code> (47),
+<code>WirelessFLN</code> (44), <code>Adapt</code> (43), <code>BACnetIPALN</code>, <code>FPWebFINBuilderCOV</code>,
+<code>FPWebFINBuilderPublish</code>, <code>SNMP</code> (12 each), <code>FPWeb</code> (9), <code>MB</code> (2). [S]</p>
+<p>Two further points an implementer needs:</p>
+<ul>
+<li><strong><code>&lt;PanelBasics&gt;</code> carries <code>&lt;Platform&gt;</code> and <code>&lt;VersionNumber&gt;</code></strong> beyond the
+  template above. Observed <code>HardwareType</code> values are <code>PXME</code>, <code>EPXC</code>, <code>MECF</code>,
+  <code>MCFP</code>; observed <code>Platform</code> values are <code>PME</code>, <code>PXE</code>, <code>MCF</code>, <code>MCA</code>. [S]</li>
+<li><strong><code>&lt;Services&gt;</code> carries a repeated <code>&lt;FLN LAN="n"&gt;TYPE&lt;/FLN&gt;</code> element</strong> that
+  the template does not show. It declares the fieldbus type <em>per LAN number</em>
+  and is the clearest statement of a panel's fieldbus layout the protocol
+  offers — see §4.4, which it settles. [S]</li>
+</ul>
+<p>Elements carrying no <code>Enabled</code> attribute are presence-only. Of those that do,
+every observed value was <code>NO</code> except <strong><code>FPWeb=YES</code> on nine panels</strong> — an
+independent confirmation of the HTTP service in §4.1.1's port surface, stated
+by the panel about itself. [S]</p>
+<p>This content comes from stored panel databases, not from a capture. The
+statement above that neither opcode appears in the corpus was re-verified
+across all 229 captures, including the panel-side captures: zero occurrences of
+<code>ServicesRendered</code> or <code>PanelBasics</code>. An implementer still has <strong>no
+wire-observed example of the response framing</strong>; what is established is the
+content a real panel puts in it. <strong>[OPEN]</strong> [S]</p>
 <p>Two things follow for an implementer. First, this is a <strong>richer identity read
 than <code>0x010C</code></strong> — it adds hardware type, platform, build number and a
 services list, and it is self-describing. Second, <code>0x010E</code> implies a <strong>change
