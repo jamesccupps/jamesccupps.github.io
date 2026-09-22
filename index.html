@@ -973,7 +973,38 @@ frame.</p>
 </ul>
 <h4 id="144-scope-summary">1.4.4 Scope summary</h4>
 <p><strong>In scope:</strong> the P2 wire protocol over TCP/IP and the adjacent layers an implementer must understand to use it — transport and ports, framing and encoding, addressing and identity, the session handshake, the full operation/opcode catalog, the point model, replication/discovery, COV/alarms, error codes, and PPCL-over-the-wire.</p>
-<p><strong>Out of scope:</strong> the BACnet protocol stack (BACnet/IP and BACnet MSTP) that coexists on later panels; the serial-era physical layer except as lineage context (§1.5); and any management-station-internal supervisor-to-station RPC that does not appear on the panel wire. [I]</p>
+<p><strong>Out of scope:</strong> the BACnet protocol stack (BACnet/IP and BACnet MSTP) that coexists on later panels; the serial-era physical layer except as lineage context (§1.5); any management-station-internal supervisor-to-station RPC that does not appear on the panel wire; and — for reasons of consequence rather than difficulty — <strong>the life-safety network described immediately below</strong>. [I]</p>
+<h4 id="121-the-life-safety-network-and-why-nothing-here-goes-near-it">1.2.1 The life-safety network, and why nothing here goes near it</h4>
+<p>The same management station that speaks this protocol to HVAC field panels
+also integrates <strong>fire alarm panels</strong>, on a network the vendor calls a <strong>Life
+Safety BLN</strong>. Its members are a different product family — <code>ALS3</code> panels
+described as <em>"field panel that belongs to an integrated Fire network"</em>, and
+<code>MXL</code> / <code>FireFinder XLS</code> backbones — reached through the station's ordinary
+device tree, and the station's own operator documentation exposes <strong>Reset</strong> and
+<strong>Alarm Silence</strong> as panel commands, the latter gated by a programmable
+<em>Alarm Silence Inhibit</em> timer. Alarm acknowledgement can be owned by a
+designated workstation ("Proprietary") or unrestricted ("Local"). [D]</p>
+<p><strong>This document describes none of it, and the tooling accompanying it must
+never address it.</strong> The reason is not that the mechanism is uninteresting.
+It is that the consequence of a mistake is not a comfort complaint:</p>
+<ul>
+<li>A read that a panel mishandles is a nuisance on an air handler and a
+  life-safety event on a fire panel.</li>
+<li><code>Alarm Silence</code> and <code>Reset</code> are <strong>suppression</strong> operations. A tool that can
+  reach them can quiet a real alarm, and no amount of read-only discipline
+  elsewhere in a scanner makes that acceptable.</li>
+<li>Fire systems carry listing and approval obligations that a third-party tool
+  touching the network can void, independently of whether it causes a fault.</li>
+</ul>
+<p>It is recorded here <strong>because an owner needs to know it</strong>, not so that anyone
+can act on it. A building operator evaluating what a compromised management
+station is worth to an attacker should know that the answer includes the fire
+panels, and that the blast radius of supervisor compromise is not bounded by
+HVAC. That is a defensive fact and it changes how the station itself should be
+segmented and monitored. [D][I]</p>
+<p>No opcode, command encoding, body layout or addressing for any life-safety
+operation appears anywhere in this document, and none will be added. <strong>[OPEN]
+by choice, permanently.</strong></p>
 <h3 id="15-lineage-informative">1.5 Lineage (informative)</h3>
 <p>This subsection is informative; nothing in it is required for interoperation. It orients an implementer to why the protocol is shaped as it is.</p>
 <p><strong>Powers → Landis &amp; Gyr → Siemens.</strong> The vendor's shipping code still says so: <code>Bn_adapt.dll</code> names its P2↔BACnet mapping table <strong><code>S600toBACnetXrefTable</code></strong> — <em>System 600</em> — so "S600" is the internal name for the P2 side in a modern BACnet adapter, not merely a historical label. [S] P2's data model and much of its vocabulary descend from the <strong>Powers System 600</strong> of the 1980s and its <strong>Protocol II</strong> — the peer ("token-passing") network discipline of that era — as distinct from <strong>Protocol I</strong>, the master/slave polling discipline that survives conceptually as the FLN sub-bus beneath a panel. [D/I] The product line passed through <strong>Landis &amp; Gyr</strong> (and a parallel <strong>Staefa Control System</strong> branch) before consolidating under Siemens' APOGEE, which is why conventions from several BAS lineages coexist in the modern system. [D/I]</p>
@@ -2059,7 +2090,7 @@ corpus has never looked at: [D]</p>
 </tr>
 <tr>
 <td><strong>TCP 3001 / 3002</strong></td>
-<td>connectivity directly to an <strong>AEM</strong> device (§4.2), and support for Ethernet and RS-485 field panels</td>
+<td>the <strong>AEM</strong> device's two serial channels (§4.2 sources this independently), and support for Ethernet and RS-485 field panels</td>
 </tr>
 <tr>
 <td><strong>TCP 999</strong></td>
@@ -2089,8 +2120,32 @@ corpus has never looked at: [D]</p>
 <td><strong>TCP 5442</strong></td>
 <td><strong>IPSNIFF</strong> — used by the Insight Async service to talk to field panels</td>
 </tr>
+<tr>
+<td><strong>TCP 6775 / 6778 / 6779 / 6780</strong></td>
+<td><em>"connectivity directly to an </em><em>AEM</em><em> device"</em>, to be allowed at the field panels <strong>and</strong> at the host running the ALN</td>
+</tr>
+<tr>
+<td><strong>TCP/UDP 5093</strong>, <strong>TCP 5099</strong></td>
+<td><strong>not panel ports.</strong> <em>"APOGEE license authentication"</em> against the Rainbow/SentinelLM licence manager, to be allowed on the machine designated as License Manager — typically the Insight database server</td>
+</tr>
+<tr>
+<td><strong>TCP 7 / 69</strong></td>
+<td>Ping/ICMP class, Insight <strong>server-to-client</strong> verification rather than anything panel-facing</td>
+</tr>
 </tbody>
 </table>
+<blockquote>
+<p><strong>How much of this row-to-port mapping to trust.</strong> The source is a single
+table in a vendor white paper, and in that table the port column and the
+comment column are <strong>vertically offset</strong> — the ports run 7, 69, 100, 135,
+161, 162, 502, 3001, 3002, 5033, 5093, 5099, 5441, 5442, 6775, 6778, 6779,
+6780 down one side while twelve comments run down the other, so a naive
+reading pairs them off by one. Three rows name their own port in the
+comment text (<code>5033</code>, <code>5093</code>, <code>5099</code>) and those are certain; <code>5441</code> is
+confirmed by the separate document it names; <code>3001</code>/<code>3002</code> is confirmed
+independently by §4.2. <strong>The rest, including the AEM assignment of
+6775-6780, rests on the alignment alone.</strong> [D] <strong>[OPEN]</strong></p>
+</blockquote>
 <p>Two of those deserve naming. <strong>TCP 5441 carries a vendor tool whose stated
 purpose is monitoring panel traffic</strong>, and the white paper points at a separate
 Siemens document titled <em>TCP Port 5441</em> that explains it. <strong>TCP 5442 is
@@ -14023,6 +14078,18 @@ has no single width, which is why no fixed-width search could ever have found
 it. The content is exactly what the name promises: the address of the contact
 that reports the point actually did what it was told, and how long to wait
 before deciding it did not.</p>
+<p>The vendor's operator help supplies the two things the type system cannot.
+The delay is <strong>in seconds</strong>, and the configurable range is <strong>0 to 32,766</strong>:
+the timer starts at the point's change-of-value, and when it expires the
+panel compares the proof point against the commanded value of its associated
+output point and puts the point into alarm if they disagree. [D] This is the
+mechanism behind the <code>proofing</code> operating state and the <code>proof_on</code> COV
+condition bit.</p>
+<p>That range is <strong>narrower than the <code>u16</code> that carries it</strong>. 32,766 is
+2^15 - 2, so slightly more than half the encodable range is unreachable
+through the supervisor's own configuration path. Whether a panel rejects a
+larger value presented on the wire, or whether <code>0x7FFF</code> and above are
+reserved as sentinels, is not established here. [D][OPEN]</p>
 <p><strong>All sixteen arms are now decodable</strong>, six of them wire-observed here and ten
 resting on the type system alone. That is the state to hold in mind when reading
 §10.9: the arms stopped being the document's bottleneck. [S]</p>
@@ -20962,11 +21029,42 @@ descending order of how many panels declare each: <code>FLNTopology</code> (55),
 <code>usbTool</code> (53 each), <code>usbModem</code>, <code>usbPrinter</code> (49), <code>TrendDST</code> (47),
 <code>WirelessFLN</code> (44), <code>Adapt</code> (43), <code>BACnetIPALN</code>, <code>FPWebFINBuilderCOV</code>,
 <code>FPWebFINBuilderPublish</code>, <code>SNMP</code> (12 each), <code>FPWeb</code> (9), <code>MB</code> (2). [S]</p>
+<p><strong>Confirmed from a second, independent store, and the set is twenty.</strong> The
+eighteen above were recovered from <em>panel</em> databases. A hundred and fifty-one further
+instances were then read out of the <strong>supervisor's own</strong> backup databases --
+a different file family with a different header -- and <strong>all eighteen appear
+there, none is absent.</strong> Two elements the panel-database sample did not show
+do appear:</p>
+<pre><code class="language-xml">&lt;HOA SwitchCount=&quot;0&quot; /&gt;          &lt;!-- Hand/Off/Auto switches, see 11.3.1 --&gt;
+&lt;OnboardIO PointCount=&quot;24&quot; /&gt;    &lt;!-- 24 and 16 observed --&gt;
+</code></pre>
+<p>and <code>&lt;FLN&gt;</code> carries a <strong><code>DROP</code> attribute</strong> alongside <code>LAN</code>, which the template
+below does not show (29 of 466 <code>&lt;FLN&gt;</code> elements carry it):</p>
+<pre><code class="language-xml">&lt;FLN LAN=&quot;0&quot; DROP=&quot;0&quot;&gt;ASIC&lt;/FLN&gt;
+</code></pre>
+<p>All three travel together and only on <strong>compact</strong> controllers: every block
+carrying one carries all three, and all of them are <code>PXCE</code>/<code>PCE</code> or
+<code>EPXC</code>/<code>PXE</code>. A client must treat <code>&lt;Services&gt;</code> as the open set this section
+already warns it is -- twenty is a floor, not a total -- and must not assume
+<code>&lt;FLN&gt;</code> carries <code>LAN</code> alone. [S]</p>
+<p><strong>Twenty is a floor that did not move.</strong> All nine dated states of that
+supervisor were censused -- 151 capability documents, 144 panels, spanning
+2020-04 to 2022-06. No twenty-first <code>&lt;Services&gt;</code> element appears, none of the
+twenty is ever absent, no seventh <code>HardwareType</code>/<code>Platform</code> pair exists, and
+no pair occurs only in an intermediate state. The set is open by construction
+and stable in practice across two and a half years of one deployment. [S]</p>
 <p>Two further points an implementer needs:</p>
 <ul>
 <li><strong><code>&lt;PanelBasics&gt;</code> carries <code>&lt;Platform&gt;</code> and <code>&lt;VersionNumber&gt;</code></strong> beyond the
   template above. Observed <code>HardwareType</code> values are <code>PXME</code>, <code>EPXC</code>, <code>MECF</code>,
-  <code>MCFP</code>; observed <code>Platform</code> values are <code>PME</code>, <code>PXE</code>, <code>MCF</code>, <code>MCA</code>. [S]</li>
+  <code>MCFP</code>, <strong><code>PXMP</code></strong> and <strong><code>PXCE</code></strong>; observed <code>Platform</code> values are <code>PME</code>,
+  <code>PXE</code>, <code>MCF</code>, <code>MCA</code>, <strong><code>PMP</code></strong> and <strong><code>PCE</code></strong>. The two pair <strong>one to one</strong>
+  across all 144 panels read from the supervisor databases --
+  <code>PXME</code>/<code>PME</code> (75), <code>PXMP</code>/<code>PMP</code> (22), <code>EPXC</code>/<code>PXE</code> (21), <code>MECF</code>/<code>MCF</code> (9),
+  <code>MCFP</code>/<code>MCA</code> (9), <code>PXCE</code>/<code>PCE</code> (8) -- so a decoder may treat either as
+  recovering the other, but <strong>must not</strong> treat the list as closed: <code>PXMP</code>
+  alone was a third of that estate and appears in no panel-database
+  sample. [S]</li>
 <li><strong><code>&lt;Services&gt;</code> carries a repeated <code>&lt;FLN LAN="n"&gt;TYPE&lt;/FLN&gt;</code> element</strong> that
   the template does not show. It declares the fieldbus type <em>per LAN number</em>
   and is the clearest statement of a panel's fieldbus layout the protocol
@@ -20976,6 +21074,22 @@ descending order of how many panels declare each: <code>FLNTopology</code> (55),
 every observed value was <code>NO</code> except <strong><code>FPWeb=YES</code> on nine panels</strong> — an
 independent confirmation of the HTTP service in §4.1.1's port surface, stated
 by the panel about itself. [S]</p>
+<p><strong><code>RENO</code> is Remote Notification</strong>, and the vendor says so itself rather than
+leaving it to the initials. The help corpus is authored with conditional text
+for two product brandings, and one topic emits both spellings of the same
+string side by side — an APOGEE span reading <code>RENO</code> immediately followed by a
+TALON span reading <code>T-Mote Remote Notification</code>. The feature dispatches alarm
+and event information to contacts by voice and pager, and lets a contact phone
+in to check system status or stop a notification. Its editor is a separate
+application, <code>RENOEdit</code>. [D]</p>
+<p>That matters to a decoder for one reason. <strong><code>&lt;RENO Enabled="..." /&gt;</code> on a panel
+is not a statement that the panel can place a call.</strong> The telephony is Dialogic
+boards — at most two per machine — installed in a <strong>workstation</strong> designated as
+the Remote Notification server, not in any field panel, and notification is
+armed per <em>point</em> by assigning devices, groups and escalation lists. The panel
+flag therefore records participation in a service hosted elsewhere on the MLN,
+which is why it reads <code>NO</code> on panels at a site that runs the option. Reading it
+as a panel-local capability inverts its meaning. [D]</p>
 <p>This content comes from stored panel databases, not from a capture. The
 statement above that neither opcode appears in the corpus was re-verified
 across all 229 captures, including the panel-side captures: zero occurrences of
