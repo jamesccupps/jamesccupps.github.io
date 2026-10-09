@@ -11,4 +11,7 @@ Allow: /
 # search results.
 Disallow: /*.md$
 
+# Slate's apt repository (package lists, signatures, .deb files) is for apt, not for search results.
+Disallow: /Slate/apt/
+
 Sitemap: https://jamesccupps.github.io/sitemap.xml
