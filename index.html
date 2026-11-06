@@ -17,7 +17,7 @@
     <!-- SEO -->
     <meta name="description" content="James Cupps — building open-source tools, Windows and Android apps for HVAC, network security, machine learning, and home automation. Projects in Python, JavaScript, Kotlin, Rust, and Electron.">
     <meta name="author" content="James Cupps">
-    <meta name="keywords" content="James Cupps, Slate, Slate text editor, large file editor, Notepad replacement, Protect Panes, UniFi Protect viewer, UniFi Stock Watcher, Ubiquiti restock alert, AllCalc, HVAC calculator, field calculator, trade tools, BACnet, HVAC, wet-bulb calculator, psychrometrics, cooling tower, WBGT, network security, machine learning, Python, Kotlin, Android, Electron, home automation, open source">
+    <meta name="keywords" content="James Cupps, Slate, Slate text editor, NoteForge, encrypted notes app, large file editor, Notepad replacement, Protect Panes, UniFi Protect viewer, UniFi Stock Watcher, Ubiquiti restock alert, AllCalc, HVAC calculator, field calculator, trade tools, BACnet, HVAC, wet-bulb calculator, psychrometrics, cooling tower, WBGT, network security, machine learning, Python, Kotlin, Android, Electron, home automation, open source">
     <link rel="canonical" href="https://jamesccupps.github.io/">
 
     <!-- Open Graph (Facebook, LinkedIn, Discord, Slack) -->
@@ -41,7 +41,7 @@
 
     <meta name="theme-color" content="#0a0a0a">
 
-    <!-- Structured data: Person + AllCalc MobileApplication + Slate, Protect Panes, UniFi Stock Watcher, PingerPlot and HW Blackbox SoftwareApplications + Wet-Bulb WebApplication + P2 TechArticle -->
+    <!-- Structured data: Person + AllCalc MobileApplication + Slate, Protect Panes, UniFi Stock Watcher, PingerPlot, HW Blackbox, HVAC Network Scanner and NoteForge SoftwareApplications + Wet-Bulb WebApplication + P2 TechArticle -->
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
@@ -196,6 +196,27 @@
           "operatingSystem": "Windows 10, Windows 11; Linux and macOS with Python 3.10+",
           "description": "A multi-protocol discovery and audit tool for HVAC and building automation networks: BACnet/IP and MS/TP, BACnet/SC, Modbus TCP, KNXnet/IP, Niagara Fox, Siemens APOGEE P2 detection and SNMP. Identifies controller models, reads points, trend logs, schedules and alarm routing, flags factory-default logins, and writes an HTML survey report. Read-only by design.",
           "keywords": "BACnet scanner, building automation, BAS, HVAC, Modbus, KNX, Niagara, Siemens APOGEE, network scanner, site survey, open source",
+          "license": "https://opensource.org/licenses/MIT",
+          "author": {
+            "@type": "Person",
+            "name": "James Cupps"
+          },
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+          }
+        },
+        {
+          "@type": "SoftwareApplication",
+          "name": "NoteForge",
+          "url": "https://jamesccupps.github.io/NoteForge/",
+          "codeRepository": "https://github.com/jamesccupps/NoteForge",
+          "downloadUrl": "https://github.com/jamesccupps/NoteForge/releases/latest",
+          "applicationCategory": "ProductivityApplication",
+          "operatingSystem": "Windows 10, Windows 11",
+          "description": "Encrypted, offline note-taking for Windows: notebooks, sections and pages like OneNote, encrypted on your own PC with AES-256-GCM and a master password, plus an optional password per notebook. No account, no cloud.",
+          "keywords": "encrypted notes, note-taking, OneNote alternative, AES-256-GCM, offline, privacy, open source",
           "license": "https://opensource.org/licenses/MIT",
           "author": {
             "@type": "Person",
@@ -696,11 +717,11 @@
                     <span class="name">HVACTrend</span>
                     <span class="desc">Read-only BACnet trend logger, viewer + alarms</span>
                 </a>
-                <a class="project-row" href="https://github.com/jamesccupps/NoteForge" target="_blank" rel="noopener">
+                <div class="project-row multilink">
                     <span class="tag">[APP]</span>
-                    <span class="name">NoteForge</span>
-                    <span class="desc">Encrypted offline note-taking (AES-256-GCM)</span>
-                </a>
+                    <a class="name-link" href="https://jamesccupps.github.io/NoteForge/" target="_blank" rel="noopener">NoteForge</a>
+                    <span class="desc">Encrypted offline notes for Windows (AES-256-GCM) &mdash; <a class="doc-link" href="https://github.com/jamesccupps/NoteForge/releases/latest" target="_blank" rel="noopener">download</a></span>
+                </div>
                 <a class="project-row" href="https://github.com/jamesccupps/FlavorForge" target="_blank" rel="noopener">
                     <span class="tag">[APP]</span>
                     <span class="name">FlavorForge</span>
