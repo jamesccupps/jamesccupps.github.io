@@ -358,6 +358,7 @@
 
         .prompt { color: var(--green); }
         .prompt-path { color: var(--amber); }
+        .install-cmd { overflow-wrap: anywhere; }
 
         /* ── Project Cards ── */
         .project-grid {
@@ -779,6 +780,10 @@
                 </div>
             </div>
             <div class="dim">       <span id="project-count">15</span> project(s) &mdash;  Type HELP for commands</div>
+            <br>
+            <div class="install-cmd"><span class="prompt-path amber">C:\CUPPS</span><span class="prompt">&gt;</span> <span class="glow">scoop bucket add jamesccupps https://github.com/jamesccupps/scoop-bucket</span></div>
+            <div class="install-cmd"><span class="prompt-path amber">C:\CUPPS</span><span class="prompt">&gt;</span> <span class="glow">scoop install jamesccupps/pingerplot</span></div>
+            <div class="dim install-cmd">       Windows apps install from the command line with <a class="link" href="https://scoop.sh" target="_blank" rel="noopener">Scoop</a>: slate, pingerplot, protectpanes, unifistockwatcher, hvac-network-scanner, netsentinel, noteforge &mdash; <a class="link" href="https://github.com/jamesccupps/scoop-bucket" target="_blank" rel="noopener">bucket</a>. Type SCOOP for the list.</div>
         </div>
 
         <hr class="sep">
@@ -25297,6 +25302,7 @@ Architecture) and the informative lineage discussion there.</p>
 <div><span class="cmd">CONTACT</span><span>Jump to contact info</span></div>
 <div><span class="cmd">GITHUB</span><span>Open GitHub profile</span></div>
 <div><span class="cmd">SPEC</span><span>Open the APOGEE P2 protocol reference</span></div>
+<div><span class="cmd">SCOOP</span><span>Install my Windows apps with Scoop</span></div>
 <div><span class="cmd">CLEAR / CLS</span><span>Clear command output</span></div>
 <div><span class="cmd">VER</span><span>Show system version</span></div>
 <div><span class="cmd">UPTIME</span><span>Show session uptime</span></div>
@@ -25311,6 +25317,18 @@ Architecture) and the informative lineage discussion there.</p>
             if (d) { d.open = true; setTimeout(() => d.scrollIntoView({ behavior: scrollBehavior, block: 'start' }), 60); }
             return '<span class="dim">Opening APOGEE P2 protocol reference...</span>';
         },
+        scoop: () => `Install my Windows apps with <a class="link" href="https://scoop.sh" target="_blank" rel="noopener">Scoop</a>:
+
+  <span class="glow">scoop bucket add jamesccupps https://github.com/jamesccupps/scoop-bucket</span>
+  <span class="glow">scoop install jamesccupps/&lt;app&gt;</span>
+
+<span class="dim" style="font-variant-ligatures:none">  slate                  Fast Notepad replacement
+  pingerplot             MTR-style traceroute monitor
+  protectpanes           UniFi Protect live view, a window per camera
+  unifistockwatcher      Ubiquiti Store restock alerts
+  hvac-network-scanner   Multi-protocol BAS network scanner
+  netsentinel            Network monitor + IDS (needs Npcap)
+  noteforge              Encrypted offline notes</span>`,
         clear: () => { output.innerHTML = ''; return null; },
         cls: () => { output.innerHTML = ''; return null; },
         ver: () => `<span class="amber">CUPPS-DOS v6.22</span>\nShell: COMMAND.COM\nUptime: ${getUptime()}`,
