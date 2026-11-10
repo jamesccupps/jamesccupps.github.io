@@ -42,7 +42,7 @@
 
     <meta name="theme-color" content="#0a0a0a">
 
-    <!-- Structured data: Person + AllCalc MobileApplication + Slate, Protect Panes, UniFi Stock Watcher, PingerPlot, NetSentinel, HW Blackbox, HVAC Network Scanner and NoteForge SoftwareApplications + Wet-Bulb WebApplication + P2 TechArticle -->
+    <!-- Structured data: Person + AllCalc MobileApplication + Slate, Protect Panes, UniFi Stock Watcher, PingerPlot, NetSentinel, HW Blackbox, HVAC Network Scanner and NoteForge SoftwareApplications + Wet-Bulb, cooling-tower simulator and Synapse Reef WebApplications + P2 TechArticle -->
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
@@ -264,6 +264,47 @@
             "name": "James Cupps"
           },
           "isBasedOn": "https://github.com/jamesccupps/Wetbulb",
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+          }
+        },
+        {
+          "@type": "WebApplication",
+          "name": "Condenser-Water Loop Simulator",
+          "url": "https://jamesccupps.github.io/CoolingTowerSim/",
+          "applicationCategory": "EducationalApplication",
+          "operatingSystem": "Any (web browser)",
+          "browserRequirements": "Requires JavaScript",
+          "description": "A physics-based browser simulator of a commercial building's condenser-water loop: two evaporative cooling-tower cells, lead/standby pumps, the tower-staging sequence of operations and live power draw, calibrated against real BAS field trends.",
+          "keywords": "cooling tower, condenser water, simulator, sequence of operations, tower staging, HVAC, BAS, chiller plant",
+          "author": {
+            "@type": "Person",
+            "name": "James Cupps"
+          },
+          "isBasedOn": "https://github.com/jamesccupps/CoolingTowerSim",
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+          }
+        },
+        {
+          "@type": "WebApplication",
+          "name": "Synapse Reef",
+          "url": "https://jamesccupps.github.io/Reef/",
+          "applicationCategory": "EducationalApplication",
+          "operatingSystem": "Any (web browser)",
+          "browserRequirements": "Requires JavaScript; WebGL2 for the full look",
+          "description": "A neuroevolution lake in the browser: eight fish species, each with its own recurrent neural network, evolve to forage, school, hunt and breed in a lake with seasons, weather, oxygen and nutrients.",
+          "keywords": "neuroevolution, neural network, artificial life, evolution simulation, ecosystem, fish, WebGL",
+          "image": "https://jamesccupps.github.io/Reef/docs/images/screenshot.png",
+          "author": {
+            "@type": "Person",
+            "name": "James Cupps"
+          },
+          "isBasedOn": "https://github.com/jamesccupps/Reef",
           "offers": {
             "@type": "Offer",
             "price": "0",
