@@ -41,7 +41,7 @@
 
     <meta name="theme-color" content="#0a0a0a">
 
-    <!-- Structured data: Person + AllCalc MobileApplication + Slate, Protect Panes, UniFi Stock Watcher, PingerPlot, HW Blackbox, HVAC Network Scanner and NoteForge SoftwareApplications + Wet-Bulb WebApplication + P2 TechArticle -->
+    <!-- Structured data: Person + AllCalc MobileApplication + Slate, Protect Panes, UniFi Stock Watcher, PingerPlot, NetSentinel, HW Blackbox, HVAC Network Scanner and NoteForge SoftwareApplications + Wet-Bulb WebApplication + P2 TechArticle -->
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
@@ -154,6 +154,27 @@
           "operatingSystem": "Windows 10, Windows 11, Linux",
           "description": "Continuous-traceroute (MTR-style) network path monitor: per-hop loss, latency, jitter and MOS over time, route changes, alerts and webhooks, a world-map path view and a headless mode. Installer, portable zip or pipx, with signed updates. Pure Python, no administrator rights for ICMP.",
           "keywords": "traceroute, mtr, WinMTR, ping, packet loss, latency, jitter, MOS, network monitoring, Windows, Linux, open source",
+          "license": "https://opensource.org/licenses/MIT",
+          "author": {
+            "@type": "Person",
+            "name": "James Cupps"
+          },
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+          }
+        },
+        {
+          "@type": "SoftwareApplication",
+          "name": "NetSentinel",
+          "url": "https://jamesccupps.github.io/NetSentinel/",
+          "codeRepository": "https://github.com/jamesccupps/NetSentinel",
+          "downloadUrl": "https://github.com/jamesccupps/NetSentinel/releases/latest",
+          "applicationCategory": "SecurityApplication",
+          "operatingSystem": "Windows",
+          "description": "Network monitor and intrusion detection for a Windows PC: packet capture with process attribution, TLS SNI and JA3/JA4 fingerprints, machine-learning anomaly detection on a learned baseline, beaconing detection, detectors for scans, brute force, DNS tunnelling, ARP spoofing and exfiltration, threat lists matched locally, a browser dashboard and PCAP evidence. Needs Npcap.",
+          "keywords": "intrusion detection, IDS, network monitor, packet capture, JA4, beaconing, anomaly detection, threat intelligence, Windows, open source",
           "license": "https://opensource.org/licenses/MIT",
           "author": {
             "@type": "Person",
@@ -758,11 +779,11 @@
                     <a class="name-link" href="https://jamesccupps.github.io/PingerPlot/" target="_blank" rel="noopener">PingerPlot</a>
                     <span class="desc">MTR-style traceroute monitor, Windows + Linux &mdash; <a class="doc-link" href="https://github.com/jamesccupps/PingerPlot/releases/latest" target="_blank" rel="noopener">download</a></span>
                 </div>
-                <a class="project-row" href="https://github.com/jamesccupps/NetSentinel" target="_blank" rel="noopener">
+                <div class="project-row multilink">
                     <span class="tag">[NET]</span>
-                    <span class="name">NetSentinel</span>
-                    <span class="desc">Network monitor + IDS with ML anomaly detection</span>
-                </a>
+                    <a class="name-link" href="https://jamesccupps.github.io/NetSentinel/" target="_blank" rel="noopener">NetSentinel</a>
+                    <span class="desc">Network monitor + IDS with ML anomaly detection &mdash; <a class="doc-link" href="https://github.com/jamesccupps/NetSentinel/releases/latest" target="_blank" rel="noopener">download</a></span>
+                </div>
                 <a class="project-row" href="https://github.com/jamesccupps/CTP500-Print-Server" target="_blank" rel="noopener">
                     <span class="tag">[HW]</span>
                     <span class="name">CTP500 Print Server</span>

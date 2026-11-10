@@ -31,6 +31,12 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://jamesccupps.github.io/NetSentinel/</loc>
+    <lastmod>2026-11-10</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://jamesccupps.github.io/HW-Blackbox/</loc>
     <lastmod>2026-11-03</lastmod>
     <changefreq>weekly</changefreq>
