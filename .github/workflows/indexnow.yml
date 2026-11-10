@@ -1,0 +1,30 @@
+# IndexNow: tell Bing (and Yandex, Seznam, Naver, Yep) the page changed, so it's
+# re-crawled now rather than whenever. The key is public by design: it's served at
+# https://jamesccupps.github.io/6f4669f95049414a71045ac20c1d6046.txt (jamesccupps.github.io repository), which
+# proves the site is ours. A failed ping is a warning, never a failed deploy.
+#
+# This site is published from its branch, so this runs on page_build: after each
+# GitHub Pages build of it.
+name: IndexNow
+
+on:
+  page_build:
+
+permissions: {}
+
+jobs:
+  ping:
+    if: github.event.build.status == 'built'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Tell IndexNow the page changed
+        env:
+          KEY: 6f4669f95049414a71045ac20c1d6046
+        run: |
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST https://api.indexnow.org/indexnow \
+            -H 'Content-Type: application/json; charset=utf-8' \
+            -d "{\"host\":\"jamesccupps.github.io\",\"key\":\"$KEY\",\"keyLocation\":\"https://jamesccupps.github.io/$KEY.txt\",\"urlList\":[\"https://jamesccupps.github.io/\",\"https://jamesccupps.github.io/p2/\"]}") || true
+          case "$code" in
+            200|202) echo "IndexNow accepted (HTTP $code)" ;;
+            *) echo "::warning title=IndexNow::not submitted (HTTP $code)" ;;
+          esac
