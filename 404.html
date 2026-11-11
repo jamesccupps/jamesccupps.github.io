@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Not found | CUPPS.EXE</title>
+    <meta name="robots" content="noindex">
+    <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48 64x64">
+    <meta name="theme-color" content="#0a0a0a">
+    <style>
+        :root {
+            --green: #1aff1a;
+            --green-dim: #3dc03d;
+            --green-glow: rgba(26, 255, 26, 0.4);
+            --amber: #ffb800;
+            --cyan: #00e5ff;
+            --bg: #0a0a0a;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: var(--bg);
+            color: var(--green);
+            font-family: 'Cascadia Mono', 'Consolas', 'Menlo', 'DejaVu Sans Mono', 'Liberation Mono', monospace;
+            font-size: 1rem;
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+        main {
+            max-width: 960px;
+            margin: 0 auto;
+            min-height: 100vh;
+            padding: 30px 40px 60px;
+            background: radial-gradient(ellipse at center, #111 0%, #0a0a0a 70%, #050505 100%);
+        }
+        h1 { font-size: 1rem; font-weight: normal; margin-bottom: 1.2em; text-shadow: 0 0 3px var(--green-glow); }
+        p, li { margin-bottom: 0.6em; }
+        .path { color: var(--amber); }
+        .dim { color: var(--green-dim); }
+        .err { color: var(--amber); }
+        ul { list-style: none; margin: 0.6em 0 1.4em 2ch; }
+        a { color: var(--cyan); text-decoration: none; }
+        a:hover, a:focus-visible { text-decoration: underline; outline: none; }
+        #req { overflow-wrap: anywhere; }
+        @media (max-width: 600px) { main { padding: 20px 16px 40px; } }
+    </style>
+</head>
+<body>
+<main>
+    <h1>CUPPS.EXE &mdash; 404 Not Found</h1>
+
+    <p><span class="path">C:\CUPPS&gt;</span> cd <span id="req">this page</span></p>
+    <p class="err">The system cannot find the path specified.</p>
+
+    <p class="dim">The page may have moved, or the link may be wrong. Try one of these:</p>
+
+    <p><span class="path">C:\CUPPS&gt;</span> dir /projects</p>
+    <ul>
+        <li><a href="/">Home</a> <span class="dim">&mdash; every project</span></li>
+        <li><a href="/HVAC-Network-Scanner/">HVAC Network Scanner</a> <span class="dim">&mdash; BACnet and building-automation device discovery</span></li>
+        <li><a href="/p2/">APOGEE P2 reference</a> <span class="dim">&mdash; the Siemens APOGEE P2 protocol, documented</span></li>
+        <li><a href="/Slate/">Slate</a> <span class="dim">&mdash; a text editor for files of any size</span></li>
+        <li><a href="/PingerPlot/">PingerPlot</a> <span class="dim">&mdash; continuous traceroute, like mtr</span></li>
+        <li><a href="/NetSentinel/">NetSentinel</a> <span class="dim">&mdash; network intrusion detection for Windows</span></li>
+        <li><a href="/UnifiCameraViewer/">Protect Panes</a> <span class="dim">&mdash; UniFi Protect live view</span></li>
+        <li><a href="https://github.com/jamesccupps">github.com/jamesccupps</a> <span class="dim">&mdash; all the source</span></li>
+    </ul>
+
+    <p><span class="path">C:\CUPPS&gt;</span><span class="dim"> _</span></p>
+</main>
+<script>
+    // Echo the path that was asked for. textContent, never innerHTML: the path is attacker-controlled.
+    try {
+        var p = decodeURIComponent(location.pathname);
+        if (p && p !== '/') document.getElementById('req').textContent = p.slice(0, 120);
+    } catch (e) { /* malformed escape: keep the default text */ }
+</script>
+</body>
+</html>

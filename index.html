@@ -4,16 +4,14 @@
     <meta name="google-site-verification" content="5pvUtcrLxUj0DTJMFDWMm7efBFn1IxssbC4NWdvjaJA" />
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>James Cupps — GitHub Projects | CUPPS.EXE</title>
+    <title>James Cupps — Open-Source BACnet, HVAC &amp; Windows Tools</title>
 
     <!-- Favicon: a file at the root, so search engines can fetch it (they don't use data: URIs) -->
     <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48 64x64">
     <link rel="alternate icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iNSIgZmlsbD0iIzBhMGEwYSIvPjx0ZXh0IHg9IjQiIHk9IjIzIiBmb250LWZhbWlseT0iQ29uc29sYXMsbW9ub3NwYWNlIiBmb250LXNpemU9IjE3IiBmb250LXdlaWdodD0iYm9sZCIgZmlsbD0iIzFhZmYxYSI+Jmd0O188L3RleHQ+PC9zdmc+">
 
-    <!-- Preconnect + font stylesheet (faster than a CSS @import) -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=VT323&display=swap">
+    <!-- VT323, self-hosted (SIL OFL, fonts/OFL.txt): no third-party request on page load -->
+    <link rel="preload" href="/fonts/vt323-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
 
     <!-- SEO -->
     <meta name="description" content="James Cupps builds open-source Windows and Android apps and tools for HVAC and building automation, network security, machine learning and home automation.">
@@ -25,7 +23,7 @@
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://jamesccupps.github.io/">
     <meta property="og:title" content="James Cupps">
-    <meta property="og:description" content="Open-source tools and Android apps for HVAC, network security, machine learning, and home automation.">
+    <meta property="og:description" content="Open-source tools for building automation, HVAC and network security, Windows apps, and an Android field calculator for the trades.">
     <meta property="og:site_name" content="CUPPS.EXE">
     <meta property="og:locale" content="en_US">
     <meta property="og:image" content="https://jamesccupps.github.io/og.png">
@@ -36,7 +34,7 @@
     <!-- Twitter / X Card -->
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="James Cupps">
-    <meta name="twitter:description" content="Open-source tools and Android apps for HVAC, network security, machine learning, and home automation.">
+    <meta name="twitter:description" content="Open-source tools for building automation, HVAC and network security, Windows apps, and an Android field calculator for the trades.">
     <meta name="twitter:image" content="https://jamesccupps.github.io/og.png">
     <meta name="twitter:image:alt" content="CUPPS.EXE terminal — James Cupps, open-source developer.">
 
@@ -51,6 +49,9 @@
           "@type": "Person",
           "name": "James Cupps",
           "url": "https://jamesccupps.github.io/",
+          "jobTitle": "Facilities Director",
+          "description": "Facilities director who builds open-source tools for building automation, HVAC, network security and Windows.",
+          "email": "mailto:jamesccupps@proton.me",
           "sameAs": [
             "https://github.com/jamesccupps"
           ],
@@ -58,6 +59,8 @@
             "HVAC",
             "BACnet",
             "Building Automation",
+            "Siemens APOGEE",
+            "PPCL",
             "Network Security",
             "Machine Learning",
             "Home Automation",
@@ -174,7 +177,7 @@
           "downloadUrl": "https://github.com/jamesccupps/NetSentinel/releases/latest",
           "applicationCategory": "SecurityApplication",
           "operatingSystem": "Windows",
-          "description": "Network monitor and intrusion detection for a Windows PC: packet capture with process attribution, TLS SNI and JA3/JA4 fingerprints, machine-learning anomaly detection on a learned baseline, beaconing detection, detectors for scans, brute force, DNS tunnelling, ARP spoofing and exfiltration, threat lists matched locally, a browser dashboard and PCAP evidence. Needs Npcap.",
+          "description": "Network monitor and intrusion detection for a Windows PC: packet capture with process attribution, TLS SNI and JA3/JA4 fingerprints, machine-learning anomaly detection on a learned baseline, beaconing detection, detectors for scans, brute force, DNS tunneling, ARP spoofing and exfiltration, threat lists matched locally, a browser dashboard and PCAP evidence. Needs Npcap.",
           "keywords": "intrusion detection, IDS, network monitor, packet capture, JA4, beaconing, anomaly detection, threat intelligence, Windows, open source",
           "license": "https://opensource.org/licenses/MIT",
           "author": {
@@ -272,7 +275,8 @@
         },
         {
           "@type": "WebApplication",
-          "name": "Condenser-Water Loop Simulator",
+          "name": "Cooling Tower Sim",
+          "alternateName": "Condenser-Water Loop Simulator",
           "url": "https://jamesccupps.github.io/CoolingTowerSim/",
           "applicationCategory": "EducationalApplication",
           "operatingSystem": "Any (web browser)",
@@ -334,6 +338,23 @@
     }
     </script>
     <style>
+        @font-face {
+            font-family: 'VT323';
+            font-style: normal;
+            font-weight: 400;
+            font-display: swap;
+            src: url('/fonts/vt323-latin-400-normal.woff2') format('woff2');
+            unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+        }
+        @font-face {
+            font-family: 'VT323';
+            font-style: normal;
+            font-weight: 400;
+            font-display: swap;
+            src: url('/fonts/vt323-latin-ext-400-normal.woff2') format('woff2');
+            unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+        }
+
         :root {
             --green: #1aff1a;
             --green-dim: #3dc03d;
@@ -722,6 +743,10 @@
             <div><span class="prompt-path amber">C:\CUPPS</span><span class="prompt">&gt;</span> <span class="glow">type ABOUT.TXT</span></div>
             <br>
             <div>Tools that solve real problems, mostly.</div>
+            <br>
+            <div>I'm a facilities director. I write the software I need to run commercial buildings: building-automation scanners and trend loggers, a PPCL workbench, the APOGEE P2 protocol reference, and Windows tools for networks and hardware.</div>
+            <div>Everything here is free, MIT-licensed and runs locally: no accounts, no cloud.</div>
+            <br>
             <div>Check out the projects below or type <span class="amber">HELP</span> for commands.</div>
         </div>
 
@@ -758,8 +783,8 @@
                 </a>
                 <div class="project-row multilink">
                     <span class="tag">[BAS]</span>
-                    <a class="name-link" href="https://github.com/jamesccupps/P2_Wireshark_Dissector_And_P2_Scanner/blob/main/PROTOCOL.md" target="_blank" rel="noopener">APOGEE P2 Spec</a>
-                    <span class="desc">Siemens APOGEE P2 protocol reference &mdash; <a class="doc-link" href="p2/">read it here</a></span>
+                    <a class="name-link" href="p2/">APOGEE P2 Spec</a>
+                    <span class="desc">Siemens APOGEE P2 protocol reference &mdash; <a class="doc-link" href="https://github.com/jamesccupps/P2_Wireshark_Dissector_And_P2_Scanner/blob/main/PROTOCOL.md" target="_blank" rel="noopener">markdown</a></span>
                 </div>
                 <div class="project-row multilink">
                     <span class="tag">[BAS]</span>
@@ -842,7 +867,7 @@
                     <span class="desc">Neuroevolution lake ecosystem, in the browser &mdash; <a class="doc-link" href="https://github.com/jamesccupps/Reef" target="_blank" rel="noopener">source</a></span>
                 </div>
             </div>
-            <div class="dim">       <span id="project-count">15</span> project(s) &mdash;  Type HELP for commands</div>
+            <div class="dim">       <span id="project-count">21</span> project(s) &mdash;  Type HELP for commands</div>
             <br>
             <div class="install-cmd"><span class="prompt-path amber">C:\CUPPS</span><span class="prompt">&gt;</span> <span class="glow">scoop bucket add jamesccupps https://github.com/jamesccupps/scoop-bucket</span></div>
             <div class="install-cmd"><span class="prompt-path amber">C:\CUPPS</span><span class="prompt">&gt;</span> <span class="glow">scoop install jamesccupps/pingerplot</span></div>
