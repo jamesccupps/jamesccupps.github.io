@@ -40,7 +40,7 @@
 
     <meta name="theme-color" content="#0a0a0a">
 
-    <!-- Structured data: Person + AllCalc MobileApplication + Slate, Protect Panes, UniFi Stock Watcher, PingerPlot, NetSentinel, HW Blackbox, HVAC Network Scanner and NoteForge SoftwareApplications + Wet-Bulb, cooling-tower simulator and Synapse Reef WebApplications + P2 TechArticle -->
+    <!-- Structured data: Person + AllCalc MobileApplication + PPCL Workbench, HVACTrend, Light Beam, Slate, Protect Panes, UniFi Stock Watcher, PingerPlot, NetSentinel, HW Blackbox, HVAC Network Scanner and NoteForge SoftwareApplications + Wet-Bulb, cooling-tower simulator and Synapse Reef WebApplications + P2 TechArticle -->
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
@@ -309,6 +309,65 @@
             "name": "James Cupps"
           },
           "isBasedOn": "https://github.com/jamesccupps/Reef",
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+          }
+        },
+        {
+          "@type": "SoftwareApplication",
+          "name": "PPCL Workbench",
+          "url": "https://jamesccupps.github.io/PPCL/",
+          "codeRepository": "https://github.com/jamesccupps/PPCL",
+          "downloadUrl": "https://github.com/jamesccupps/PPCL/releases/latest",
+          "applicationCategory": "DeveloperApplication",
+          "operatingSystem": "Windows, Linux, macOS (Python 3.10+)",
+          "description": "A browser IDE, linter, simulator and debugger for Siemens PPCL, the control language APOGEE and PXC field panels run: 90 lint rules each citing the manual, a decision-table builder, a block editor, and a bench with a simulated air handler.",
+          "license": "https://opensource.org/licenses/MIT",
+          "author": {
+            "@type": "Person",
+            "name": "James Cupps"
+          },
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+          }
+        },
+        {
+          "@type": "SoftwareApplication",
+          "name": "HVACTrend",
+          "url": "https://jamesccupps.github.io/HVACTrend/",
+          "codeRepository": "https://github.com/jamesccupps/HVACTrend",
+          "downloadUrl": "https://github.com/jamesccupps/HVACTrend/releases/latest",
+          "applicationCategory": "BusinessApplication",
+          "operatingSystem": "Windows, Linux (Python 3.11+)",
+          "description": "A read-only BACnet/IP trend logger, web trend viewer and rule-based alarm system for building HVAC: logs the points you choose every two minutes, charts years of history instantly, and sends equipment alarms to your phone.",
+          "license": "https://opensource.org/licenses/MIT",
+          "author": {
+            "@type": "Person",
+            "name": "James Cupps"
+          },
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+          }
+        },
+        {
+          "@type": "SoftwareApplication",
+          "name": "Light Beam",
+          "url": "https://jamesccupps.github.io/Light-Beam/",
+          "codeRepository": "https://github.com/jamesccupps/Light-Beam",
+          "applicationCategory": "CommunicationApplication",
+          "operatingSystem": "Server: Windows, Linux (Node.js); clients: any browser, Windows, Android",
+          "description": "A self-hosted messenger and hub for your own devices over Tailscale: text and files of any size, phone notifications on your PCs, ring a lost phone, wake or control a PC, and a private family chat. No accounts, no third-party cloud.",
+          "license": "https://opensource.org/licenses/MIT",
+          "author": {
+            "@type": "Person",
+            "name": "James Cupps"
+          },
           "offers": {
             "@type": "Offer",
             "price": "0",
@@ -788,7 +847,7 @@
                 </div>
                 <div class="project-row multilink">
                     <span class="tag">[BAS]</span>
-                    <a class="name-link" href="https://github.com/jamesccupps/PPCL" target="_blank" rel="noopener">PPCL Workbench</a>
+                    <a class="name-link" href="https://jamesccupps.github.io/PPCL/" target="_blank" rel="noopener">PPCL Workbench</a>
                     <span class="desc">IDE, linter and simulator for Siemens PPCL &mdash; <a class="doc-link" href="https://github.com/jamesccupps/PPCL/releases/latest" target="_blank" rel="noopener">download</a></span>
                 </div>
                 <div class="project-row multilink">
@@ -801,11 +860,11 @@
                     <a class="name-link" href="https://jamesccupps.github.io/Wetbulb/" target="_blank" rel="noopener">Wet-Bulb Calc</a>
                     <span class="desc">Live pressure-corrected wet-bulb + tower approach &mdash; <a class="doc-link" href="https://github.com/jamesccupps/Wetbulb" target="_blank" rel="noopener">source</a></span>
                 </div>
-                <a class="project-row" href="https://github.com/jamesccupps/HVACTrend" target="_blank" rel="noopener">
+                <div class="project-row multilink">
                     <span class="tag">[BAS]</span>
-                    <span class="name">HVACTrend</span>
-                    <span class="desc">Read-only BACnet trend logger, viewer + alarms</span>
-                </a>
+                    <a class="name-link" href="https://jamesccupps.github.io/HVACTrend/" target="_blank" rel="noopener">HVACTrend</a>
+                    <span class="desc">Read-only BACnet trend logger, viewer + alarms &mdash; <a class="doc-link" href="https://github.com/jamesccupps/HVACTrend/releases/latest" target="_blank" rel="noopener">download</a></span>
+                </div>
                 <div class="project-row multilink">
                     <span class="tag">[APP]</span>
                     <a class="name-link" href="https://jamesccupps.github.io/NoteForge/" target="_blank" rel="noopener">NoteForge</a>
@@ -831,11 +890,11 @@
                     <a class="name-link" href="https://jamesccupps.github.io/HW-Blackbox/" target="_blank" rel="noopener">HW Blackbox</a>
                     <span class="desc">Hardware monitor + crash black box for Windows &mdash; <a class="doc-link" href="https://github.com/jamesccupps/HW-Blackbox/releases/latest" target="_blank" rel="noopener">download</a></span>
                 </div>
-                <a class="project-row" href="https://github.com/jamesccupps/Light-Beam" target="_blank" rel="noopener">
+                <div class="project-row multilink">
                     <span class="tag">[APP]</span>
-                    <span class="name">Light Beam</span>
-                    <span class="desc">Self-hosted messenger + hub for your own devices</span>
-                </a>
+                    <a class="name-link" href="https://jamesccupps.github.io/Light-Beam/" target="_blank" rel="noopener">Light Beam</a>
+                    <span class="desc">Self-hosted messenger + hub for your own devices &mdash; <a class="doc-link" href="https://github.com/jamesccupps/Light-Beam" target="_blank" rel="noopener">source</a></span>
+                </div>
                 <a class="project-row" href="https://github.com/jamesccupps/StockOracle" target="_blank" rel="noopener">
                     <span class="tag">[APP]</span>
                     <span class="name">Stock Oracle</span>

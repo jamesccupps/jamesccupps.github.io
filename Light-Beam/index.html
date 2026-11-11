@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Light Beam: a self-hosted messenger for your own devices</title>
+<meta name="description" content="Free, open source, self-hosted messenger for your devices over Tailscale: files of any size, phone notifications on your PCs, family chat. No cloud.">
+<meta name="theme-color" content="#3b3f9e">
+<link rel="canonical" href="https://jamesccupps.github.io/Light-Beam/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="James Cupps">
+<meta property="og:title" content="Light Beam">
+<meta property="og:description" content="A private messenger and hub for your own devices, on your own computer over Tailscale: files of any size, phone notifications on your PCs, a family chat.">
+<meta property="og:url" content="https://jamesccupps.github.io/Light-Beam/">
+<meta property="og:image" content="https://jamesccupps.github.io/Light-Beam/images/social-preview.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta property="og:image:alt" content="Light Beam: a self-hosted messenger for your own devices, beside its chat window">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="images/icon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="images/icon-32.png">
+<link rel="apple-touch-icon" href="images/icon-256.png">
+<meta name="color-scheme" content="light dark">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Light Beam",
+  "alternateName": "Beam",
+  "description": "A self-hosted messenger and hub for your own devices, running on your own computer and reached over Tailscale: text and files of any size between devices, phone notifications on your PCs, ring a lost phone, wake or control a PC, and a private family chat. No accounts, no third-party cloud.",
+  "url": "https://jamesccupps.github.io/Light-Beam/",
+  "codeRepository": "https://github.com/jamesccupps/Light-Beam",
+  "applicationCategory": "CommunicationApplication",
+  "operatingSystem": "Server: Windows, Linux (Node.js). Clients: any browser, Windows, Android",
+  "image": "https://jamesccupps.github.io/Light-Beam/images/chat.png",
+  "screenshot": "https://jamesccupps.github.io/Light-Beam/images/chat.png",
+  "license": "https://opensource.org/licenses/MIT",
+  "isAccessibleForFree": true,
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  },
+  "author": {
+    "@type": "Person",
+    "name": "James Cupps",
+    "url": "https://jamesccupps.github.io/"
+  }
+}
+</script>
+<style>
+  :root { --bg: #f6f6fc; --panel: #ffffff; --text: #1d1f2e; --muted: #585c74; --line: #e2e3f0; --accent: #4b4fd1; --accent-dark: #a9b0ff; --code: #eeeffa; --warn: #9a5b00; --hero: linear-gradient(160deg, #4a3fd0 0%, #136d8a 100%); --hero-muted: #d6dcf5; --hero-ink: #33349a; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #121320; --panel: #1b1c2b; --text: #e6e7f2; --muted: #9a9db8; --line: #2b2d42; --code: #232538; --warn: #e3a34a; } }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.55 "Segoe UI", system-ui, -apple-system, Ubuntu, "DejaVu Sans", sans-serif; }
+  a { color: var(--accent); }
+  @media (prefers-color-scheme: dark) { a { color: var(--accent-dark); } }
+  code { background: var(--code); border-radius: 4px; padding: 1px 5px; font: 0.9em Consolas, "DejaVu Sans Mono", monospace; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 20px; }
+  header.hero { background: var(--hero); color: #fff; padding: 56px 0 40px; }
+  .brand { display: flex; align-items: center; gap: 16px; }
+  .brand img { width: 64px; height: 64px; }
+  .brand h1 { margin: 0; font-size: 40px; font-weight: 600; letter-spacing: -0.5px; line-height: 1.15; }
+  .tagline { font-size: 22px; margin: 18px 0 6px; max-width: 720px; }
+  .facts { color: var(--hero-muted); margin: 0 0 26px; max-width: 780px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  .btn { display: inline-flex; align-items: center; gap: 10px; padding: 12px 22px; border-radius: 8px; font-weight: 600;
+         text-decoration: none; background: #fff; color: var(--hero-ink); font-size: 17px; }
+  .btn:hover { background: #eef2f8; }
+  .btn.ghost { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,.45); font-weight: 500; font-size: 15px; padding: 10px 16px; }
+  .btn.ghost:hover { background: rgba(255,255,255,.1); }
+  .btn small { font-weight: 400; opacity: .75; font-size: 13px; }
+  .sub { color: var(--hero-muted); font-size: 14px; margin-top: 12px; }
+  .sub a { color: #e3ecfa; }
+  .demo { margin: 34px 0 0; }
+  .demo img { width: 100%; height: auto; display: block; border-radius: 8px; box-shadow: 0 18px 50px rgba(0,0,0,.45); }
+  section { padding: 44px 0 8px; }
+  h2 { font-size: 26px; margin: 0 0 18px; }
+  h3 { font-size: 17px; margin: 0 0 6px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; }
+  .card p { margin: 0; color: var(--muted); font-size: 15px; }
+  .card p + p { margin-top: 8px; }
+  .card ul { margin: 6px 0 0; padding-left: 20px; color: var(--muted); font-size: 15px; }
+  .shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  .shots figure { margin: 0; }
+  .shots img { width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--line); display: block; }
+  .shots figcaption { color: var(--muted); font-size: 14px; margin-top: 6px; }
+  .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+  .cmd { position: relative; margin: 10px 0 0; }
+  pre { background: var(--code); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; padding-top: 34px; overflow-x: auto;
+        font: 13.5px/1.5 Consolas, "DejaVu Sans Mono", monospace; margin: 0; }
+  .copy { position: absolute; top: 6px; right: 6px; font: 12px "Segoe UI", system-ui, sans-serif; padding: 3px 10px; border-radius: 5px;
+          border: 1px solid var(--line); background: var(--panel); color: var(--text); cursor: pointer; }
+  .copy:hover { border-color: var(--muted); }
+  .note { border-left: 4px solid var(--warn); }
+  .note h3 { color: var(--warn); }
+  .muted { color: var(--muted); font-size: 14px; }
+  table { border-collapse: collapse; width: 100%; font-size: 15px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; width: 34%; }
+  .more { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+  .more a { display: block; text-decoration: none; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; color: var(--text); }
+  .more a:hover { border-color: var(--accent); }
+  .more b { display: block; color: var(--accent); }
+  @media (prefers-color-scheme: dark) { .more b { color: var(--accent-dark); } }
+  .more span { color: var(--muted); font-size: 14px; }
+  footer { color: var(--muted); font-size: 14px; padding: 40px 0 50px; border-top: 1px solid var(--line); margin-top: 44px; }
+  @media (max-width: 600px) {
+    header.hero { padding: 36px 0 28px; }
+    .brand h1 { font-size: 30px; }
+    .brand img { width: 52px; height: 52px; }
+    .tagline { font-size: 19px; }
+    th { width: auto; }
+  }
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="wrap">
+    <div class="brand"><img width="64" height="64" src="images/icon-256.png" alt=""><h1>Light Beam</h1></div>
+    <p class="tagline">A private messenger and hub for your own devices, running on your own computer.</p>
+    <p class="facts">Send text, links, photos and files of any size from any device to any other. See your phone's notifications on your PCs and reply, ring a lost phone, wake a sleeping PC, or control a PC's screen from another device. Beam Family adds your family's own chat on the same machine. No accounts and no third-party cloud: your devices reach it privately through Tailscale, at home or away, without opening a port.</p>
+    <div class="actions">
+      <a class="btn" href="#start">Get started <small>Node.js and Tailscale</small></a>
+      <a class="btn ghost" href="https://github.com/jamesccupps/Light-Beam#documentation">Documentation</a>
+      <a class="btn ghost" href="https://github.com/jamesccupps/Light-Beam">Source on GitHub</a>
+    </div>
+    <p class="sub"><span id="version">Free and open source (MIT).</span> <a href="https://github.com/jamesccupps/Light-Beam/releases">Releases</a></p>
+    <div class="demo"><img src="images/chat.png" width="1280" height="860" alt="Beam in a browser: the devices on the left, a conversation with a phone on the right with photos, a PDF and a reply"></div>
+  </div>
+</header>
+
+<main class="wrap">
+  <section>
+    <h2>What it does</h2>
+    <div class="grid">
+      <div class="card"><h3>Anything, to any device</h3><p>Text, links, photos and files of any size, to one device or all of them at once.</p></div>
+      <div class="card"><h3>Your phone, on your PC</h3><p>Your phone's notifications show on your PCs, and you can reply from there. Lost the phone? Ring it.</p></div>
+      <div class="card"><h3>Your PCs, from anywhere</h3><p>Wake a sleeping PC, or see and control its screen from another device, over your own tailnet.</p></div>
+      <div class="card"><h3>Beam Family</h3><p>Your family's own chat, in the spirit of Discord: channels, direct and group conversations, photos and files, replies, reactions, search. A separate server, so it can face the internet without reaching the one that controls your PCs.</p></div>
+      <div class="card"><h3>Scripts and automations</h3><p>The <code>beam</code> command line, a plain HTTP API and iPhone Shortcuts: anything that can make a request can send to your devices.</p></div>
+      <div class="card"><h3>Runs on what you have</h3><p>The server is plain Node.js on a computer that stays on, or in Docker on a NAS. A Raspberry Pi or another Linux computer can join as a device. Any browser is a client, and installs to the home screen like an app.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>On every device</h2>
+    <div class="card">
+      <table>
+        <tr><th>Anything with a browser</th><td>The web app (iPhone, Android, Mac, Linux, Chromebook, Windows), which installs like an app</td></tr>
+        <tr><th>Windows</th><td>An optional tray app, <code>Beam.exe</code>: one self-updating file, with the same chat window</td></tr>
+        <tr><th>Android</th><td>An optional native app, <code>beam.apk</code>: the share sheet, phone notifications on your PCs, ringing, remote control</td></tr>
+        <tr><th>Scripts and terminals</th><td>The <code>beam</code> command, or plain HTTP</td></tr>
+      </table>
+      <p class="muted" style="margin-top:10px">The browser is all you need to start. The native apps add system integration, and you build them yourself (<a href="https://github.com/jamesccupps/Light-Beam/blob/main/docs/BUILDING.md">how</a>), signed with your own keys.</p>
+    </div>
+    <div class="shots" style="margin-top:16px">
+      <figure><img src="images/devices.png" width="1280" height="860" alt="Settings, Devices: each device's status, storage, Beam version and system" loading="lazy"><figcaption>Your devices, with status, storage and version.</figcaption></figure>
+      <figure><img src="images/windows-app.png" width="1100" height="800" alt="The Windows app's Settings, Control and sharing: remote control, shared folders, installing apps" loading="lazy"><figcaption>The Windows app: remote control, shared folders, installing apps.</figcaption></figure>
+    </div>
+    <p class="muted">Made-up devices on a test server.</p>
+  </section>
+
+  <section id="start">
+    <h2>Get started</h2>
+    <div class="two">
+      <div class="card">
+        <h3>On a computer that stays on</h3>
+        <p>You need <a href="https://nodejs.org">Node.js</a> 22.13 or later and <a href="https://tailscale.com/download">Tailscale</a>, signed in (the free plan is plenty).</p>
+        <div class="cmd"><button class="copy" type="button">Copy</button><pre>git clone https://github.com/jamesccupps/Light-Beam.git
+cd Light-Beam
+npm install
+node server.js</pre></div>
+        <p style="margin-top:10px">Then share it over Tailscale, HTTPS and reachable only by your own devices:</p>
+        <div class="cmd"><button class="copy" type="button">Copy</button><pre>tailscale serve --bg http://127.0.0.1:8765</pre></div>
+      </div>
+      <div class="card">
+        <h3>Then on each device</h3>
+        <p>Sign in to the same Tailscale account and open <code>https://&lt;your-computer&gt;.&lt;your-tailnet&gt;.ts.net</code>. The first account to sign in becomes Beam's owner, and your devices sign in by themselves from then on.</p>
+        <p>On Windows, one script runs the server hidden at every sign-in, shares it over Tailscale and installs the tray app, already paired. The <a href="https://github.com/jamesccupps/Light-Beam#quick-start-browser-only">README</a> has the details.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Private by design</h2>
+    <div class="two">
+      <div class="card">
+        <h3>Your server, your devices</h3>
+        <ul>
+          <li>Every device has its own sign-in; removing one signs it out and wipes what Beam saved on it.</li>
+          <li>Signing in through Tailscale trusts only identities Tailscale vouches for, at this Beam's own address.</li>
+          <li>The data folder is locked to the account Beam runs as; app updates install only when signed with your key.</li>
+        </ul>
+      </div>
+      <div class="card note">
+        <h3>Where it stands</h3>
+        <p>A personal project, now open source, used every day on Windows 11 PCs, an Android phone and a Raspberry Pi. The server's tests run on Linux and Windows; macOS, the systemd unit and the Docker files haven't been tested yet. Reports and fixes are welcome.</p>
+        <p><a href="https://github.com/jamesccupps/Light-Beam/blob/main/SECURITY.md">Threat model and reporting</a></p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>More tools from James Cupps</h2>
+    <div class="more">
+      <a href="https://jamesccupps.github.io/PingerPlot/"><b>PingerPlot</b><span>Continuous traceroute: where on the path it goes wrong</span></a>
+      <a href="https://jamesccupps.github.io/NetSentinel/"><b>NetSentinel</b><span>Network monitor and intrusion detection for Windows</span></a>
+      <a href="https://jamesccupps.github.io/UnifiCameraViewer/"><b>Protect Panes</b><span>UniFi Protect live view, a window per camera</span></a>
+      <a href="https://jamesccupps.github.io/HW-Blackbox/"><b>HW Blackbox</b><span>Why did the PC switch off? A black box for Windows</span></a>
+      <a href="https://jamesccupps.github.io/Slate/"><b>Slate</b><span>A text editor for files of any size</span></a>
+      <a href="https://jamesccupps.github.io/"><b>Everything else</b><span>Every project, on one page</span></a>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">Light Beam is free and open source under the MIT license, made by <a href="https://jamesccupps.github.io/">James Cupps</a>. <a href="https://github.com/jamesccupps/Light-Beam">github.com/jamesccupps/Light-Beam</a></div>
+</footer>
+<script>
+document.querySelectorAll("button.copy").forEach(function (b) {
+  b.addEventListener("click", function () {
+    var pre = b.parentNode.querySelector("pre");
+    var said = function (msg) { b.textContent = msg; setTimeout(function () { b.textContent = "Copy"; }, 2000); };
+    var select = function () { var r = document.createRange(); r.selectNodeContents(pre); var s = window.getSelection(); s.removeAllRanges(); s.addRange(r); said("Selected: copy it"); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(pre.textContent.trim()).then(function () { said("Copied"); }, select);
+    else select();
+  });
+});
+
+try {
+  fetch("https://api.github.com/repos/jamesccupps/Light-Beam/releases/latest").then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+    if (d && d.tag_name) document.getElementById("version").textContent = "Version " + d.tag_name.replace(/^v/, "") + ", free and open source (MIT).";
+  }).catch(function () {});
+} catch (e) {}
+</script>
+</body>
+</html>

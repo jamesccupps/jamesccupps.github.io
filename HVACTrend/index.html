@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HVACTrend: read-only BACnet trend logger and alarms</title>
+<meta name="description" content="Free, open source BACnet/IP trend logger for HVAC: logs the points you pick, charts years of history instantly and sends equipment alarms to your phone.">
+<meta name="theme-color" content="#0c3b3a">
+<link rel="canonical" href="https://jamesccupps.github.io/HVACTrend/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="James Cupps">
+<meta property="og:title" content="HVACTrend">
+<meta property="og:description" content="A read-only BACnet trend logger, trend viewer and alarm system for building HVAC. Free and open source; it never writes to a controller.">
+<meta property="og:url" content="https://jamesccupps.github.io/HVACTrend/">
+<meta property="og:image" content="https://jamesccupps.github.io/HVACTrend/images/social-preview.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta property="og:image:alt" content="HVACTrend: a read-only BACnet trend logger, beside its trend viewer">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="images/icon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="images/icon-32.png">
+<link rel="apple-touch-icon" href="images/icon-256.png">
+<meta name="color-scheme" content="light dark">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "HVACTrend",
+  "description": "A read-only BACnet/IP trend logger, web trend viewer and rule-based alarm system for building HVAC: logs the points you choose every two minutes, charts years of history instantly, and sends equipment alarms to your phone.",
+  "url": "https://jamesccupps.github.io/HVACTrend/",
+  "codeRepository": "https://github.com/jamesccupps/HVACTrend",
+  "downloadUrl": "https://github.com/jamesccupps/HVACTrend/releases/latest",
+  "applicationCategory": "BusinessApplication",
+  "applicationSubCategory": "Building automation trend logging",
+  "operatingSystem": "Windows, Linux (Python 3.11+)",
+  "image": "https://jamesccupps.github.io/HVACTrend/images/trend-viewer.png",
+  "screenshot": "https://jamesccupps.github.io/HVACTrend/images/trend-viewer.png",
+  "license": "https://opensource.org/licenses/MIT",
+  "isAccessibleForFree": true,
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  },
+  "author": {
+    "@type": "Person",
+    "name": "James Cupps",
+    "url": "https://jamesccupps.github.io/"
+  }
+}
+</script>
+<style>
+  :root { --bg: #f5f9f9; --panel: #ffffff; --text: #1a2626; --muted: #536665; --line: #dde8e7; --accent: #0f7a6d; --accent-dark: #7fe0cf; --code: #ecf4f3; --warn: #9a5b00; --hero: linear-gradient(160deg, #0f4a47 0%, #0c1716 100%); --hero-muted: #b6d6d1; --hero-ink: #0c3b3a; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #111716; --panel: #19211f; --text: #e3ece9; --muted: #98aaa6; --line: #28342f; --code: #1f2a27; --warn: #e3a34a; } }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.55 "Segoe UI", system-ui, -apple-system, Ubuntu, "DejaVu Sans", sans-serif; }
+  a { color: var(--accent); }
+  @media (prefers-color-scheme: dark) { a { color: var(--accent-dark); } }
+  code { background: var(--code); border-radius: 4px; padding: 1px 5px; font: 0.9em Consolas, "DejaVu Sans Mono", monospace; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 20px; }
+  header.hero { background: var(--hero); color: #fff; padding: 56px 0 40px; }
+  .brand { display: flex; align-items: center; gap: 16px; }
+  .brand img { width: 64px; height: 64px; }
+  .brand h1 { margin: 0; font-size: 40px; font-weight: 600; letter-spacing: -0.5px; line-height: 1.15; }
+  .tagline { font-size: 22px; margin: 18px 0 6px; max-width: 720px; }
+  .facts { color: var(--hero-muted); margin: 0 0 26px; max-width: 780px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  .btn { display: inline-flex; align-items: center; gap: 10px; padding: 12px 22px; border-radius: 8px; font-weight: 600;
+         text-decoration: none; background: #fff; color: var(--hero-ink); font-size: 17px; }
+  .btn:hover { background: #eef2f8; }
+  .btn.ghost { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,.45); font-weight: 500; font-size: 15px; padding: 10px 16px; }
+  .btn.ghost:hover { background: rgba(255,255,255,.1); }
+  .btn small { font-weight: 400; opacity: .75; font-size: 13px; }
+  .sub { color: var(--hero-muted); font-size: 14px; margin-top: 12px; }
+  .sub a { color: #e3ecfa; }
+  .demo { margin: 34px 0 0; }
+  .demo img { width: 100%; height: auto; display: block; border-radius: 8px; box-shadow: 0 18px 50px rgba(0,0,0,.45); }
+  section { padding: 44px 0 8px; }
+  h2 { font-size: 26px; margin: 0 0 18px; }
+  h3 { font-size: 17px; margin: 0 0 6px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; }
+  .card p { margin: 0; color: var(--muted); font-size: 15px; }
+  .card p + p { margin-top: 8px; }
+  .card ul { margin: 6px 0 0; padding-left: 20px; color: var(--muted); font-size: 15px; }
+  .shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  .shots figure { margin: 0; }
+  .shots img { width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--line); display: block; }
+  .shots figcaption { color: var(--muted); font-size: 14px; margin-top: 6px; }
+  .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+  .cmd { position: relative; margin: 10px 0 0; }
+  pre { background: var(--code); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; padding-top: 34px; overflow-x: auto;
+        font: 13.5px/1.5 Consolas, "DejaVu Sans Mono", monospace; margin: 0; }
+  .copy { position: absolute; top: 6px; right: 6px; font: 12px "Segoe UI", system-ui, sans-serif; padding: 3px 10px; border-radius: 5px;
+          border: 1px solid var(--line); background: var(--panel); color: var(--text); cursor: pointer; }
+  .copy:hover { border-color: var(--muted); }
+  .note { border-left: 4px solid var(--warn); }
+  .note h3 { color: var(--warn); }
+  .muted { color: var(--muted); font-size: 14px; }
+  table { border-collapse: collapse; width: 100%; font-size: 15px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; width: 34%; }
+  .more { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+  .more a { display: block; text-decoration: none; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; color: var(--text); }
+  .more a:hover { border-color: var(--accent); }
+  .more b { display: block; color: var(--accent); }
+  @media (prefers-color-scheme: dark) { .more b { color: var(--accent-dark); } }
+  .more span { color: var(--muted); font-size: 14px; }
+  footer { color: var(--muted); font-size: 14px; padding: 40px 0 50px; border-top: 1px solid var(--line); margin-top: 44px; }
+  @media (max-width: 600px) {
+    header.hero { padding: 36px 0 28px; }
+    .brand h1 { font-size: 30px; }
+    .brand img { width: 52px; height: 52px; }
+    .tagline { font-size: 19px; }
+    th { width: auto; }
+  }
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="wrap">
+    <div class="brand"><img width="64" height="64" src="images/icon-256.png" alt=""><h1>HVACTrend</h1></div>
+    <p class="tagline">A read-only BACnet trend logger, trend viewer and alarm system for building HVAC.</p>
+    <p class="facts">It sits on your building's BACnet network and records the points you choose every two minutes: temperatures, setpoints, fan speeds, valves, dampers, statuses. It keeps that history as long as you like, shows it in a fast trend viewer in your browser, and sends equipment that isn't doing what it's told to your phone. It never writes to a controller.</p>
+    <div class="actions">
+      <a class="btn" href="https://github.com/jamesccupps/HVACTrend/releases/latest">Download the latest release <small>Windows or Linux, Python 3.11+</small></a>
+      <a class="btn ghost" href="#demo">Try the demo</a>
+      <a class="btn ghost" href="https://github.com/jamesccupps/HVACTrend">Source on GitHub</a>
+    </div>
+    <p class="sub"><span id="version">Free and open source (MIT).</span> <a href="https://github.com/jamesccupps/HVACTrend/blob/main/docs/getting-started.md">Getting started</a></p>
+    <div class="demo"><img src="images/trend-viewer.png" width="1440" height="860" alt="The trend viewer: two and a half days of discharge air on two air handlers, with the setpoint and the outdoor air. AHU-2 runs about 9 degrees F warm every afternoon while AHU-1 holds its 55 degree setpoint"></div>
+  </div>
+</header>
+
+<main class="wrap">
+  <section>
+    <h2>What it does</h2>
+    <div class="grid">
+      <div class="card"><h3>Trend logging</h3><p>Polls the points you pick with ReadPropertyMultiple, falling back to single reads where a controller needs it. Every reading carries its quality, and 5-minute and hourly averages let a year of data chart instantly.</p></div>
+      <div class="card"><h3>A viewer made for HVAC work</h3><p>Zoom, pan, jump to a day, compare with the day or week before. Plot a reading against its setpoint, or against the other units. X-Y scatter, weather overlay, occupied-hours shading, notes, saved views, CSV. Works on a phone.</p></div>
+      <div class="card"><h3>Realtime trends</h3><p>Read chosen points every 5 seconds while you stroke a valve or watch a discharge temperature settle, with caps on how many run at once to protect the controllers.</p></div>
+      <div class="card"><h3>Alarms on your phone</h3><p>A separate watchdog checks every 5 minutes: data that stops, a controller that stops answering, equipment alarms that open, get worse or clear. A morning check-in, and a daily reminder of what's still wrong, through ntfy.</p></div>
+      <div class="card"><h3>Overrides, seen</h3><p>It reads (never writes) each commandable point's priority array, so you see when someone at the workstation is holding a setpoint by hand, and since when.</p></div>
+      <div class="card"><h3>And the rest</h3><p>A dashboard of every air handler and plant system, point coverage for the alarm rules, a one-button rescan after a programming change, verified weekly backups, and an optional AI summary of what the rules found, with your own API key.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Screens</h2>
+    <div class="shots">
+      <figure><img src="images/dashboard.png" width="1440" height="340" alt="Every unit on one screen: discharge, mixed and return air, fan speed, outdoor air damper and duct static, with an override badge on AHU-3" loading="lazy"><figcaption>Every unit on one screen, with an operator override flagged on AHU-3.</figcaption></figure>
+      <figure><img src="images/unit.png" width="1440" height="700" alt="AHU-2's readings grouped by kind, each with a sparkline" loading="lazy"><figcaption>One unit's readings, grouped by kind, each with a sparkline.</figcaption></figure>
+    </div>
+    <p class="muted">From the demo: a made-up building with a week of readings.</p>
+  </section>
+
+  <section id="safe">
+    <h2>Safe by design</h2>
+    <div class="two">
+      <div class="card">
+        <h3>Read-only BACnet</h3>
+        <ul>
+          <li>It only sends reads and discovery. Writes are refused in code, whatever the configuration says.</li>
+          <li>Disruptive services (reinitialize, communication control, file writes, create or delete object) are blocked outright.</li>
+          <li>None of this can be switched on from the web pages.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Local by default</h3>
+        <ul>
+          <li>Out of the box only the computer it runs on can open the pages.</li>
+          <li>Others you let in get the trend viewer and Realtime, and nothing else: no settings, no secrets, no backups.</li>
+          <li>API keys and the notification topic live in a separate file that is never committed or backed up.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="demo">
+    <h2>Try it in a minute, without a BACnet network</h2>
+    <div class="card">
+      <div class="cmd"><button class="copy" type="button">Copy</button><pre>git clone https://github.com/jamesccupps/HVACTrend.git
+cd HVACTrend
+python -m venv .venv
+.venv/bin/pip install -e .          # Windows: .venv\Scripts\pip install -e .
+.venv/bin/python scripts/demo.py    # Windows: .venv\Scripts\python scripts\demo.py</pre></div>
+      <p style="margin-top:10px">Then open <code>http://localhost:8001</code>: a made-up building with a week of readings, one unit that runs warm in the afternoons, and an operator override. Nothing is sent anywhere.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Install it for your building</h2>
+    <div class="two">
+      <div class="card">
+        <h3>Windows (the tested platform)</h3>
+        <p>Install Python 3.11+ and download the release. Double-click <code>install.bat</code>: it makes a private Python environment and runs a setup wizard (building name, which network card is on BACnet, who may open the pages). Then find your controllers, map units to controllers, choose points on the Point Selection page, and install the service so it runs from boot.</p>
+        <p><a href="https://github.com/jamesccupps/HVACTrend/blob/main/docs/getting-started.md">The step-by-step walkthrough</a></p>
+      </div>
+      <div class="card">
+        <h3>What you need</h3>
+        <table>
+          <tr><th>A computer</th><td>On the building's BACnet/IP network; a small always-on PC is ideal</td></tr>
+          <tr><th>Python</th><td>3.11 or newer</td></tr>
+          <tr><th>Controllers</th><td>Reachable over BACnet/IP; MS/TP behind a BACnet router is fine</td></tr>
+          <tr><th>Disk</th><td>About 35 MB a day per 1,000 points at the 2-minute interval</td></tr>
+        </table>
+      </div>
+    </div>
+    <p class="muted">In production in one building since July 2026, with more than 450 automated tests and no hardware needed to run them. Other buildings name points differently: if yours aren't recognized, <a href="https://github.com/jamesccupps/HVACTrend/issues/new">open an issue</a> with a few examples.</p>
+  </section>
+
+  <section>
+    <h2>More tools from James Cupps</h2>
+    <div class="more">
+      <a href="https://jamesccupps.github.io/HVAC-Network-Scanner/"><b>HVAC Network Scanner</b><span>Find and identify every device on a building automation network</span></a>
+      <a href="https://jamesccupps.github.io/PPCL/"><b>PPCL Workbench</b><span>IDE, linter and simulator for Siemens PPCL</span></a>
+      <a href="https://jamesccupps.github.io/p2/"><b>APOGEE P2 reference</b><span>The Siemens APOGEE P2 protocol, documented</span></a>
+      <a href="https://jamesccupps.github.io/CoolingTowerSim/"><b>Cooling Tower Sim</b><span>A condenser-water loop simulator in the browser</span></a>
+      <a href="https://jamesccupps.github.io/Wetbulb/"><b>Wet-Bulb Calculator</b><span>Live, pressure-corrected wet-bulb and tower approach</span></a>
+      <a href="https://jamesccupps.github.io/"><b>Everything else</b><span>Every project, on one page</span></a>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">HVACTrend is free and open source under the MIT license, made by <a href="https://jamesccupps.github.io/">James Cupps</a>. <a href="https://github.com/jamesccupps/HVACTrend">github.com/jamesccupps/HVACTrend</a></div>
+</footer>
+<script>
+document.querySelectorAll("button.copy").forEach(function (b) {
+  b.addEventListener("click", function () {
+    var pre = b.parentNode.querySelector("pre");
+    var said = function (msg) { b.textContent = msg; setTimeout(function () { b.textContent = "Copy"; }, 2000); };
+    var select = function () { var r = document.createRange(); r.selectNodeContents(pre); var s = window.getSelection(); s.removeAllRanges(); s.addRange(r); said("Selected: copy it"); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(pre.textContent.trim()).then(function () { said("Copied"); }, select);
+    else select();
+  });
+});
+
+try {
+  fetch("https://api.github.com/repos/jamesccupps/HVACTrend/releases/latest").then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+    if (d && d.tag_name) document.getElementById("version").textContent = "Version " + d.tag_name.replace(/^v/, "") + ", free and open source (MIT).";
+  }).catch(function () {});
+} catch (e) {}
+</script>
+</body>
+</html>

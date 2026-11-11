@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PPCL Workbench: IDE, linter and simulator for Siemens PPCL</title>
+<meta name="description" content="Free, open source IDE for Siemens PPCL (APOGEE, PXC): 90 lint rules cited to the manual, a decision-table builder, a simulated air handler and a debugger.">
+<meta name="theme-color" content="#16233b">
+<link rel="canonical" href="https://jamesccupps.github.io/PPCL/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="James Cupps">
+<meta property="og:title" content="PPCL Workbench">
+<meta property="og:description" content="Write, check and test Siemens PPCL before it reaches a panel: a linter with 90 cited rules, a builder, and a bench with a simulated air handler.">
+<meta property="og:url" content="https://jamesccupps.github.io/PPCL/">
+<meta property="og:image" content="https://jamesccupps.github.io/PPCL/images/social-preview.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta property="og:image:alt" content="PPCL Workbench: write, check and test Siemens PPCL, beside its editor">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="images/icon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="images/icon-32.png">
+<link rel="apple-touch-icon" href="images/icon-256.png">
+<meta name="color-scheme" content="light dark">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "PPCL Workbench",
+  "description": "A browser IDE, linter, simulator and debugger for Siemens PPCL, the control language APOGEE and PXC field panels run: 90 lint rules each citing the manual, a decision-table builder, a block editor, and a bench that runs a program against a simulated air handler.",
+  "url": "https://jamesccupps.github.io/PPCL/",
+  "codeRepository": "https://github.com/jamesccupps/PPCL",
+  "downloadUrl": "https://github.com/jamesccupps/PPCL/releases/latest",
+  "applicationCategory": "DeveloperApplication",
+  "applicationSubCategory": "Building automation programming",
+  "operatingSystem": "Windows, Linux, macOS (Python 3.10+)",
+  "image": "https://jamesccupps.github.io/PPCL/images/editor.png",
+  "screenshot": "https://jamesccupps.github.io/PPCL/images/editor.png",
+  "license": "https://opensource.org/licenses/MIT",
+  "isAccessibleForFree": true,
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  },
+  "author": {
+    "@type": "Person",
+    "name": "James Cupps",
+    "url": "https://jamesccupps.github.io/"
+  }
+}
+</script>
+<style>
+  :root { --bg: #f6f8fb; --panel: #ffffff; --text: #1c2330; --muted: #566174; --line: #e0e5ee; --accent: #2457b8; --accent-dark: #8fb4ff; --code: #eef2f8; --warn: #9a5b00; --hero: linear-gradient(160deg, #1d3157 0%, #10141f 100%); --hero-muted: #b9c6dc; --hero-ink: #16233b; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #12151c; --panel: #1b1f28; --text: #e5e9f0; --muted: #9aa4b5; --line: #2b313d; --code: #232834; --warn: #e3a34a; } }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.55 "Segoe UI", system-ui, -apple-system, Ubuntu, "DejaVu Sans", sans-serif; }
+  a { color: var(--accent); }
+  @media (prefers-color-scheme: dark) { a { color: var(--accent-dark); } }
+  code { background: var(--code); border-radius: 4px; padding: 1px 5px; font: 0.9em Consolas, "DejaVu Sans Mono", monospace; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 20px; }
+  header.hero { background: var(--hero); color: #fff; padding: 56px 0 40px; }
+  .brand { display: flex; align-items: center; gap: 16px; }
+  .brand img { width: 64px; height: 64px; }
+  .brand h1 { margin: 0; font-size: 40px; font-weight: 600; letter-spacing: -0.5px; line-height: 1.15; }
+  .tagline { font-size: 22px; margin: 18px 0 6px; max-width: 720px; }
+  .facts { color: var(--hero-muted); margin: 0 0 26px; max-width: 780px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  .btn { display: inline-flex; align-items: center; gap: 10px; padding: 12px 22px; border-radius: 8px; font-weight: 600;
+         text-decoration: none; background: #fff; color: var(--hero-ink); font-size: 17px; }
+  .btn:hover { background: #eef2f8; }
+  .btn.ghost { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,.45); font-weight: 500; font-size: 15px; padding: 10px 16px; }
+  .btn.ghost:hover { background: rgba(255,255,255,.1); }
+  .btn small { font-weight: 400; opacity: .75; font-size: 13px; }
+  .sub { color: var(--hero-muted); font-size: 14px; margin-top: 12px; }
+  .sub a { color: #e3ecfa; }
+  .demo { margin: 34px 0 0; }
+  .demo img { width: 100%; height: auto; display: block; border-radius: 8px; box-shadow: 0 18px 50px rgba(0,0,0,.45); }
+  section { padding: 44px 0 8px; }
+  h2 { font-size: 26px; margin: 0 0 18px; }
+  h3 { font-size: 17px; margin: 0 0 6px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; }
+  .card p { margin: 0; color: var(--muted); font-size: 15px; }
+  .card p + p { margin-top: 8px; }
+  .card ul { margin: 6px 0 0; padding-left: 20px; color: var(--muted); font-size: 15px; }
+  .shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  .shots figure { margin: 0; }
+  .shots img { width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--line); display: block; }
+  .shots figcaption { color: var(--muted); font-size: 14px; margin-top: 6px; }
+  .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+  .cmd { position: relative; margin: 10px 0 0; }
+  pre { background: var(--code); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; padding-top: 34px; overflow-x: auto;
+        font: 13.5px/1.5 Consolas, "DejaVu Sans Mono", monospace; margin: 0; }
+  .copy { position: absolute; top: 6px; right: 6px; font: 12px "Segoe UI", system-ui, sans-serif; padding: 3px 10px; border-radius: 5px;
+          border: 1px solid var(--line); background: var(--panel); color: var(--text); cursor: pointer; }
+  .copy:hover { border-color: var(--muted); }
+  .note { border-left: 4px solid var(--warn); }
+  .note h3 { color: var(--warn); }
+  .muted { color: var(--muted); font-size: 14px; }
+  table { border-collapse: collapse; width: 100%; font-size: 15px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; width: 34%; }
+  .more { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+  .more a { display: block; text-decoration: none; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; color: var(--text); }
+  .more a:hover { border-color: var(--accent); }
+  .more b { display: block; color: var(--accent); }
+  @media (prefers-color-scheme: dark) { .more b { color: var(--accent-dark); } }
+  .more span { color: var(--muted); font-size: 14px; }
+  footer { color: var(--muted); font-size: 14px; padding: 40px 0 50px; border-top: 1px solid var(--line); margin-top: 44px; }
+  @media (max-width: 600px) {
+    header.hero { padding: 36px 0 28px; }
+    .brand h1 { font-size: 30px; }
+    .brand img { width: 52px; height: 52px; }
+    .tagline { font-size: 19px; }
+    th { width: auto; }
+  }
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="wrap">
+    <div class="brand"><img width="64" height="64" src="images/icon-256.png" alt=""><h1>PPCL Workbench</h1></div>
+    <p class="tagline">Write, check and test Siemens PPCL before it reaches a panel.</p>
+    <p class="facts">An IDE in your browser for the line-numbered control language APOGEE and PXC field panels run. A linter with 90 rules, each citing the manual page it comes from; a builder and a block editor that compile to PPCL; and a bench that runs a program against a simulated air handler, with sensor lag, actuator stroke time and faults you inject.</p>
+    <div class="actions">
+      <a class="btn" href="https://github.com/jamesccupps/PPCL/releases/latest">Download the latest release <small>runs with Python 3.10+</small></a>
+      <a class="btn ghost" href="#run">How to run it</a>
+      <a class="btn ghost" href="https://github.com/jamesccupps/PPCL">Source on GitHub</a>
+    </div>
+    <p class="sub"><span id="version">Free and open source (MIT).</span> Python standard library only: nothing to install, and no program text ever leaves the machine.</p>
+    <div class="demo"><img src="images/editor.png" width="1440" height="900" alt="The Editor with a sample program open: syntax coloring, two warnings marked in the gutter, and the findings below, each with its fix and the manual chapter it comes from"></div>
+  </div>
+</header>
+
+<main class="wrap">
+  <section>
+    <h2>What's in it</h2>
+    <div class="grid">
+      <div class="card"><h3>Editor</h3><p>Checks as you type: errors, warnings and unresolved points marked in the gutter. Opens Desigo and Insight exports, and uses the Desigo CC editor's keys: go to statement, find and replace, comment, quick numbering, Command Assist.</p></div>
+      <div class="card"><h3>90 lint rules, each cited</h3><p>Every rule names the manual page it comes from. Plus transforms that are exact by machine and tedious by hand: DEFINE expand and collapse, point-name separator swap, clone a block with renames.</p></div>
+      <div class="card"><h3>Builder</h3><p>Author from a decision table, equipment against modes, Siemens' own planning method. The compiler guarantees one backward GOTO, every interlock force released at the same priority, and no time-based command inside an IF.</p></div>
+      <div class="card"><h3>Blocks</h3><p>Draw the control as 30 kinds of blocks and wires and compile it to PPCL as you draw, with logic kept as expressions rather than a statement per block.</p></div>
+      <div class="card"><h3>Bench</h3><p>Run the program against simulated equipment: mixing box, coils, fan, a zone with thermal mass. Pick the weather, inject a fault, read the trends. Point priority is exact, so a command blocked by a higher priority is reported.</p></div>
+      <div class="card"><h3>Debugger</h3><p>Line breakpoints, write watchpoints that name the line that commanded a point, and conditional breakpoints written in PPCL. Step, watch each point's value and priority, and override any point mid-run.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Find the bug before the building does</h2>
+    <div class="shots">
+      <figure><img src="images/bench.png" width="1440" height="900" alt="The Bench after a three-hour design-winter run with a stuck outdoor-air damper injected at 30 minutes: what was simulated and what priority blocked, the trends, and the checks that failed and passed" loading="lazy"><figcaption>A sample air-handler program run for three design-winter hours with the outdoor-air damper stuck open at 30 minutes: the coil-face check fails, and a command blocked by a higher priority is called out.</figcaption></figure>
+      <div class="card">
+        <h3>What PPCL lets through, and the rule that catches it</h3>
+        <table>
+          <tr><th>A point latched at @EMER, never released</th><td>The schedule silently stops working</td></tr>
+          <tr><th>LOOP, TOD or WAIT outside the main loop</th><td>Runs once at load, then never again</td></tr>
+          <tr><th>A duplicate line number</th><td>One line silently vanishes on load</td></tr>
+          <tr><th>SAMPLE or TIMAVG inside a GOSUB</th><td>Timing drifts unpredictably</td></tr>
+          <tr><th>Two unconditional writers on one point</th><td>Behavior depends on line order</td></tr>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section id="safe">
+    <h2>Honest about what it is</h2>
+    <div class="two">
+      <div class="card">
+        <h3>It never touches a building</h3>
+        <ul>
+          <li>No panel writes, no network client, no BACnet or P2 connection. It reads and writes files; you load the result through Insight or Desigo CC yourself.</li>
+          <li>The server binds 127.0.0.1 and keeps every file inside the workspace folder.</li>
+          <li>Zero dependencies: the server is Python's own <code>http.server</code>, the UI plain ES modules.</li>
+        </ul>
+      </div>
+      <div class="card note">
+        <h3>The bench is a model</h3>
+        <p>The equipment models are first-order approximations, good for exercising control logic and worthless as a load calculation. Siemens doesn't publish LOOP's PID form, so its output is approximate and says so at runtime: never take a tuning constant from the bench to a real panel.</p>
+        <p>Every command signature traces to the manual or to Desigo CC's own Command Assist. The parser has read 2,644 lines recovered from programs running on panels without a miss.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="run">
+    <h2>Run it</h2>
+    <div class="two">
+      <div class="card">
+        <h3>Windows</h3>
+        <p>Download the <a href="https://github.com/jamesccupps/PPCL/releases/latest">latest release</a>, unzip it, and double-click <code>ppcl.bat</code>. It finds a suitable Python, starts the workbench and opens it in your browser.</p>
+      </div>
+      <div class="card">
+        <h3>Any OS, with Python 3.10 or newer</h3>
+        <p>From the unzipped folder or a clone, start the workbench:</p>
+        <div class="cmd"><button class="copy" type="button">Copy</button><pre>python -m ppcl serve</pre></div>
+        <p style="margin-top:10px">Or use the command line: lint a folder, or bench a program with a fault.</p>
+        <div class="cmd"><button class="copy" type="button">Copy</button><pre>python -m ppcl lint programs/
+python -m ppcl bench AHU1.ppcl --weather design_winter</pre></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Feedback</h2>
+    <p>Found a rule that's wrong, or PPCL it can't read? <a href="https://github.com/jamesccupps/PPCL/issues/new">Open an issue</a>. The full documentation, including what is verified against the manual and what is approximated, is in the <a href="https://github.com/jamesccupps/PPCL#readme">README</a> and the app's Help pane.</p>
+  </section>
+
+  <section>
+    <h2>More tools from James Cupps</h2>
+    <div class="more">
+      <a href="https://jamesccupps.github.io/HVAC-Network-Scanner/"><b>HVAC Network Scanner</b><span>Find and identify every device on a building automation network</span></a>
+      <a href="https://jamesccupps.github.io/p2/"><b>APOGEE P2 reference</b><span>The Siemens APOGEE P2 protocol, documented</span></a>
+      <a href="https://jamesccupps.github.io/HVACTrend/"><b>HVACTrend</b><span>Read-only BACnet trend logger and alarms</span></a>
+      <a href="https://jamesccupps.github.io/CoolingTowerSim/"><b>Cooling Tower Sim</b><span>A condenser-water loop simulator in the browser</span></a>
+      <a href="https://jamesccupps.github.io/"><b>Everything else</b><span>Every project, on one page</span></a>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">PPCL Workbench is free and open source under the MIT license, made by <a href="https://jamesccupps.github.io/">James Cupps</a>. <a href="https://github.com/jamesccupps/PPCL">github.com/jamesccupps/PPCL</a></div>
+</footer>
+<script>
+document.querySelectorAll("button.copy").forEach(function (b) {
+  b.addEventListener("click", function () {
+    var pre = b.parentNode.querySelector("pre");
+    var said = function (msg) { b.textContent = msg; setTimeout(function () { b.textContent = "Copy"; }, 2000); };
+    var select = function () { var r = document.createRange(); r.selectNodeContents(pre); var s = window.getSelection(); s.removeAllRanges(); s.addRange(r); said("Selected: copy it"); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(pre.textContent.trim()).then(function () { said("Copied"); }, select);
+    else select();
+  });
+});
+
+try {
+  fetch("https://api.github.com/repos/jamesccupps/PPCL/releases/latest").then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+    if (d && d.tag_name) document.getElementById("version").textContent = "Version " + d.tag_name.replace(/^v/, "") + ", free and open source (MIT).";
+  }).catch(function () {});
+} catch (e) {}
+</script>
+</body>
+</html>
