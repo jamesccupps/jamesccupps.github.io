@@ -1132,7 +1132,7 @@
         echo.innerHTML = `<span class="prompt-path amber">C:\\CUPPS</span><span class="prompt">&gt;</span> <span class="glow">${escapeHtml(raw)}</span>`;
         output.appendChild(echo);
 
-        const handler = COMMANDS[cmd];
+        const handler = Object.hasOwn(COMMANDS, cmd) ? COMMANDS[cmd] : null;  // own commands only: "constructor" and "__proto__" are not commands
         if (handler) {
             const result = handler();
             if (result) {
