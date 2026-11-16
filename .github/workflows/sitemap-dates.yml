@@ -4,6 +4,7 @@
 # (.github/scripts/sitemap_dates.py), then commits only if a date moved and asks
 # GitHub Pages to rebuild, since a push made with GITHUB_TOKEN may not start one.
 name: Sitemap dates
+# Run by hand: Actions, Sitemap dates, Run workflow.
 
 on:
   schedule:
