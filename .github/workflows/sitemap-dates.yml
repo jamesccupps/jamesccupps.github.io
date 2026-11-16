@@ -1,0 +1,52 @@
+# Keep sitemap.xml's <lastmod> dates current. Most pages are edited in their own
+# repositories, so nothing here changes when they do. Once a day this looks up
+# when each page last changed and moves its date forward
+# (.github/scripts/sitemap_dates.py), then commits only if a date moved and asks
+# GitHub Pages to rebuild, since a push made with GITHUB_TOKEN may not start one.
+name: Sitemap dates
+
+on:
+  schedule:
+    - cron: "37 10 * * *"   # daily at 10:37 UTC (5:37 or 6:37 am Eastern)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+
+concurrency:
+  group: sitemap-dates
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Move lastmod dates forward
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/sitemap_dates.py
+
+      - name: Commit and rebuild the site if a date moved
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet -- sitemap.xml; then
+            echo "No dates moved."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898333+github-actions[bot]@users.noreply.github.com"
+          git commit -q -m "sitemap.xml: lastmod from each page's latest change" -- sitemap.xml
+          for attempt in 1 2 3; do
+            if git push -q; then
+              gh api -X POST "repos/${GITHUB_REPOSITORY}/pages/builds" --silent \
+                || echo "::warning title=Pages::couldn't request a rebuild; the next push will publish the dates"
+              exit 0
+            fi
+            git pull -q --rebase
+          done
+          echo "::error title=Sitemap dates::push failed three times"
+          exit 1
