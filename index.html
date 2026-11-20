@@ -16,7 +16,7 @@
     <!-- SEO -->
     <meta name="description" content="James Cupps builds open-source Windows and Android apps and tools for HVAC and building automation, network security, machine learning and home automation.">
     <meta name="author" content="James Cupps">
-    <meta name="keywords" content="James Cupps, Slate, Slate text editor, NoteForge, encrypted notes app, large file editor, Notepad replacement, Protect Panes, UniFi Protect viewer, UniFi Stock Watcher, Ubiquiti restock alert, AllCalc, HVAC calculator, field calculator, trade tools, BACnet, HVAC, wet-bulb calculator, psychrometrics, cooling tower, WBGT, network security, machine learning, Python, Kotlin, Android, Electron, home automation, open source">
+    <meta name="keywords" content="James Cupps, Slate, Slate text editor, NoteForge, encrypted notes app, large file editor, Notepad replacement, Protect Panes, UniFi Protect viewer, UniFi Stock Watcher, Ubiquiti restock alert, Silhouette Maker, Cricut silhouette, AllCalc, HVAC calculator, field calculator, trade tools, BACnet, HVAC, wet-bulb calculator, psychrometrics, cooling tower, WBGT, network security, machine learning, Python, Kotlin, Android, Electron, home automation, open source">
     <link rel="canonical" href="https://jamesccupps.github.io/">
 
     <!-- Open Graph (Facebook, LinkedIn, Discord, Slack) -->
@@ -40,7 +40,7 @@
 
     <meta name="theme-color" content="#0a0a0a">
 
-    <!-- Structured data: Person + AllCalc MobileApplication + PPCL Workbench, HVACTrend, Light Beam, Slate, Protect Panes, UniFi Stock Watcher, PingerPlot, NetSentinel, HW Blackbox, HVAC Network Scanner and NoteForge SoftwareApplications + Wet-Bulb, cooling-tower simulator and Synapse Reef WebApplications + P2 TechArticle + the Hot Brook lakes ScholarlyArticle (Reef's paper) -->
+    <!-- Structured data: Person + AllCalc MobileApplication + PPCL Workbench, HVACTrend, Light Beam, Slate, Protect Panes, UniFi Stock Watcher, PingerPlot, NetSentinel, HW Blackbox, Silhouette Maker, HVAC Network Scanner and NoteForge SoftwareApplications + Wet-Bulb, cooling-tower simulator and Synapse Reef WebApplications + P2 TechArticle + the Hot Brook lakes ScholarlyArticle (Reef's paper) -->
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
@@ -216,6 +216,27 @@
           "operatingSystem": "Windows 10, Windows 11",
           "description": "A hardware monitor and black box for Windows: every sensor every 5 seconds and the voltage rails four times a second, recorded from boot by a Windows service, with a report after every power-off or app crash. Local dashboard, optional Home Assistant status.",
           "keywords": "hardware monitor, black box, power loss, crash report, voltage monitoring, sensors, Windows service, Home Assistant, open source",
+          "license": "https://opensource.org/licenses/MIT",
+          "author": {
+            "@type": "Person",
+            "name": "James Cupps"
+          },
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+          }
+        },
+        {
+          "@type": "SoftwareApplication",
+          "name": "Silhouette Maker",
+          "url": "https://jamesccupps.github.io/silhouette-maker/",
+          "codeRepository": "https://github.com/jamesccupps/silhouette-maker",
+          "downloadUrl": "https://github.com/jamesccupps/silhouette-maker/releases/latest",
+          "applicationCategory": "DesignApplication",
+          "operatingSystem": "Windows 10, Windows 11",
+          "description": "Turns side-on photos into silhouette cut files for a Cricut on your own PC: an automatic cut-out that runs locally, ornaments and lettering, SVG at true size, pages to print at real size and STL files for 3D printing. No photo is uploaded.",
+          "keywords": "silhouette maker, Cricut, SVG cut file, profile silhouette, background removal, offline, 3D printing, STL, open source",
           "license": "https://opensource.org/licenses/MIT",
           "author": {
             "@type": "Person",
@@ -930,6 +951,11 @@
                     <a class="name-link" href="https://jamesccupps.github.io/Light-Beam/" target="_blank" rel="noopener">Light Beam</a>
                     <span class="desc">Self-hosted messenger + hub for your own devices &mdash; <a class="doc-link" href="https://github.com/jamesccupps/Light-Beam" target="_blank" rel="noopener">source</a></span>
                 </div>
+                <div class="project-row multilink">
+                    <span class="tag">[APP]</span>
+                    <a class="name-link" href="https://jamesccupps.github.io/silhouette-maker/" target="_blank" rel="noopener">Silhouette Maker</a>
+                    <span class="desc">Photos into Cricut silhouette cut files, all local &mdash; <a class="doc-link" href="https://github.com/jamesccupps/silhouette-maker/releases/latest" target="_blank" rel="noopener">download</a></span>
+                </div>
                 <a class="project-row" href="https://github.com/jamesccupps/StockOracle" target="_blank" rel="noopener">
                     <span class="tag">[APP]</span>
                     <span class="name">Stock Oracle</span>
@@ -961,7 +987,7 @@
                     <span class="desc">Neuroevolution lake ecosystem, in the browser &mdash; <a class="doc-link" href="https://jamesccupps.github.io/Reef/paper/" target="_blank" rel="noopener">paper</a> &middot; <a class="doc-link" href="https://github.com/jamesccupps/Reef" target="_blank" rel="noopener">source</a></span>
                 </div>
             </div>
-            <div class="dim">       <span id="project-count">21</span> project(s) &mdash;  Type HELP for commands</div>
+            <div class="dim">       <span id="project-count">22</span> project(s) &mdash;  Type HELP for commands</div>
             <br>
             <div class="install-cmd"><span class="prompt-path amber">C:\CUPPS</span><span class="prompt">&gt;</span> <span class="glow">scoop bucket add jamesccupps https://github.com/jamesccupps/scoop-bucket</span></div>
             <div class="install-cmd"><span class="prompt-path amber">C:\CUPPS</span><span class="prompt">&gt;</span> <span class="glow">scoop install jamesccupps/pingerplot</span></div>

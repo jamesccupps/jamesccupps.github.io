@@ -32,8 +32,8 @@ keeps it current.
 
 - Every page keeps: a `<title>` of 60 characters or less, a meta description of 160 or less, a canonical link,
   `og:*` tags with an image, and JSON-LD. James is described as a facilities director: no employer, city or state.
-- `sitemap.xml` lists every page of the site, including the pages other repositories publish (23 addresses on
-  Nov 18). Add a new page there when it goes up. `robots.txt` points to it and keeps raw `.md` files and Slate's apt
+- `sitemap.xml` lists every page of the site, including the pages other repositories publish (24 addresses on
+  Nov 20). Add a new page there when it goes up. `robots.txt` points to it and keeps raw `.md` files and Slate's apt
   repository out of search.
 - `<lastmod>` dates are kept by `.github/workflows/sitemap-dates.yml`, daily at 10:37 UTC (GitHub sometimes starts
   it hours late). `.github/scripts/sitemap_dates.py` finds the newest commit to each page's source and moves the date
