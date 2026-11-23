@@ -32,8 +32,8 @@ keeps it current.
 
 - Every page keeps: a `<title>` of 60 characters or less, a meta description of 160 or less, a canonical link,
   `og:*` tags with an image, and JSON-LD. James is described as a facilities director: no employer, city or state.
-- `sitemap.xml` lists every page of the site, including the pages other repositories publish (24 addresses on
-  Nov 20). Add a new page there when it goes up. `robots.txt` points to it and keeps raw `.md` files and Slate's apt
+- `sitemap.xml` lists every page of the site, including the pages other repositories publish (25 addresses on
+  Nov 23). Add a new page there when it goes up. `robots.txt` points to it and keeps raw `.md` files and Slate's apt
   repository out of search.
 - `<lastmod>` dates are kept by `.github/workflows/sitemap-dates.yml`, daily at 10:37 UTC (GitHub sometimes starts
   it hours late). `.github/scripts/sitemap_dates.py` finds the newest commit to each page's source and moves the date
@@ -44,3 +44,8 @@ keeps it current.
 - `.github/workflows/indexnow.yml` runs after each Pages build and tells Bing (and the other IndexNow engines) the
   site changed. A failed ping is a warning, never a failed build.
 - The sitemap is submitted to Google Search Console and Bing Webmaster Tools (James's accounts, in his browser).
+  In Search Console it is submitted twice, as `/sitemap.xml` (Nov 16) and `/sitemap.xml?v=2` (Nov 23), because the
+  first sat at "Couldn't fetch" with no "Last read" date, meaning Google never read it. Same file either way.
+- `/UnifiStockWatcher/` has never been crawled by Google, despite weeks of indexing requests, while Protect Panes'
+  page (same template, same launch day, same hub section) is indexed. `/UnifiStockWatcher/how-it-works/` (Nov 23)
+  is the test: if Google crawls it, the front page's URL is stuck; if not, Google is skipping that site.
