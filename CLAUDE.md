@@ -19,7 +19,8 @@ keeps it current.
   Pages serves `/<repo>/` from that repository when it has Pages turned on, and falls through to this repository's
   folder of the same name otherwise. If one of those repositories ever turns on its own Pages, its site replaces the
   folder here: move the page there and delete the folder.
-- Every other project page (`/Slate/`, `/NoteForge/`, `/Wetbulb/`, `/Reef/` and the rest) is published from its own
+- Every other project page (`/Slate/`, `/NoteForge/`, `/Wetbulb/`, `/Reef/`, the two games `/PocketMaine/` and
+  `/EightFold/`, and the rest) is published from its own
   repository and edited there, not here. Only its entry in `sitemap.xml` lives here.
 - `404.html` (`noindex`), `og.png` (the hub's social image), `favicon.ico`, `fonts/` (with its OFL license),
   `robots.txt`, `sitemap.xml`.
@@ -32,7 +33,8 @@ keeps it current.
 
 - Every page keeps: a `<title>` of 60 characters or less, a meta description of 160 or less, a canonical link,
   `og:*` tags with an image, and JSON-LD. James is described as a facilities director: no employer, city or state.
-- `sitemap.xml` lists every page of the site, including the pages other repositories publish (25 addresses on
+  `/EightFold/` has only a `<title>` so far (Nov 23); the rest of that list is to add in its own repository.
+- `sitemap.xml` lists every page of the site, including the pages other repositories publish (27 addresses on
   Nov 23). Add a new page there when it goes up. `robots.txt` points to it and keeps raw `.md` files and Slate's apt
   repository out of search.
 - `<lastmod>` dates are kept by `.github/workflows/sitemap-dates.yml`, daily at 10:37 UTC (GitHub sometimes starts
