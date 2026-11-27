@@ -35,6 +35,7 @@ SOURCES = {
     "": [(HUB, "index.html")],
     "Wetbulb/": [("Wetbulb", "index.html")],
     "CoolingTowerSim/": [("CoolingTowerSim", "index.html")],
+    "Airflow-Lab/app/": [("Airflow-Lab", "js/")],     # the app itself, published under app/ by its Pages workflow
     "Reef/": [("Reef", "index.html")],
     "Reef/paper/": [("Reef", "paper/index.html")],
 }

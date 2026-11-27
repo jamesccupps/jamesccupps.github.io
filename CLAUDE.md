@@ -22,6 +22,8 @@ keeps it current.
 - Every other project page (`/Slate/`, `/NoteForge/`, `/Wetbulb/`, `/Reef/`, the two games `/PocketMaine/` and
   `/EightFold/`, and the rest) is published from its own
   repository and edited there, not here. Only its entry in `sitemap.xml` lives here.
+  `/Airflow-Lab/` (Nov 27) has two addresses in the sitemap: its project page, and the app itself at
+  `/Airflow-Lab/app/`.
 - `404.html` (`noindex`), `og.png` (the hub's social image), `favicon.ico`, `fonts/` (with its OFL license),
   `robots.txt`, `sitemap.xml`.
 - `6f4669f95049414a71045ac20c1d6046.txt`: the IndexNow key. Public by design; it must stay at the root.
@@ -34,8 +36,8 @@ keeps it current.
 - Every page keeps: a `<title>` of 60 characters or less, a meta description of 160 or less, a canonical link,
   `og:*` tags with an image, and JSON-LD. James is described as a facilities director: no employer, city or state.
   `/EightFold/` has only a `<title>` so far (Nov 23); the rest of that list is to add in its own repository.
-- `sitemap.xml` lists every page of the site, including the pages other repositories publish (27 addresses on
-  Nov 23). Add a new page there when it goes up. `robots.txt` points to it and keeps raw `.md` files and Slate's apt
+- `sitemap.xml` lists every page of the site, including the pages other repositories publish (29 addresses on
+  Nov 27). Add a new page there when it goes up. `robots.txt` points to it and keeps raw `.md` files and Slate's apt
   repository out of search.
 - `<lastmod>` dates are kept by `.github/workflows/sitemap-dates.yml`, daily at 10:37 UTC (GitHub sometimes starts
   it hours late). `.github/scripts/sitemap_dates.py` finds the newest commit to each page's source and moves the date
